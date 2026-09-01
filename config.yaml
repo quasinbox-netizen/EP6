@@ -1,0 +1,106 @@
+# btc-cycle-lab — konfiguracja projektu.
+# Wszystkie ścieżki są względne wobec katalogu głównego repo.
+
+paths:
+  raw: data/raw
+  processed: data/processed
+  db: data/processed/lab.sqlite
+
+price:
+  symbol: BTCUSD
+  # Które źródła pobierać.
+  sources: [binance, bitstamp, coinbase]
+  # Kolejność zszywania: dla danego dnia wygrywa pierwsze źródło, które ten
+  # dzień ma. Binance jest najgłębszym rynkiem, ale startuje 2017-08-17,
+  # więc halvingi 2012 i 2016 pokrywa wyłącznie Bitstamp.
+  stitch_priority: [binance, bitstamp, coinbase]
+  start: "2011-08-18"     # pierwsza sesja BTC/USD na Bitstampie
+  # Maksymalna akceptowalna mediana rozbieżności na zakładce źródeł.
+  # Binance kwotuje BTC/USDT, więc epizody utraty parytetu USDT tu wychodzą.
+  overlap_tolerance: 0.01
+  # Dzienny bar zamyka się o 00:00 UTC dnia następnego.
+  timezone: UTC
+
+# Grupa kontrolna — aktywa, które NIE mają halvingu.
+# Sens: jeśli „efekt halvingu" widać także tutaj, to nie jest efekt halvingu,
+# tylko wspólny ruch rynków ryzyka w tamtym okresie. Porównanie jest sparowane
+# po zdarzeniach (różnica w różnicach), bo te same halvingi wypadają w tych
+# samych warunkach makro dla obu aktywów.
+control:
+  symbols:
+    NASDAQ: "^IXIC"     # indeks giełdowy — najbliższy odpowiednik „ryzyka" dla BTC
+    SP500: "^GSPC"      # szerszy rynek
+    GOLD: "GC=F"        # aktywo o podaży ograniczonej, ale bez harmonogramu emisji
+  primary: NASDAQ
+  source: yahoo
+  start: "2011-01-01"
+  # NASDAQ handluje się ~252 dni w roku, BTC 365. Okna liczymy w dniach
+  # KALENDARZOWYCH (szereg kontrolny jest przenoszony na kalendarz przez
+  # ffill ostatniego znanego zamknięcia), inaczej „365 dni po halvingu"
+  # znaczyłoby dla NASDAQ prawie 17 miesięcy.
+  align: calendar
+
+macro:
+  # Serie z Yahoo Finance — bez klucza API, dostępne tego samego dnia po zamknięciu.
+  yahoo:
+    dxy: "DX-Y.NYB"       # indeks dolara
+    spx: "^GSPC"
+    us10y: "^TNX"         # rentowność 10Y (w %, x10 w Yahoo — normalizujemy)
+    us13w: "^IRX"         # bon 13-tyg., proxy stopy krótkiej
+    gold: "GC=F"
+  # Serie z FRED — wymagają darmowego klucza (FRED_API_KEY w .env).
+  # publication_lag_days = ile dni po końcu okresu obserwacji dana jest publicznie znana.
+  # To jest jedyne zabezpieczenie przed look-ahead bias na danych makro.
+  fred:
+    m2:
+      series_id: M2SL
+      # Zapasowe opóźnienie, używane tylko gdy brak daty publikacji z archiwum
+      # wersji. Zmierzone na prawdziwych wersjach M2SL: mediana 43 dni, maks 58 —
+      # czyli o dwa tygodnie więcej niż podpowiada intuicja "miesiąc po końcu okresu".
+      publication_lag_days: 45
+      frequency: monthly
+    indpro:
+      series_id: INDPRO
+      publication_lag_days: 17
+      frequency: monthly
+    fed_funds:
+      series_id: DFF
+      # DFF ma ponad 5000 dat wersji, czyli więcej niż limit FRED dla pierwszych
+      # publikacji (2000). Pobieramy ją bez archiwum wersji — dla serii dziennej,
+      # publikowanej następnego dnia i praktycznie nierewidowanej, stałe
+      # opóźnienie 1 dnia jest wierne.
+      publication_lag_days: 1
+      frequency: daily
+    unrate:
+      series_id: UNRATE
+      publication_lag_days: 7
+      frequency: monthly
+  # ISM Manufacturing PMI nie jest dostępne w FRED (licencja ISM).
+  # Jeśli masz własne dane, wrzuć je do data/raw/manual/pmi.csv
+  # w formacie: observation_date,value[,available_from]
+  manual_dir: data/raw/manual
+
+features:
+  # Okna zdarzeniowe używane przez features/events.py i analizę.
+  event_windows: [7, 30, 90]
+  halving_windows: [30, 90, 180, 365]
+
+backtest:
+  # Koszty jednostronne, w punktach bazowych obrotu.
+  fee_bps: 10.0
+  slippage_bps: 15.0
+  # Sygnał policzony na zamknięciu dnia t wchodzi w życie na zamknięciu t+lag.
+  execution_lag_days: 1
+  initial_equity: 10000.0
+  # Dni handlowych w roku — BTC handluje się 365 dni.
+  periods_per_year: 365
+
+validation:
+  # Podział po cyklach halvingowych: cykle treningowe vs testowy.
+  train_cycles: [0, 1, 2]
+  test_cycles: [3, 4]
+  alpha: 0.05
+  fdr_method: bh          # bh | bonferroni
+  bootstrap_iterations: 2000
+  block_length_days: 30   # bootstrap blokowy — BTC ma autokorelację zmienności
+  random_seed: 20260901

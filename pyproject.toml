@@ -1,0 +1,13 @@
+[project]
+name = "btc-cycle-lab"
+version = "0.1.0"
+description = "Lokalne laboratorium do badania cykli i zdarzeń makro w cenie BTC"
+requires-python = ">=3.11"
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+addopts = "-q --basetemp=.pytest-tmp"
+markers = [
+    "network: testy wymagające dostępu do sieci (domyślnie pomijane)",
+]
