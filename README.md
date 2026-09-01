@@ -10,54 +10,83 @@ porównuje się z „kup i trzymaj".
 
 ---
 
-## Szybki start
+## Szybki start (Windows)
 
-```bash
-python -m venv .venv && .venv/Scripts/pip install -r requirements.txt
+Wymagany jest tylko Python 3.11 lub nowszy. Reszta robi się sama — launcher
+tworzy środowisko wirtualne i instaluje zależności przy pierwszym uruchomieniu.
+
+```bat
+.\btc.cmd ingest --what all
 ```
 
-Pobranie danych (kilka minut, wszystkie źródła są darmowe i bez klucza):
+Potem dowolna z komend:
 
-```bash
-PYTHONPATH=src .venv/Scripts/python -m cli ingest --what all
+```bat
+.\btc.cmd all
 ```
 
-Pełny przebieg analizy:
+| komenda | co robi |
+|---|---|
+| `.\btc.cmd ingest --what all` | pobiera ceny, makro, grupę kontrolną i zdarzenia |
+| `.\btc.cmd quality` | raport jakości danych i szwu między giełdami |
+| `.\btc.cmd study --post 365` | event study wokół halvingów i kategorii zdarzeń |
+| `.\btc.cmd control` | grupa kontrolna: NASDAQ, S&P 500, złoto |
+| `.\btc.cmd macro` | oś płynności: prawdziwe M2 vs proxy dolarowe |
+| `.\btc.cmd validate` | skan hipotez z korektą + replikacja poza próbą |
+| `.\btc.cmd backtest` | strategie vs „kup i trzymaj" |
+| `.\btc.cmd all` | wszystko po kolei |
 
-```bash
-PYTHONPATH=src .venv/Scripts/python -m cli all
+Dashboard i testy mają własne launchery:
+
+```bat
+.\dashboard.cmd
 ```
 
-Grupa kontrolna — czy „efekt halvingu" widać też tam, gdzie halvingu nie ma:
-
-```bash
-PYTHONPATH=src .venv/Scripts/python -m cli control --post 365
-PYTHONPATH=src .venv/Scripts/python -m cli control --category credit_event --post 90
+```bat
+.\test.cmd offline
 ```
 
-Oś płynności — czym jest liczona i czy wybór źródła zmienia wnioski:
+`.\test.cmd` bez argumentu uruchamia też testy odpytujące prawdziwe API.
 
-```bash
-PYTHONPATH=src .venv/Scripts/python -m cli macro
-PYTHONPATH=src .venv/Scripts/python -m cli macro --check-key
+Prefiks `.\` jest wymagany w PowerShellu, a w `cmd.exe` bywa wymagany, gdy
+w systemie ustawiono `NoDefaultCurrentDirectoryInExePath` — dlatego wszędzie
+podaję go od razu.
+
+Skrypty są w `.cmd`, a nie w `.ps1`, celowo: domyślna polityka wykonywania
+PowerShella blokuje niepodpisane `.ps1`, a `.cmd` uruchomi się wszędzie.
+
+### Przenośność
+
+Cały katalog można skopiować na pendrive'a albo na inny komputer z Windowsem
+i po prostu uruchomić `.\btc.cmd`. Środowisko wirtualne ma w środku ścieżki
+bezwzględne, więc po przeniesieniu przestaje działać — launcher to wykrywa
+(próbuje zaimportować zależności) i odtwarza je od zera. Baza, konfiguracja
+i wyniki są trzymane względem katalogu repo, więc jadą razem z folderem.
+
+Czego przenosiny **nie** zabiorą: pliku `.env` z kluczem FRED, bo jest poza
+kontrolą wersji. Launcher utworzy go z szablonu, ale klucz trzeba wkleić
+ponownie. Bez niego działa wszystko poza serią M2 z FRED.
+
+**Trzymaj folder blisko korzenia dysku** — np. `C:\projektytc`, a nie kilka
+poziomów w głąb `Dokumenty`. Windows ma limit 260 znaków na ścieżkę, a instalacja
+Streamlita rozpakowuje bardzo głęboko zagnieżdżone pliki przykładowe; przy ścieżce
+repo dłuższej niż ~120 znaków instalacja przerywa się z `No such file or directory`.
+Launcher ostrzega o tym przed startem i podpowiada obejście w komunikacie błędu.
+Sprawdzone: w `C:\ptest-ep6` setup przechodzi, w ścieżce ~150-znakowej pada.
+
+### Bez launchera
+
+Moduł sam dokleja `src` do ścieżki, więc `PYTHONPATH` nie jest potrzebny:
+
+```bat
+.venv\Scripts\python.exe src\cli.py study --post 365
 ```
 
-Dashboard:
+W bashu (Git Bash, WSL) to samo:
 
 ```bash
-.venv/Scripts/python -m streamlit run dashboard/app.py
+.venv/Scripts/python src/cli.py study --post 365
 ```
-
-Testy:
-
-```bash
-.venv/Scripts/python -m pytest
-```
-
-Testy sieciowe (odpytują prawdziwe API) są oznaczone i domyślnie się uruchamiają;
-`pytest -m "not network"` je pomija.
-
----
 
 ## Skąd biorą się dane
 

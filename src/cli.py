@@ -1,11 +1,19 @@
-"""Interfejs wiersza polecen.
+r"""Interfejs wiersza polecen.
 
-    python -m cli ingest --what all
-    python -m cli quality
-    python -m cli study --post 365
-    python -m cli validate
-    python -m cli backtest
-    python -m cli all
+Na Windowsie uruchamiaj przez launcher, ktory sam przygotuje srodowisko:
+
+    btc ingest --what all
+    btc quality
+    btc study --post 365
+    btc control
+    btc validate
+    btc backtest
+    btc all
+
+Bez launchera dziala tez bezposrednie wywolanie - modul sam dokleja `src`
+do sciezki, wiec nie trzeba ustawiac PYTHONPATH:
+
+    .venv\Scripts\python.exe src\cli.py study --post 365
 
 Kazda komenda zapisuje wynik do data/processed/ i wypisuje skrot na ekran.
 """
