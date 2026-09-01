@@ -8,6 +8,16 @@ data/processed/**
 !data/raw/manual/.gitkeep
 !data/raw/.gitkeep
 !data/processed/.gitkeep
+# Wyniki analizy wersjonujemy - to one sa produktem tego repo.
+# Poza kontrola wersji zostaja dane odtwarzalne jedna komenda:
+# lab.sqlite (11 MB) i features.csv (3,9 MB) zasmiecalyby historie
+# przy kazdym przebiegu, a odtwarza je `btc.cmd all`.
+!data/processed/WYNIKI.md
+!data/processed/event_study_*.csv
+!data/processed/hypothesis_scan.csv
+!data/processed/out_of_sample.csv
+!data/processed/control_*.csv
+!data/processed/backtest_comparison.csv
 .pytest_cache/
 .streamlit/
 *.log
