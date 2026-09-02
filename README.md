@@ -67,7 +67,7 @@ Czego przenosiny **nie** zabiorą: pliku `.env` z kluczem FRED, bo jest poza
 kontrolą wersji. Launcher utworzy go z szablonu, ale klucz trzeba wkleić
 ponownie. Bez niego działa wszystko poza serią M2 z FRED.
 
-**Trzymaj folder blisko korzenia dysku** — np. `C:\projektytc`, a nie kilka
+**Trzymaj folder blisko korzenia dysku** — np. `C:\projekty\btc`, a nie kilka
 poziomów w głąb `Dokumenty`. Windows ma limit 260 znaków na ścieżkę, a instalacja
 Streamlita rozpakowuje bardzo głęboko zagnieżdżone pliki przykładowe; przy ścieżce
 repo dłuższej niż ~120 znaków instalacja przerywa się z `No such file or directory`.
