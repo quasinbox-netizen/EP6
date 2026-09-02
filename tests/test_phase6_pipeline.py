@@ -212,3 +212,60 @@ def test_control_comparison_runs_when_control_exists(lab_config, tmp_path):
     # Kalibracje testu sprawdza test_control_group; tutaj pojedyncze losowanie
     # nic by nie dowiodlo - przy alpha=0.05 co dwudzieste wyszloby istotne.
     assert not comparison.per_event.empty
+
+
+# --- walidacja kroczaca w pipeline ----------------------------------------
+
+
+def test_walk_forward_produces_many_disjoint_folds(lab_config):
+    """Sens walk-forward: kilkanascie okien zamiast jednego podzialu."""
+    from pipeline import walk_forward_check
+
+    table = walk_forward_check(load_lab_data(lab_config), config=lab_config)
+    assert not table.empty
+    assert table.attrs["n_folds_total"] >= 5
+    assert table.attrs["test_windows_disjoint"] is True
+    assert {"sign_p_value", "sign_p_adjusted", "mean_test_effect"} <= set(table.columns)
+
+
+def test_walk_forward_finds_nothing_on_noise(lab_config):
+    """Baza testowa to czysty szum - nic nie ma prawa przezyc korekty."""
+    from pipeline import walk_forward_check
+
+    table = walk_forward_check(load_lab_data(lab_config), config=lab_config)
+    assert not table["sign_significant_adjusted"].any()
+    assert not table["test_effect_significant_adjusted"].any()
+
+
+def test_overlapping_test_windows_suppress_the_t_test(lab_config):
+    """Przy nakladajacych sie oknach test t jest niewazny i NIE moze byc podany.
+
+    Zaklada on niezaleznosc obserwacji; gdy sasiednie okna testowe dziela
+    polowe dni, p-value byloby zanizone. Pipeline wykrywa to na faktycznych
+    indeksach, a nie na parametrach.
+    """
+    from pipeline import walk_forward_check
+
+    settings = lab_config["validation"]["walk_forward"]
+    original = settings["step_days"]
+    settings["step_days"] = max(1, int(settings["test_days"]) // 2)
+    try:
+        table = walk_forward_check(load_lab_data(lab_config), config=lab_config)
+        assert table.attrs["test_windows_disjoint"] is False
+        assert table["test_effect_p_value"].isna().all()
+        assert table["test_effect_p_adjusted"].isna().all()
+        # Test znaku pozostaje wazny - nie zalezy od niezaleznosci okien.
+        assert table["sign_p_value"].notna().any()
+    finally:
+        settings["step_days"] = original
+
+
+def test_walk_forward_corrects_both_statistics(lab_config):
+    """Obie statystyki sa hipotezami, wiec obie musza przejsc korekte."""
+    from pipeline import walk_forward_check
+
+    table = walk_forward_check(load_lab_data(lab_config), config=lab_config)
+    sign = table[["sign_p_value", "sign_p_adjusted"]].dropna()
+    assert (sign["sign_p_adjusted"] >= sign["sign_p_value"] - 1e-12).all()
+    effect = table[["test_effect_p_value", "test_effect_p_adjusted"]].dropna()
+    assert (effect["test_effect_p_adjusted"] >= effect["test_effect_p_value"] - 1e-12).all()

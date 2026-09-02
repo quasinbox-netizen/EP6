@@ -55,6 +55,7 @@ from pipeline import (  # noqa: E402
     out_of_sample_check,
     run_strategies,
     scan_hypotheses,
+    walk_forward_check,
 )
 from storage import connect, read_macro, read_prices, table_summary  # noqa: E402
 from validation.multiple_testing import summarize  # noqa: E402
@@ -344,6 +345,56 @@ def cmd_macro(args) -> int:
     return 0
 
 
+def cmd_walkforward(args) -> int:
+    """Walidacja kroczaca: kilkanascie rozlacznych okien testowych."""
+    config = load_config()
+    data = load_lab_data(config)
+    if data.is_empty:
+        print("baza jest pusta - uruchom najpierw `ingest`")
+        return 1
+
+    table = walk_forward_check(data, config=config)
+    if table.empty:
+        print("za malo danych na walidacje kroczaca")
+        return 1
+
+    folds = table.attrs["folds"]
+    disjoint = table.attrs["test_windows_disjoint"]
+    print(f"--- {table.attrs['n_folds_total']} foldow, okna testowe rozlaczne: {disjoint} ---")
+    print(folds.loc[:, ["split", "train_days", "train_span", "test_days", "test_span"]]
+          .to_string(index=False))
+    if not disjoint:
+        print(
+            "\nUWAGA: okna testowe zachodza na siebie, wiec test t po foldach jest "
+            "niewazny i nie zostal policzony. Zwieksz step_days w config.yaml."
+        )
+
+    print("\n--- stabilnosc znaku efektu miedzy treningiem a testem ---")
+    columns = ["hypothesis", "n_folds", "n_same_sign", "sign_agreement",
+               "sign_p_value", "sign_p_adjusted", "mean_test_effect"]
+    if disjoint:
+        columns += ["test_effect_p_value", "test_effect_p_adjusted"]
+    print(table.loc[:, columns].to_string(index=False, float_format=lambda v: f"{v:,.4f}"))
+
+    sign_hits = table[table["sign_significant_adjusted"]]["hypothesis"].tolist()
+    effect_hits = table[table["test_effect_significant_adjusted"]]["hypothesis"].tolist()
+    print(f"\npo korekcie {config['validation']['fdr_method']}:")
+    print(f"  stabilny znak      : {sign_hits or 'nic'}")
+    print(f"  efekt out-of-sample: {effect_hits or 'nic'}")
+
+    best = table.iloc[0]
+    if int(best["n_folds"]) < 6:
+        print(
+            f"\nLimit mocy: najlepsza hipoteza ({best['hypothesis']}) ma tylko "
+            f"{int(best['n_folds'])} foldow. Nawet pelna zgodnosc znaku dalaby "
+            f"p={0.5 ** (int(best['n_folds']) - 1):.4f}, wiec przy tylu oknach "
+            "nie da sie osiagnac istotnosci."
+        )
+    _save(table, config, "walk_forward.csv")
+    _save(folds, config, "walk_forward_folds.csv")
+    return 0
+
+
 def cmd_control(args) -> int:
     """Test placebo: czy grupa kontrolna reaguje na halvingi tak samo jak BTC."""
     config = load_config()
@@ -428,7 +479,7 @@ def cmd_backtest(args) -> int:
 
 def cmd_all(args) -> int:
     for command in (cmd_quality, cmd_features, cmd_macro, cmd_study, cmd_control,
-                    cmd_validate, cmd_backtest):
+                    cmd_validate, cmd_walkforward, cmd_backtest):
         print("\n" + "=" * 78)
         code = command(args)
         if code != 0:
@@ -461,6 +512,11 @@ def build_parser() -> argparse.ArgumentParser:
 
     validate = subparsers.add_parser("validate", help="skan hipotez + korekta + out-of-sample")
     validate.set_defaults(func=cmd_validate)
+
+    walkforward = subparsers.add_parser(
+        "walkforward", help="walidacja kroczaca: kilkanascie okien testowych"
+    )
+    walkforward.set_defaults(func=cmd_walkforward)
 
     control = subparsers.add_parser(
         "control", help="grupa kontrolna: czy NASDAQ reaguje na halvingi tak samo"

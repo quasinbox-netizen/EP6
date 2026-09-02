@@ -59,6 +59,27 @@ Tych liczb nie wolno czytać jako wyników — to wejście do korekty poniżej.
 * replikuje się poza próbą (cykle 0–2 → 3–4): **0**,
 * pominięte, bo brak danych: 3 (kategoria `cycle_extreme` jest jeszcze pusta).
 
+## Walidacja krocząca (13 rozłącznych okien, 2013-11 → 2026-09)
+
+Dla każdej hipotezy sprawdzamy, jak często znak efektu przeżywa przejście
+z okna treningowego na testowe. Pod hipotezą zerową to rzut monetą.
+
+| hipoteza | foldów | zgodnych | zgodność | p znaku | q (BH) | średni efekt OOS | p efektu | q efektu |
+|---|---|---|---|---|---|---|---|---|
+| phase_expanding_rising | 5 | 5 | 100% | 0,063 | 1,000 | −0,0028 | 0,017 | 0,300 |
+| phase_contracting_rising | 11 | 4 | 36% | 0,549 | 1,000 | +0,0005 | 0,638 | 0,932 |
+| phase_contracting_falling | 10 | 6 | 60% | 0,754 | 1,000 | +0,0006 | 0,651 | 0,932 |
+| halving_after_365d | 7 | 3 | 43% | 1,000 | 1,000 | +0,0097 | 0,344 | 0,932 |
+| halving_after_180d | 4 | 2 | 50% | 1,000 | 1,000 | −0,0008 | 0,619 | 0,932 |
+
+**Istotnych po korekcie: 0** — ani na teście znaku, ani na efekcie
+out-of-sample. Obie statystyki przechodzą korektę; poprawianie tylko jednej
+i podawanie surowej drugiej byłoby wyborem wygodniejszej po fakcie.
+
+Limit mocy wart zapamiętania: `phase_expanding_rising` ma **5 na 5** zgodnych
+znaków, czyli najlepszy możliwy wynik — a mimo to p = 0,0625. Przy pięciu
+oknach istotności nie da się osiągnąć, nawet przy idealnej stabilności.
+
 ## Oś płynności: prawdziwe M2 vs proxy dolarowe
 
 Zgodność **42,3%** na 5130 porównanych dni — poniżej poziomu przypadku (50% dla

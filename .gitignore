@@ -18,6 +18,8 @@ data/processed/**
 !data/processed/out_of_sample.csv
 !data/processed/control_*.csv
 !data/processed/backtest_comparison.csv
+!data/processed/walk_forward.csv
+!data/processed/walk_forward_folds.csv
 .pytest_cache/
 .streamlit/
 *.log

@@ -17,6 +17,7 @@ from dataclasses import dataclass
 
 import numpy as np
 import pandas as pd
+from scipy import stats
 
 from features.halving import CONFIRMED_HALVINGS
 
@@ -121,6 +122,69 @@ def walk_forward_splits(
         if test_end >= len(index):
             break
     return splits
+
+
+def window_effect(values: pd.Series, mask: pd.Series) -> float:
+    """Roznica srednich: w oknie minus poza oknem. Bez testu, sam efekt.
+
+    Do walk-forward nie jest potrzebne p-value per fold - wnioskowanie idzie
+    z rozkladu efektow MIEDZY foldami, a nie z pojedynczego okna. Liczenie
+    permutacji dla kazdego folda osobno byloby drogie i nic by nie wnosilo.
+    """
+    frame = pd.DataFrame({"value": values, "mask": mask}).dropna()
+    if frame.empty:
+        return float("nan")
+    inside = frame.loc[frame["mask"].astype(bool), "value"]
+    outside = frame.loc[~frame["mask"].astype(bool), "value"]
+    if inside.empty or outside.empty:
+        return float("nan")
+    return float(inside.mean() - outside.mean())
+
+
+def sign_agreement_test(train_effects, test_effects) -> dict:
+    """Czy znak efektu utrzymuje sie z okna treningowego na testowe.
+
+    To jest sedno walk-forward. Pod hipoteza zerowa (brak zaleznosci) znak
+    w oknie testowym jest rzutem monetą, wiec liczba zgodnych foldow ma
+    rozklad dwumianowy z p=0.5. Test dwustronny, bo konsekwentne odwracanie
+    znaku tez jest informacja - i tez nie jest przypadkiem.
+
+    Dodatkowo raportujemy sredni efekt out-of-sample z testem t po foldach.
+    Okna testowe sa rozlaczne (embargo), wiec traktowanie ich jako
+    niezaleznych obserwacji jest uzasadnione - w przeciwienstwie do dni.
+    """
+    pairs = [
+        (a, b)
+        for a, b in zip(train_effects, test_effects)
+        if np.isfinite(a) and np.isfinite(b)
+    ]
+    n = len(pairs)
+    if n == 0:
+        return {
+            "n_folds": 0, "n_same_sign": 0, "sign_agreement": np.nan,
+            "sign_p_value": np.nan, "mean_test_effect": np.nan,
+            "test_effect_t_stat": np.nan, "test_effect_p_value": np.nan,
+        }
+
+    same = sum(1 for a, b in pairs if np.sign(a) == np.sign(b) and a != 0)
+    sign_p = float(stats.binomtest(same, n, 0.5).pvalue) if n else np.nan
+
+    test_values = np.array([b for _, b in pairs], dtype=float)
+    if n > 1 and test_values.std(ddof=1) > 0:
+        t_stat = float(test_values.mean() / (test_values.std(ddof=1) / np.sqrt(n)))
+        t_p = float(2 * stats.t.sf(abs(t_stat), df=n - 1))
+    else:
+        t_stat = t_p = np.nan
+
+    return {
+        "n_folds": n,
+        "n_same_sign": same,
+        "sign_agreement": same / n,
+        "sign_p_value": sign_p,
+        "mean_test_effect": float(test_values.mean()),
+        "test_effect_t_stat": t_stat,
+        "test_effect_p_value": t_p,
+    }
 
 
 def assert_no_overlap(split: Split, *, horizon_days: int = 0) -> None:

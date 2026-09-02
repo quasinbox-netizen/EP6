@@ -104,3 +104,16 @@ validation:
   bootstrap_iterations: 2000
   block_length_days: 30   # bootstrap blokowy — BTC ma autokorelację zmienności
   random_seed: 20260901
+  # Walidacja krocząca — kilkanaście rozłącznych okien testowych zamiast
+  # jednego podziału po cyklach. Embargo musi pokrywać horyzont celu,
+  # bo fwd_return_90d w ostatnim dniu treningu zawiera ceny ze zbioru testowego.
+  walk_forward:
+    train_days: 730
+    test_days: 365
+    # Krok MUSI być >= test_days, inaczej okna testowe zachodzą na siebie
+    # i test t po foldach przestaje być ważny (zaniżałby p-value).
+    # Pipeline sprawdza rozłączność na faktycznych indeksach i przy nakładaniu
+    # w ogóle nie raportuje testu t — zostaje sam test znaku.
+    step_days: 365
+    embargo_days: 90
+    expanding: true     # okno treningowe rośnie, jak w praktyce

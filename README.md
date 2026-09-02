@@ -183,7 +183,7 @@ src/
 ├── pipeline.py  spina wszystko — używane i przez CLI, i przez dashboard
 └── cli.py
 dashboard/       Streamlit — czysta prezentacja, zero logiki (pilnuje tego test)
-tests/           137 testów: po jednym pliku na fazę + wersje FRED + grupa kontrolna
+tests/           148 testów: po jednym pliku na fazę + wersje FRED + grupa kontrolna
 ```
 
 ---
@@ -207,6 +207,18 @@ zawyża istotność. Permutacja przez rotację zachowuje autokorelację obu szer
 
 **Embargo między treningiem a testem.** Cel `fwd_return_90d` w dniu t zawiera ceny
 z t+90, więc bez luki ostatnie dni treningu widzą zbiór testowy.
+
+**Walidacja krocząca zamiast jednego podziału.** Podział po cyklach daje *jeden*
+zbiór testowy — „nie powtórzyło się" jest tam pojedynczą obserwacją. Walk-forward
+daje 13 rozłącznych okien rocznych (2013-11 → 2026-09) i pozwala policzyć, jak
+często znak efektu przeżywa przejście z treningu na test. Pod hipotezą zerową to
+rzut monetą, więc liczba zgodnych foldów ma rozkład dwumianowy.
+
+Krok między foldami **musi** być co najmniej równy długości okna testowego —
+inaczej okna zachodzą na siebie i test t po foldach przestaje być ważny.
+Pipeline sprawdza rozłączność na faktycznych indeksach, a nie na parametrach,
+i przy nakładaniu w ogóle nie raportuje testu t. Pierwsza wersja konfiguracji
+miała ten błąd (krok 182 dni przy oknie 365) i zawyżała istotność.
 
 **Koszt naliczany od obrotu, nie od liczby transakcji.** Sygnał z dnia t wchodzi
 z opóźnieniem — zerowe opóźnienie to handel po cenie, która dopiero się ustala.
@@ -300,4 +312,4 @@ w dużej mierze z „bądź w rynku w hossie".
 1. Uzupełnić `source` w rejestrze zdarzeń i dodać zdarzenia bez reakcji rynku.
 2. ~~Wkleić klucz FRED i powtórzyć fazę makro na prawdziwym M2 zamiast proxy.~~ zrobione
 3. ~~Dołożyć drugą klasę aktywów jako grupę kontrolną.~~ zrobione — NASDAQ, S&P 500, złoto
-4. Walk-forward na oknach rocznych zamiast pojedynczego podziału po cyklach.
+4. ~~Walk-forward na oknach rocznych zamiast pojedynczego podziału po cyklach.~~ zrobione

@@ -239,3 +239,77 @@ def test_replication_fails_when_out_of_sample_is_insignificant():
     train = {"difference": 0.01, "p_value": 0.001}
     noisy = {"difference": 0.009, "p_value": 0.4}
     assert not replicate_finding(train, noisy)["replicated"]
+
+
+# --- walidacja kroczaca ---------------------------------------------------
+
+
+def test_window_effect_is_difference_of_means():
+    index = pd.date_range("2020-01-01", periods=100, freq="D")
+    values = pd.Series(np.r_[np.full(40, 0.02), np.full(60, 0.01)], index=index)
+    mask = pd.Series(np.r_[np.ones(40), np.zeros(60)].astype(bool), index=index)
+    from validation.splits import window_effect
+
+    assert window_effect(values, mask) == pytest.approx(0.01)
+
+
+def test_window_effect_is_nan_when_a_side_is_empty():
+    from validation.splits import window_effect
+
+    index = pd.date_range("2020-01-01", periods=10, freq="D")
+    values = pd.Series(np.ones(10), index=index)
+    assert np.isnan(window_effect(values, pd.Series(True, index=index)))
+    assert np.isnan(window_effect(values, pd.Series(False, index=index)))
+
+
+def test_sign_agreement_is_a_coin_flip_under_the_null():
+    """Losowe znaki nie moga dawac istotnosci."""
+    from validation.splits import sign_agreement_test
+
+    rng = np.random.default_rng(5)
+    train = rng.normal(0, 1, 12)
+    test = rng.normal(0, 1, 12)
+    result = sign_agreement_test(train, test)
+    assert result["n_folds"] == 12
+    assert result["sign_p_value"] > 0.05
+
+
+def test_sign_agreement_detects_a_stable_effect():
+    from validation.splits import sign_agreement_test
+
+    train = [0.01] * 10
+    test = [0.008, 0.011, 0.009, 0.012, 0.007, 0.010, 0.009, 0.011, 0.008, 0.010]
+    result = sign_agreement_test(train, test)
+    assert result["n_same_sign"] == 10
+    assert result["sign_p_value"] < 0.01
+    assert result["mean_test_effect"] > 0
+
+
+def test_sign_agreement_also_flags_a_consistent_flip():
+    """Konsekwentne odwracanie znaku tez nie jest przypadkiem - test dwustronny."""
+    from validation.splits import sign_agreement_test
+
+    result = sign_agreement_test([0.01] * 10, [-0.01] * 10)
+    assert result["n_same_sign"] == 0
+    assert result["sign_p_value"] < 0.01
+
+
+def test_five_folds_cannot_reach_significance_even_when_perfect():
+    """Uczciwy limit mocy: przy 5 foldach pelna zgodnosc daje p=0.0625.
+
+    Ten test pilnuje, zeby nikt nie "poprawil" metody tak, by przy piaciu
+    oknach zaczela wypluwac istotne wyniki.
+    """
+    from validation.splits import sign_agreement_test
+
+    result = sign_agreement_test([0.01] * 5, [0.01] * 5)
+    assert result["sign_agreement"] == 1.0
+    assert result["sign_p_value"] == pytest.approx(0.0625)
+    assert result["sign_p_value"] > 0.05
+
+
+def test_sign_agreement_ignores_folds_with_missing_effects():
+    from validation.splits import sign_agreement_test
+
+    result = sign_agreement_test([0.01, np.nan, 0.02], [0.01, 0.03, np.nan])
+    assert result["n_folds"] == 1

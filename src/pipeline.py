@@ -21,7 +21,15 @@ from features.halving import CONFIRMED_HALVINGS
 from ingest.prices import load_stitched
 from storage import connect, read_events, read_macro, read_prices
 from validation.multiple_testing import correct, summarize
-from validation.splits import cycle_split, replicate_finding, split_frame
+from validation.splits import (
+    assert_no_overlap,
+    cycle_split,
+    replicate_finding,
+    sign_agreement_test,
+    split_frame,
+    walk_forward_splits,
+    window_effect,
+)
 
 DEFAULT_HORIZON = 90
 
@@ -204,6 +212,109 @@ def out_of_sample_check(
     return pd.DataFrame(rows)
 
 
+def walk_forward_check(
+    data: LabData, *, target: str = "log_return", config=None
+) -> pd.DataFrame:
+    """Walidacja kroczaca: kilkanascie rozlacznych okien testowych.
+
+    Podzial po cyklach daje JEDEN zbior testowy, wiec "nie powtorzylo sie"
+    jest tam pojedyncza obserwacja. Tutaj kazda hipoteza dostaje kilkanascie
+    niezaleznych okien i mozna policzyc, jak czesto znak efektu przezywa
+    przejscie z treningu na test.
+
+    Statystyka: pod hipoteza zerowa znak w oknie testowym jest rzutem moneta,
+    wiec liczba zgodnych foldow ma rozklad dwumianowy z p=0.5. Do tego test t
+    na sredniej efektow out-of-sample - okna testowe sa rozlaczne (embargo),
+    wiec wolno je traktowac jak niezalezne obserwacje.
+
+    Na koncu korekta na wielokrotne testowanie, bo hipotez jest kilkanascie.
+    """
+    config = config or load_config()
+    frame = with_phase_dummies(data.features)
+    if frame.empty:
+        return pd.DataFrame()
+
+    settings = config["validation"].get("walk_forward", {})
+    folds = walk_forward_splits(
+        frame.index,
+        train_days=int(settings.get("train_days", 730)),
+        test_days=int(settings.get("test_days", 365)),
+        step_days=int(settings["step_days"]) if settings.get("step_days") else None,
+        embargo_days=int(settings.get("embargo_days", 90)),
+        expanding=bool(settings.get("expanding", True)),
+    )
+    if not folds:
+        return pd.DataFrame()
+
+    horizon = int(settings.get("embargo_days", 90))
+    for fold in folds:
+        assert_no_overlap(fold, horizon_days=horizon - 1)
+
+    # Test t po foldach zaklada, ze okna testowe sa niezalezne. Przy kroku
+    # mniejszym niz dlugosc okna zachodza one na siebie i to zalozenie pada -
+    # p-value byloby zanizone. Sprawdzamy to na faktycznych indeksach,
+    # a nie na parametrach, i przy nakladaniu NIE raportujemy testu t.
+    disjoint = True
+    for earlier, later in zip(folds, folds[1:]):
+        if len(earlier.test.intersection(later.test)) > 0:
+            disjoint = False
+            break
+
+    rows = []
+    for column in hypothesis_columns(frame):
+        train_effects, test_effects = [], []
+        for fold in folds:
+            train, test = split_frame(frame, fold)
+            if train.empty or test.empty:
+                continue
+            train_effects.append(window_effect(train[target], train[column] > 0))
+            test_effects.append(window_effect(test[target], test[column] > 0))
+
+        summary = sign_agreement_test(train_effects, test_effects)
+        if summary["n_folds"] == 0:
+            continue
+        summary["hypothesis"] = column
+        rows.append(summary)
+
+    if not rows:
+        return pd.DataFrame()
+
+    table = pd.DataFrame(rows)
+    if not disjoint:
+        table["test_effect_t_stat"] = float("nan")
+        table["test_effect_p_value"] = float("nan")
+    table = table.loc[
+        :, ["hypothesis", "n_folds", "n_same_sign", "sign_agreement", "sign_p_value",
+            "mean_test_effect", "test_effect_t_stat", "test_effect_p_value"]
+    ]
+
+    method = config["validation"]["fdr_method"]
+    alpha = float(config["validation"]["alpha"])
+
+    # Obie statystyki sa hipotezami i obie musza przejsc korekte. Poprawianie
+    # tylko jednej i raportowanie surowej drugiej byloby wyborem tej
+    # wygodniejszej juz po zobaczeniu wynikow.
+    corrected = correct(table, method=method, alpha=alpha, p_column="sign_p_value")
+    corrected = corrected.rename(
+        columns={"p_adjusted": "sign_p_adjusted",
+                 "significant_raw": "sign_significant_raw",
+                 "significant_adjusted": "sign_significant_adjusted"}
+    )
+    if disjoint:
+        effect = correct(corrected, method=method, alpha=alpha,
+                         p_column="test_effect_p_value")
+        corrected["test_effect_p_adjusted"] = effect["p_adjusted"]
+        corrected["test_effect_significant_adjusted"] = effect["significant_adjusted"]
+    else:
+        corrected["test_effect_p_adjusted"] = float("nan")
+        corrected["test_effect_significant_adjusted"] = False
+
+    corrected.attrs["n_folds_total"] = len(folds)
+    corrected.attrs["test_windows_disjoint"] = disjoint
+    corrected.attrs["folds"] = pd.DataFrame([f.describe() for f in folds])
+    return corrected
+
+
 def macro_phase_comparison(data: LabData, config=None) -> dict:
     """Porownuje faze makro liczona z prawdziwego M2 i z proxy dolarowego.
 
@@ -352,6 +463,7 @@ def full_report(config=None) -> dict:
     table, results = run_strategies(data, config=config)
     return {
         "data": data,
+        "walk_forward": walk_forward_check(data, config=config),
         "halving_study": halving_event_study(data, config=config),
         "category_studies": category_event_studies(data, config=config),
         "scan": scan,
