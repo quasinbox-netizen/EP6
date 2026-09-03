@@ -1,0 +1,20 @@
+# Streamlit configuration for the dashboard.
+#
+# Committed on purpose: this is project configuration, not a secret.
+# Secrets live in .streamlit/secrets.toml, which is excluded from git.
+
+[client]
+# Hides the developer options in the top-right menu, including the "Deploy"
+# button that advertises Streamlit Community Cloud. This tool is meant to run
+# locally, and that button leads nowhere useful here - a hosted instance would
+# start with an empty database, and serving the control-group data onward would
+# breach the Yahoo Finance terms (see DATA_SOURCES.md).
+#
+# The trade-off: "viewer" also removes "Clear cache" and "Rerun", and the
+# dashboard caches its data heavily. The sidebar therefore has its own
+# "Reload data" button, which is what you need after running `ingest`.
+toolbarMode = "viewer"
+
+[browser]
+# No usage statistics leave this machine.
+gatherUsageStats = false

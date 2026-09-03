@@ -201,6 +201,17 @@ def main() -> None:
         study_post = st.slider("Event study horizon (days after the event)", 30, 730, 365, 5)
         show_events = st.checkbox("Show events on the chart", value=True)
         st.divider()
+
+        # Everything on this page is cached, so a fresh `ingest` is invisible
+        # until the cache is dropped. The toolbar's "Clear cache" is hidden by
+        # config.toml along with the Deploy button, so the button lives here
+        # instead - where someone looking for it would actually look.
+        if st.button("Reload data", icon=":material/refresh:", width="stretch"):
+            st.cache_data.clear()
+            st.rerun()
+        st.caption("Press this after running `ingest` to pick up new data.")
+
+        st.divider()
         st.caption(
             f"Data: {data.features.index.min().date()} - {data.features.index.max().date()} "
             f"({len(data.features)} days)\n\n"

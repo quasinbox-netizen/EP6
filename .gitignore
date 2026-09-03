@@ -21,6 +21,6 @@ data/processed/**
 !data/processed/walk_forward.csv
 !data/processed/walk_forward_folds.csv
 .pytest_cache/
-.streamlit/
+.streamlit/secrets.toml
 *.log
 .pytest-tmp/
