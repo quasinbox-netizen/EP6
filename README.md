@@ -24,25 +24,41 @@ You need Python 3.11 or newer. Everything else happens automatically — the
 launcher creates a virtual environment and installs dependencies on first run.
 Nothing is installed system-wide.
 
-**Windows**
+**Windows** — the supported platform, tested on every push:
 
 ```bat
 .\btc.cmd ingest --what all
 ```
 
-**macOS and Linux**
+**macOS and Linux** — should work, but not yet verified:
 
 ```bash
 ./btc ingest --what all
 ```
 
-**Any platform, no wrapper**
+**Any platform, no wrapper:**
 
 ```bash
 python run.py ingest --what all
 ```
 
 The wrappers are one-line shims around `run.py`; use whichever is convenient.
+
+### Platform support, stated honestly
+
+| platform | status |
+|---|---|
+| Windows 10/11 | **supported** — CI runs the suite on every push, Python 3.11 and 3.13 |
+| macOS, Linux | **untested** — the code has no platform-specific logic and `run.py` handles the venv layout, but nobody has run it there yet |
+
+That second row is a statement about evidence, not about quality. The Python
+code contains nothing Windows-specific and the launcher already handles the
+`Scripts/` versus `bin/` difference, so it very likely works. It has simply not
+been run, and this project does not claim results it has not measured — that
+rule applies to its own README as much as to Bitcoin.
+
+If you run it on macOS or Linux, an issue saying whether it worked is a genuinely
+useful contribution.
 The examples below use `run.py` because it is identical everywhere.
 
 Then run any of these:

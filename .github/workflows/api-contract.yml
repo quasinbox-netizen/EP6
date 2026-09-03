@@ -1,0 +1,40 @@
+name: api-contract
+
+# The tests marked `network` query real APIs (Binance, Bitstamp, FRED) to check
+# that their response shapes still match what the ingest code expects.
+#
+# They run weekly rather than on every push for two reasons: hammering someone
+# else's API from CI is rude and earns rate limits, and a test that depends on
+# a third party being up makes the pipeline flaky. Once a week is enough to
+# catch a contract change and bothers nobody.
+#
+# The FRED test skips itself when FRED_API_KEY is absent, so this workflow is
+# useful even without the secret configured.
+
+on:
+  schedule:
+    - cron: "0 6 * * 1"   # Mondays, 06:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  live-apis:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Write the FRED key if one is configured
+        env:
+          FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
+        if: env.FRED_API_KEY != ''
+        run: Set-Content -Path .env -Value "FRED_API_KEY=$env:FRED_API_KEY" -Encoding utf8
+        shell: pwsh
+
+      - name: Run the network tests
+        run: python run.py test -m network

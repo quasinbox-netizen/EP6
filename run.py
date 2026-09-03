@@ -134,8 +134,29 @@ def ensure_environment() -> Path:
     return create_environment()
 
 
+def child_environment() -> dict:
+    """Environment for the child process, with UTF-8 forced on.
+
+    Windows consoles default to a legacy code page (cp1252 on a Polish or
+    Western European install). Printing a single em dash or umlaut then raises
+    UnicodeEncodeError and the command dies. That is not hypothetical here:
+    data/raw/events.csv is the main extension point of this tool, and the first
+    person to add an event with a non-ASCII character in its description would
+    hit it.
+
+    PYTHONUTF8=1 puts the interpreter in UTF-8 mode, so stdout encodes as UTF-8
+    regardless of the console code page.
+    """
+    environment = dict(os.environ)
+    environment["PYTHONUTF8"] = "1"
+    environment["PYTHONIOENCODING"] = "utf-8"
+    return environment
+
+
 def run(python: Path, arguments: list[str]) -> int:
-    return subprocess.run([str(python), *arguments], cwd=str(ROOT), check=False).returncode
+    return subprocess.run(
+        [str(python), *arguments], cwd=str(ROOT), env=child_environment(), check=False
+    ).returncode
 
 
 def doctor(python: Path) -> int:

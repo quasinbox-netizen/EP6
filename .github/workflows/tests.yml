@@ -1,0 +1,58 @@
+name: tests
+
+# Windows only, deliberately. It is the platform this project is actually
+# verified on; macOS and Linux jobs will be added when they have been tested
+# for real rather than assumed to work.
+#
+# The job runs run.py rather than pytest directly, so every push exercises the
+# same installation path a user goes through: interpreter discovery, virtual
+# environment creation, dependency install. A launcher that breaks would
+# otherwise be found by a user, not by CI.
+#
+# Network tests are excluded here - they query Binance, Bitstamp and FRED, and
+# hitting third-party APIs from CI on every push means rate limits and a flaky
+# pipeline that people stop reading. They run on a schedule in api-contract.yml.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  # A new push cancels the previous run on the same branch.
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # 3.11 is the declared minimum, 3.13 is what the project was built on.
+        # Testing both ends catches version-specific breakage; the versions in
+        # between rarely add anything.
+        python-version: ["3.11", "3.13"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Cache pip downloads
+        uses: actions/cache@v4
+        with:
+          path: ~\AppData\Local\pip\Cache
+          key: pip-${{ runner.os }}-${{ matrix.python-version }}-${{ hashFiles('requirements.txt') }}
+
+      - name: Show the environment
+        run: python run.py doctor
+
+      - name: Run the offline test suite
+        run: python run.py test offline

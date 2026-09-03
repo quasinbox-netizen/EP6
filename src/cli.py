@@ -68,6 +68,27 @@ pd.set_option("display.width", 160)
 pd.set_option("display.max_columns", 40)
 
 
+def _make_output_unicode_safe() -> None:
+    """Never let a non-ASCII character kill a command.
+
+    run.py already starts children in UTF-8 mode, but this module is also
+    meant to be runnable directly, and then a legacy Windows console code page
+    (cp1252 on a Western or Central European install) turns one em dash in an
+    event description into a UnicodeEncodeError that ends the run.
+
+    `errors="replace"` is deliberate: a question mark in place of a dash is a
+    cosmetic problem, a traceback instead of the analysis is not.
+    """
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(encoding="utf-8", errors="replace")
+        except (AttributeError, ValueError):
+            pass  # Already wrapped, or not a real stream (captured in tests).
+
+
+_make_output_unicode_safe()
+
+
 def _processed_dir(config) -> Path:
     path = config.path("processed")
     path.mkdir(parents=True, exist_ok=True)

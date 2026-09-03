@@ -158,3 +158,33 @@ def test_live_bitstamp_matches_contract():
     assert len(df) == 31
     assert list(df.columns) == ["date", "open", "high", "low", "close", "volume"]
     assert check_prices(df).is_clean
+
+
+def test_non_ascii_event_description_survives_the_round_trip(tmp_path, db_path):
+    """An em dash in a description must not break loading or storing.
+
+    events.csv is the main thing a user edits by hand, and a Windows console
+    on a Western or Central European install encodes as cp1252. Printing one
+    em dash there used to be a UnicodeEncodeError that ended the command, so
+    cli.py forces UTF-8 output. This test pins the data path: the file has to
+    load, store and read back unchanged.
+    """
+    from ingest.events import load_events_csv, store_events
+    from storage import connect, read_events
+
+    path = tmp_path / "events.csv"
+    path.write_text(
+        "name,date,category,description,available_from,source\n"
+        "dash_event,2020-03-12,macro,Crash — risk assets,2020-03-12,\n"
+        "umlaut_event,2021-05-19,regulation,München łódź,2021-05-19,\n",
+        encoding="utf-8",
+    )
+
+    events = load_events_csv(path)
+    assert len(events) == 2
+    assert "—" in events.loc[0, "description"]
+
+    with connect(db_path) as conn:
+        assert store_events(conn, events) == 2
+        stored = read_events(conn)
+    assert "łódź" in stored.loc[1, "description"]
