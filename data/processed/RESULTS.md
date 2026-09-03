@@ -1,0 +1,131 @@
+# Results snapshot — 2026-09-01
+
+Generated with `python run.py all --post 365`.
+To reproduce: `python run.py ingest --what all`, then `python run.py all`.
+
+Sample: **5494 days**, 2011-08-18 → 2026-09-01. Stitched series — Bitstamp for
+2191 days up to 2017-08-16, Binance for 3303 days afterwards. Median divergence
+on the overlap 0.06%, maximum 9.0% (2017-12-23, a genuine divergence between
+exchanges at the peak of the mania). No missing days, no duplicates.
+
+---
+
+## Halvings
+
+CAR computed across events, confidence interval from the t distribution with
+n−1 degrees of freedom.
+
+| horizon | CAR | 95% CI | p |
+|---|---|---|---|
+| 30 days | −0.8% | [−25.7%, +24.0%] | 0.920 |
+| 90 days | +12.1% | [−67.7%, +91.9%] | 0.663 |
+| 180 days | +47.7% | [−117.7%, +213.2%] | 0.426 |
+| 365 days | **+125.2%** | **[−190.5%, +441.0%]** | **0.296** |
+
+n = 4. The effect may be enormous or negative — with four observations there is
+no way to decide.
+
+## Control group (placebo test)
+
+Difference paired across events, 365-day horizon, calendar windows.
+
+| | CAR BTC | CAR control | difference | 95% CI | p |
+|---|---|---|---|---|---|
+| vs NASDAQ | +125.2% | +17.0% | +108.2% | [−169.4%, +385.8%] | 0.303 |
+| vs S&P 500 | +125.2% | +13.7% | +111.5% | [−167.7%, +390.7%] | 0.293 |
+| vs gold | +125.2% | −17.3% | +142.5% | [−200.5%, +485.4%] | 0.278 |
+
+No difference is distinguishable from zero. The placebo works in the other
+direction: run on the NASDAQ, the method finds no halving effect there
+(+17.0%, p = 0.307), so the absence of a result for BTC is not the method being
+powerless.
+
+## Event categories (p-values are RAW, before correction)
+
+| category | n | CAR(365d) | raw p |
+|---|---|---|---|
+| regulation | 3 | −194.4% | 0.081 |
+| market_structure | 3 | −304.7% | 0.197 |
+| macro | 4 | +106.1% | 0.287 |
+| halving | 4 | +125.2% | 0.296 |
+| credit_event | 6 | −81.8% | 0.494 |
+
+These numbers must not be read as results — they are the input to the
+correction below.
+
+## Validation
+
+**23 hypotheses** (halving windows × event categories × macro phases):
+
+* significant raw: **0** — chance alone would give ~1.2,
+* after Benjamini-Hochberg correction: **0**,
+* replicating out of sample (cycles 0–2 → 3–4): **0**,
+* skipped for lack of data: 3 (the `cycle_extreme` category is still empty).
+
+## Walk-forward validation (13 disjoint windows, 2013-11 → 2026-09)
+
+For each hypothesis we check how often the sign of the effect survives the move
+from the training window to the test window. Under the null that is a coin flip.
+
+| hypothesis | folds | agreeing | agreement | sign p | q (BH) | mean OOS effect | effect p | effect q |
+|---|---|---|---|---|---|---|---|---|
+| phase_expanding_rising | 5 | 5 | 100% | 0.063 | 1.000 | −0.0028 | 0.017 | 0.300 |
+| phase_contracting_rising | 11 | 4 | 36% | 0.549 | 1.000 | +0.0005 | 0.638 | 0.932 |
+| phase_contracting_falling | 10 | 6 | 60% | 0.754 | 1.000 | +0.0006 | 0.651 | 0.932 |
+| halving_after_365d | 7 | 3 | 43% | 1.000 | 1.000 | +0.0097 | 0.344 | 0.932 |
+| halving_after_180d | 4 | 2 | 50% | 1.000 | 1.000 | −0.0008 | 0.619 | 0.932 |
+
+**Significant after correction: 0** — on neither the sign test nor the
+out-of-sample effect. Both statistics go through the correction; correcting
+only one and quoting the other raw would mean picking the convenient one after
+seeing the results.
+
+A power limit worth remembering: `phase_expanding_rising` has **5 out of 5**
+matching signs, the best possible outcome — and still p = 0.0625. At five
+windows significance cannot be reached even with perfect stability.
+
+## Liquidity axis: real M2 vs the dollar proxy
+
+Agreement on **42.3%** of 5130 compared days — *below* chance level (50% for a
+binary axis), because in this sample the two are opposed.
+
+| | proxy: contracting | proxy: expanding |
+|---|---|---|
+| **M2: contracting** | 1588 | 2193 |
+| **M2: expanding** | 767 | 582 |
+
+The phase "liquidity rising, rates rising" returns −20.6% a year computed from
+M2 and +105.9% computed from the proxy. Same label, opposite conclusion.
+
+## Backtest (10 bps fees + 15 bps slippage)
+
+| strategy | return | CAGR | Sharpe | maxDD | exposure |
+|---|---|---|---|---|---|
+| buy and hold | +715,635% | 80.3% | 1.14 | −84.9% | 100% |
+| trend 50/200 | +885,999% | 82.9% | **1.27** | −78.3% | 61% |
+| halving +365d | +254,351% | 68.4% | **1.42** | −71.0% | 27% |
+| halving +180d | +2,555% | 24.3% | 0.87 | −70.3% | 13% |
+| halving +90d | +242% | 8.5% | 0.76 | −21.8% | 7% |
+| halving +30d | +12% | 0.7% | 0.13 | −20.5% | 2% |
+| macro (M2 up, rates down) | +257% | 8.8% | 0.46 | −57.4% | 10% |
+
+---
+
+## Conclusion
+
+The only strategy with a better Sharpe than buy-and-hold at meaningful exposure
+(`halving +365d`, 1.42 at 27% time in market) **fails statistical validation
+and is indistinguishable from the NASDAQ**. Four cycles are four observations,
+and "be in the market for a year after the halving" largely overlaps with "be
+in the market during a bull run".
+
+That is a result, not a failure. The project was built to tell a pattern from
+noise, and it did.
+
+---
+
+## What is not here
+
+`features.csv` (3.9 MB) and `lab.sqlite` (11 MB) are deliberately outside
+version control — one command regenerates them, and versioning them would bloat
+the history on every run.

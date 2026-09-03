@@ -1,21 +1,24 @@
-r"""Interfejs wiersza polecen.
+r"""Command-line interface.
 
-Na Windowsie uruchamiaj przez launcher, ktory sam przygotuje srodowisko:
+Use the cross-platform launcher, which prepares the environment for you:
 
-    btc ingest --what all
-    btc quality
-    btc study --post 365
-    btc control
-    btc validate
-    btc backtest
-    btc all
+    python run.py ingest --what all
+    python run.py quality
+    python run.py study --post 365
+    python run.py control
+    python run.py validate
+    python run.py walkforward
+    python run.py backtest
+    python run.py all
 
-Bez launchera dziala tez bezposrednie wywolanie - modul sam dokleja `src`
-do sciezki, wiec nie trzeba ustawiac PYTHONPATH:
+On Windows `btc.cmd` and on macOS/Linux `./btc` are thin wrappers around it.
 
-    .venv\Scripts\python.exe src\cli.py study --post 365
+Calling this module directly works too - it appends `src` to the import path
+itself, so PYTHONPATH is not needed:
 
-Kazda komenda zapisuje wynik do data/processed/ i wypisuje skrot na ekran.
+    .venv/bin/python src/cli.py study --post 365
+
+Every command writes its output to data/processed/ and prints a summary.
 """
 from __future__ import annotations
 
@@ -76,7 +79,7 @@ def _save(frame: pd.DataFrame, config, name: str) -> Path:
     return path
 
 
-# --- komendy --------------------------------------------------------------
+# --- commands --------------------------------------------------------------
 
 
 def cmd_ingest(args) -> int:
@@ -88,22 +91,22 @@ def cmd_ingest(args) -> int:
         if what in ("all", "prices"):
             for source in config["price"]["sources"]:
                 start = args.start or max(config["price"]["start"], SOURCE_START.get(source, "2010-01-01"))
-                print(f"[ceny] {source}: pobieram od {start} ...")
+                print(f"[prices] {source}: fetching from {start} ...")
                 try:
                     frame = fetch_prices(source, symbol, start, args.end)
                     rows = store_prices(conn, frame, symbol, source)
-                    print(f"[ceny] {source}: {rows} barow")
-                except Exception as exc:  # zrodlo moze byc chwilowo niedostepne
-                    print(f"[ceny] {source}: BLAD {exc}")
+                    print(f"[prices] {source}: {rows} bars")
+                except Exception as exc:  # a source may be temporarily unavailable
+                    print(f"[prices] {source}: ERROR {exc}")
 
         if what in ("all", "macro"):
             for name, ticker in config["macro"]["yahoo"].items():
                 try:
                     frame = fetch_yahoo_series(ticker)
                     rows = store_macro(conn, frame, name, "yahoo")
-                    print(f"[makro] {name} ({ticker}): {rows} obserwacji")
+                    print(f"[macro] {name} ({ticker}): {rows} observations")
                 except Exception as exc:
-                    print(f"[makro] {name}: BLAD {exc}")
+                    print(f"[macro] {name}: ERROR {exc}")
 
             for name, spec in config["macro"]["fred"].items():
                 try:
@@ -112,21 +115,21 @@ def cmd_ingest(args) -> int:
                         publication_lag_days=int(spec["publication_lag_days"]),
                     )
                     rows = store_macro(conn, frame, name, "fred")
-                    print(f"[makro] {name} ({spec['series_id']}): {rows} obserwacji")
+                    print(f"[macro] {name} ({spec['series_id']}): {rows} observations")
                 except MissingCredentials as exc:
-                    print(f"[makro] pomijam FRED: {exc}")
+                    print(f"[macro] skipping FRED: {exc}")
                     break
                 except Exception as exc:
-                    print(f"[makro] {name}: BLAD {exc}")
+                    print(f"[macro] {name}: ERROR {exc}")
 
             manual_dir = config.root / config["macro"]["manual_dir"]
             for path in sorted(manual_dir.glob("*.csv")):
                 try:
                     frame = load_manual_csv(path)
                     rows = store_macro(conn, frame, path.stem, "manual")
-                    print(f"[makro] {path.stem} (reczne): {rows} obserwacji")
+                    print(f"[macro] {path.stem} (manual): {rows} observations")
                 except Exception as exc:
-                    print(f"[makro] {path.name}: BLAD {exc}")
+                    print(f"[macro] {path.name}: ERROR {exc}")
 
         if what in ("all", "control"):
             control_config = config.get("control", {})
@@ -136,16 +139,16 @@ def cmd_ingest(args) -> int:
                 try:
                     frame = fetch_prices(source, name, start, args.end)
                     rows = store_prices(conn, frame, name, source)
-                    print(f"[kontrola] {name}: {rows} sesji")
+                    print(f"[control] {name}: {rows} sessions")
                 except Exception as exc:
-                    print(f"[kontrola] {name}: BLAD {exc}")
+                    print(f"[control] {name}: ERROR {exc}")
 
         if what in ("all", "events"):
             events = load_events_csv(config.root / "data" / "raw" / "events.csv")
             rows = store_events(conn, events)
-            print(f"[zdarzenia] {rows} pozycji")
+            print(f"[events] {rows} entries")
 
-        print("\n--- zawartosc bazy ---")
+        print("\n--- database contents ---")
         print(table_summary(conn).to_string(index=False))
     return 0
 
@@ -160,14 +163,14 @@ def cmd_quality(args) -> int:
         for source in priority:
             frame = read_prices(conn, symbol, source=source)
             if frame.empty:
-                print(f"[jakosc] {source}: brak danych")
+                print(f"[quality] {source}: no data")
                 continue
             frames[source] = frame
-            print("[jakosc]", check_prices(frame, name=source).summary())
+            print("[quality]", check_prices(frame, name=source).summary())
 
         if len(frames) >= 2:
             stitched, report = stitch_sources(frames, priority)
-            print("\n--- zszycie zrodel ---")
+            print("\n--- source stitching ---")
             print(report.to_string(index=False))
             overlap = report.attrs["overlap"]
             if not overlap.empty:
@@ -176,19 +179,19 @@ def cmd_quality(args) -> int:
                 for _, row in overlap.iterrows():
                     if row["median_rel_diff"] > tolerance:
                         print(
-                            f"UWAGA: {row['pair']} rozjezdza sie o "
-                            f"{row['median_rel_diff']:.2%} (prog {tolerance:.2%})"
+                            f"WARNING: {row['pair']} diverges by "
+                            f"{row['median_rel_diff']:.2%} (threshold {tolerance:.2%})"
                         )
-            print("\n[jakosc]", check_prices(stitched, name="zszyty szereg").summary())
+            print("\n[quality]", check_prices(stitched, name="stitched series").summary())
 
             first, second = priority[0], priority[1]
             if first in frames and second in frames:
                 divergence = compare_sources(frames[first], frames[second], tolerance=0.05)
-                print(f"[jakosc] dni z rozbieznoscia >5% ({first} vs {second}): {len(divergence)}")
+                print(f"[quality] days diverging >5% ({first} vs {second}): {len(divergence)}")
 
         macro = read_macro(conn)
         if not macro.empty:
-            print("\n--- makro ---")
+            print("\n--- macro ---")
             rows = [check_macro(group, name=name) for name, group in macro.groupby("series")]
             print(pd.DataFrame(rows).to_string(index=False))
     return 0
@@ -198,10 +201,10 @@ def cmd_features(args) -> int:
     config = load_config()
     data = load_lab_data(config)
     if data.is_empty:
-        print("baza jest pusta - uruchom najpierw `ingest`")
+        print("the database is empty - run `ingest` first")
         return 1
     path = _save(data.features, config, "features.csv")
-    print(f"cechy: {data.features.shape[0]} dni x {data.features.shape[1]} kolumn -> {path}")
+    print(f"features: {data.features.shape[0]} days x {data.features.shape[1]} columns -> {path}")
     print(data.features.tail(3).to_string())
     return 0
 
@@ -210,14 +213,14 @@ def cmd_study(args) -> int:
     config = load_config()
     data = load_lab_data(config)
     if data.is_empty:
-        print("baza jest pusta - uruchom najpierw `ingest`")
+        print("the database is empty - run `ingest` first")
         return 1
 
     result = halving_event_study(data, pre=args.pre, post=args.post, config=config)
-    print("--- halvingi ---")
+    print("--- halvings ---")
     print(result.summary())
     if len(result.skipped_events):
-        print(f"pominiete (brak pelnego okna): {[str(d.date()) for d in result.skipped_events]}")
+        print(f"skipped (incomplete window): {[str(d.date()) for d in result.skipped_events]}")
     if not result.table.empty:
         path = _save(result.table, config, "event_study_halving.csv")
         milestones = [d for d in (0, 30, 90, 180, 365) if d in result.table.index]
@@ -228,7 +231,7 @@ def cmd_study(args) -> int:
         )
         print(f"-> {path}")
 
-    print("\n--- kategorie zdarzen ---")
+    print("\n--- event categories ---")
     rows = []
     for category, study in category_event_studies(data, post=args.post, config=config).items():
         rows.append({"kategoria": category, "n": study.n_events, **study.car_summary})
@@ -237,8 +240,8 @@ def cmd_study(args) -> int:
         print(table.to_string(index=False))
         _save(table, config, "event_study_categories.csv")
         print(
-            "\nUWAGA: powyzsze p-value NIE sa skorygowane o liczbe testow. "
-            "Do wnioskowania uzyj `python -m cli validate`."
+            "\nWARNING: the p-values above are NOT corrected for the number of "
+            "tests. For inference use `run.py validate`."
         )
     return 0
 
@@ -247,14 +250,14 @@ def cmd_validate(args) -> int:
     config = load_config()
     data = load_lab_data(config)
     if data.is_empty:
-        print("baza jest pusta - uruchom najpierw `ingest`")
+        print("the database is empty - run `ingest` first")
         return 1
 
     scan = scan_hypotheses(data, config=config)
     if scan.empty:
-        print("brak hipotez do sprawdzenia")
+        print("no hypotheses to check")
         return 1
-    print("--- skan hipotez (cel: dzienny zwrot logarytmiczny) ---")
+    print("--- hypothesis scan (target: daily log return) ---")
     print(
         scan.loc[
             :, ["hypothesis", "n_in", "mean_in", "mean_out", "difference",
@@ -266,7 +269,7 @@ def cmd_validate(args) -> int:
 
     out_of_sample = out_of_sample_check(data, config=config)
     if not out_of_sample.empty:
-        print("\n--- replikacja poza proba (podzial po cyklach) ---")
+        print("\n--- out-of-sample replication (split by cycle) ---")
         print(
             out_of_sample.loc[
                 :, ["hypothesis", "train_effect", "test_effect", "same_sign",
@@ -274,41 +277,41 @@ def cmd_validate(args) -> int:
             ].to_string(index=False)
         )
         survivors = out_of_sample[out_of_sample["replicated"]]["hypothesis"].tolist()
-        print(f"\nprzetrwalo out-of-sample: {survivors or 'nic'}")
+        print(f"\nsurvived out of sample: {survivors or 'nothing'}")
         _save(out_of_sample, config, "out_of_sample.csv")
     return 0
 
 
 def cmd_macro(args) -> int:
-    """Stan osi plynnosci: czym jest liczona i czy wybor zrodla zmienia wnioski."""
+    """Liquidity axis: what it is computed from, and whether the choice matters."""
     config = load_config()
 
     if args.check_key:
         key = secret("FRED_API_KEY")
         if not key:
-            print("FRED_API_KEY: brak. Wklej klucz do .env (wzor w .env.example).")
+            print("FRED_API_KEY: missing. Paste a key into .env (template in .env.example).")
             return 1
-        print(f"FRED_API_KEY: obecny ({len(key)} znakow)")
+        print(f"FRED_API_KEY: present ({len(key)} characters)")
         try:
             probe = fetch_fred("M2SL", publication_lag_days=30)
         except Exception as exc:
-            print(f"FRED: klucz odrzucony albo API niedostepne -> {exc}")
+            print(f"FRED: key rejected or API unreachable -> {exc}")
             return 1
         lag = (probe["available_from"] - probe["date"]).dt.days
         print(
-            f"FRED: OK, {len(probe)} obserwacji M2SL "
+            f"FRED: OK, {len(probe)} M2SL observations "
             f"({probe['date'].min().date()} -> {probe['date'].max().date()})"
         )
         print(
-            f"  daty publikacji z archiwum wersji: {probe.attrs.get('vintage_rows', 0)}, "
-            f"ze stalego opoznienia: {probe.attrs.get('fallback_rows', 0)}"
+            f"  publication dates from the vintage archive: {probe.attrs.get('vintage_rows', 0)}, "
+            f"from the fixed lag: {probe.attrs.get('fallback_rows', 0)}"
         )
-        print(f"  mediana opoznienia publikacji: {lag.median():.0f} dni, maks {lag.max():.0f}")
+        print(f"  median publication lag: {lag.median():.0f} days, max {lag.max():.0f}")
         return 0
 
     data = load_lab_data(config)
     if data.is_empty:
-        print("baza jest pusta - uruchom najpierw `ingest`")
+        print("the database is empty - run `ingest` first")
         return 1
 
     report = macro_phase_comparison(data, config=config)
@@ -317,59 +320,59 @@ def cmd_macro(args) -> int:
         return 1
 
     for name, summary in report["summary"].items():
-        label = "M2 (FRED)" if name == "m2" else "proxy: odwrocony indeks dolara"
-        print(f"\n--- os plynnosci: {label} ---")
+        label = "M2 (FRED)" if name == "m2" else "proxy: inverted dollar index"
+        print(f"\n--- liquidity axis: {label} ---")
         print(
-            f"dni z etykieta: {summary['coverage_days']} "
-            f"(od {summary['first_labelled_day']})"
+            f"labelled days: {summary['coverage_days']} "
+            f"(from {summary['first_labelled_day']})"
         )
         print(summary["regimes"].to_string(float_format=lambda v: f"{v:,.4f}"))
 
     if "agreement" in report:
         agreement = report["agreement"]
-        print("\n--- zgodnosc obu wersji ---")
-        print(f"porownane dni: {agreement['compared_days']}")
-        print(f"identyczna etykieta fazy: {agreement['identical_label']:.1%}")
-        print(f"sama os plynnosci zgodna: {agreement['liquidity_axis_agrees']:.1%}")
+        print("\n--- agreement between the two versions ---")
+        print(f"days compared: {agreement['compared_days']}")
+        print(f"identical phase label: {agreement['identical_label']:.1%}")
+        print(f"liquidity axis alone agrees: {agreement['liquidity_axis_agrees']:.1%}")
         if agreement["liquidity_axis_agrees"] < 0.7:
             print(
-                "\nProxy dolarowe i M2 opisuja rozne rzeczy - wnioski z fazy makro "
-                "policzonej na proxy NIE przenosza sie na wersje z M2."
+                "\nThe dollar proxy and M2 describe different things - conclusions "
+                "from a macro phase computed on the proxy do NOT carry over to M2."
             )
     else:
         print(
-            "\nBrak drugiej wersji do porownania. Zeby policzyc faze na prawdziwym M2, "
-            "wklej klucz FRED do .env i uruchom:\n"
-            "  python -m cli ingest --what macro"
+            "\nNo second version to compare against. To compute the phase on real "
+            "M2, paste a FRED key into .env and run:\n"
+            "  run.py ingest --what macro"
         )
     return 0
 
 
 def cmd_walkforward(args) -> int:
-    """Walidacja kroczaca: kilkanascie rozlacznych okien testowych."""
+    """Walk-forward validation: a dozen or more disjoint test windows."""
     config = load_config()
     data = load_lab_data(config)
     if data.is_empty:
-        print("baza jest pusta - uruchom najpierw `ingest`")
+        print("the database is empty - run `ingest` first")
         return 1
 
     table = walk_forward_check(data, config=config)
     if table.empty:
-        print("za malo danych na walidacje kroczaca")
+        print("not enough data for walk-forward validation")
         return 1
 
     folds = table.attrs["folds"]
     disjoint = table.attrs["test_windows_disjoint"]
-    print(f"--- {table.attrs['n_folds_total']} foldow, okna testowe rozlaczne: {disjoint} ---")
+    print(f"--- {table.attrs['n_folds_total']} folds, test windows disjoint: {disjoint} ---")
     print(folds.loc[:, ["split", "train_days", "train_span", "test_days", "test_span"]]
           .to_string(index=False))
     if not disjoint:
         print(
-            "\nUWAGA: okna testowe zachodza na siebie, wiec test t po foldach jest "
-            "niewazny i nie zostal policzony. Zwieksz step_days w config.yaml."
+            "\nWARNING: the test windows overlap, so the t-test across folds is "
+            "invalid and was not computed. Raise step_days in config.yaml."
         )
 
-    print("\n--- stabilnosc znaku efektu miedzy treningiem a testem ---")
+    print("\n--- sign stability of the effect from training to test ---")
     columns = ["hypothesis", "n_folds", "n_same_sign", "sign_agreement",
                "sign_p_value", "sign_p_adjusted", "mean_test_effect"]
     if disjoint:
@@ -378,17 +381,17 @@ def cmd_walkforward(args) -> int:
 
     sign_hits = table[table["sign_significant_adjusted"]]["hypothesis"].tolist()
     effect_hits = table[table["test_effect_significant_adjusted"]]["hypothesis"].tolist()
-    print(f"\npo korekcie {config['validation']['fdr_method']}:")
-    print(f"  stabilny znak      : {sign_hits or 'nic'}")
-    print(f"  efekt out-of-sample: {effect_hits or 'nic'}")
+    print(f"\nafter {config['validation']['fdr_method']} correction:")
+    print(f"  stable sign        : {sign_hits or 'nothing'}")
+    print(f"  out-of-sample effect: {effect_hits or 'nothing'}")
 
     best = table.iloc[0]
     if int(best["n_folds"]) < 6:
         print(
-            f"\nLimit mocy: najlepsza hipoteza ({best['hypothesis']}) ma tylko "
-            f"{int(best['n_folds'])} foldow. Nawet pelna zgodnosc znaku dalaby "
-            f"p={0.5 ** (int(best['n_folds']) - 1):.4f}, wiec przy tylu oknach "
-            "nie da sie osiagnac istotnosci."
+            f"\nPower limit: the best hypothesis ({best['hypothesis']}) has only "
+            f"{int(best['n_folds'])} folds. Even perfect sign agreement would give "
+            f"p={0.5 ** (int(best['n_folds']) - 1):.4f}, so at this many windows "
+            "significance is unreachable."
         )
     _save(table, config, "walk_forward.csv")
     _save(folds, config, "walk_forward_folds.csv")
@@ -396,23 +399,23 @@ def cmd_walkforward(args) -> int:
 
 
 def cmd_control(args) -> int:
-    """Test placebo: czy grupa kontrolna reaguje na halvingi tak samo jak BTC."""
+    """Placebo test: does the control group react to halvings the way BTC does?"""
     config = load_config()
     data = load_lab_data(config)
     if data.is_empty:
-        print("baza jest pusta - uruchom najpierw `ingest`")
+        print("the database is empty - run `ingest` first")
         return 1
 
     dates = None
     label = "halvingi"
     if args.category:
         if data.events.empty:
-            print("brak rejestru zdarzen")
+            print("no event registry")
             return 1
         subset = data.events[data.events["category"] == args.category]
         if subset.empty:
             available = sorted(data.events["category"].unique())
-            print(f"brak zdarzen w kategorii {args.category}; dostepne: {available}")
+            print(f"no events in category {args.category}; available: {available}")
             return 1
         dates = subset["available_from"]
         label = args.category
@@ -426,9 +429,9 @@ def cmd_control(args) -> int:
 
     alpha = float(config["validation"]["alpha"])
     for name, comparison in report["comparisons"].items():
-        print(f"\n--- {config['price']['symbol']} vs {name} wokol: {report['label']} ---")
+        print(f"\n--- {config['price']['symbol']} vs {name} around: {report['label']} ---")
         if comparison.table.empty:
-            print("brak wspolnych zdarzen z pelnym oknem")
+            print("no shared events with a complete window")
             continue
         print(
             comparison.table.loc[
@@ -440,15 +443,16 @@ def cmd_control(args) -> int:
         placebo = report["placebos"][name]
         if placebo.car_summary:
             print(
-                f"placebo ({name} traktowany jak BTC): CAR({placebo.car_summary['offset']}d) = "
+                f"placebo ({name} treated like BTC): CAR({placebo.car_summary['offset']}d) = "
                 f"{placebo.car_summary['car']:+.1%}, p={placebo.car_summary['p_value']:.3f}"
             )
         _save(comparison.per_event, config, f"control_{name}_per_event.csv")
         _save(comparison.table, config, f"control_{name}.csv")
 
     print(
-        "\nJak to czytac: jesli roznica nie odstaje od zera, to co widac wokol "
-        "halvingu jest wspolne dla rynkow ryzyka, a nie specyficzne dla bitcoina."
+        "\nHow to read this: if the difference is indistinguishable from zero, "
+        "what happens around a halving is common to risk assets rather than "
+        "specific to Bitcoin."
     )
     return 0
 
@@ -457,11 +461,11 @@ def cmd_backtest(args) -> int:
     config = load_config()
     data = load_lab_data(config)
     if data.is_empty:
-        print("baza jest pusta - uruchom najpierw `ingest`")
+        print("the database is empty - run `ingest` first")
         return 1
 
     table, results = run_strategies(data, config=config)
-    print("--- backtest (koszty: {} bps prowizji + {} bps poslizgu) ---".format(
+    print("--- backtest ({} bps fees + {} bps slippage) ---".format(
         config["backtest"]["fee_bps"], config["backtest"]["slippage_bps"]
     ))
     for result in results:
@@ -470,10 +474,10 @@ def cmd_backtest(args) -> int:
     print(table.to_string(float_format=lambda v: f"{v:,.3f}"))
     _save(table, config, "backtest_comparison.csv")
 
-    baseline = table.loc["kup i trzymaj"]
+    baseline = table.loc["buy and hold"]
     better = table[table["sharpe"] > baseline["sharpe"]].index.tolist()
-    better = [name for name in better if name != "kup i trzymaj"]
-    print(f"\nlepszy Sharpe niz kup-i-trzymaj: {better or 'zadna'}")
+    better = [name for name in better if name != "buy and hold"]
+    print(f"\nbetter Sharpe than buy-and-hold: {better or 'none'}")
     return 0
 
 
@@ -491,54 +495,54 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="btc-cycle-lab", description=__doc__)
     subparsers = parser.add_subparsers(dest="command", required=True)
 
-    ingest = subparsers.add_parser("ingest", help="pobiera dane do lokalnej bazy")
+    ingest = subparsers.add_parser("ingest", help="download data into the local database")
     ingest.add_argument(
         "--what", choices=["all", "prices", "macro", "events", "control"], default="all"
     )
-    ingest.add_argument("--start", default=None, help="data poczatkowa (YYYY-MM-DD)")
+    ingest.add_argument("--start", default=None, help="start date (YYYY-MM-DD)")
     ingest.add_argument("--end", default=None)
     ingest.set_defaults(func=cmd_ingest)
 
-    quality = subparsers.add_parser("quality", help="raport jakosci danych")
+    quality = subparsers.add_parser("quality", help="data quality report")
     quality.set_defaults(func=cmd_quality)
 
-    features = subparsers.add_parser("features", help="buduje i zapisuje ramke cech")
+    features = subparsers.add_parser("features", help="build and save the feature frame")
     features.set_defaults(func=cmd_features)
 
-    study = subparsers.add_parser("study", help="event study wokol halvingow i zdarzen")
+    study = subparsers.add_parser("study", help="event study around halvings and events")
     study.add_argument("--pre", type=int, default=30)
     study.add_argument("--post", type=int, default=365)
     study.set_defaults(func=cmd_study)
 
-    validate = subparsers.add_parser("validate", help="skan hipotez + korekta + out-of-sample")
+    validate = subparsers.add_parser("validate", help="hypothesis scan + correction + out-of-sample")
     validate.set_defaults(func=cmd_validate)
 
     walkforward = subparsers.add_parser(
-        "walkforward", help="walidacja kroczaca: kilkanascie okien testowych"
+        "walkforward", help="walk-forward validation across many test windows"
     )
     walkforward.set_defaults(func=cmd_walkforward)
 
     control = subparsers.add_parser(
-        "control", help="grupa kontrolna: czy NASDAQ reaguje na halvingi tak samo"
+        "control", help="control group: does the NASDAQ react to halvings the same way"
     )
     control.add_argument("--post", type=int, default=365)
     control.add_argument(
         "--category", default=None,
-        help="zamiast halvingow uzyj zdarzen z tej kategorii (np. credit_event)",
+        help="use events from this category instead of halvings (e.g. credit_event)",
     )
     control.set_defaults(func=cmd_control)
 
-    macro = subparsers.add_parser("macro", help="os plynnosci: M2 vs proxy, stan klucza FRED")
+    macro = subparsers.add_parser("macro", help="liquidity axis: M2 vs proxy, FRED key status")
     macro.add_argument(
         "--check-key", action="store_true",
-        help="sprawdza, czy FRED_API_KEY dziala (odpytuje API)",
+        help="check whether FRED_API_KEY works (queries the API)",
     )
     macro.set_defaults(func=cmd_macro)
 
-    backtest = subparsers.add_parser("backtest", help="strategie vs kup-i-trzymaj")
+    backtest = subparsers.add_parser("backtest", help="strategies vs buy-and-hold")
     backtest.set_defaults(func=cmd_backtest)
 
-    everything = subparsers.add_parser("all", help="pelny przebieg (bez pobierania danych)")
+    everything = subparsers.add_parser("all", help="full run (without downloading data)")
     everything.add_argument("--pre", type=int, default=30)
     everything.add_argument("--post", type=int, default=365)
     everything.add_argument("--check-key", action="store_true", help=argparse.SUPPRESS)

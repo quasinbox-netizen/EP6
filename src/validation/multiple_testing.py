@@ -1,23 +1,22 @@
-"""Korekta na wielokrotne testowanie.
+"""Correction for multiple testing.
 
-Problem, ktory ten modul rozwiazuje, jest w tym projekcie glowny. Majac
-kilkanascie okien halvingowych, kilka kategorii zdarzen i cztery horyzonty,
-testujemy setki hipotez. Przy 100 testach na czystym szumie okolo piec
-wyjdzie "istotnych" na poziomie 0.05 - i to wlasnie te piec opisza potem
-naglowki o "wzorcu cyklicznym".
+This is the problem the project exists to handle. With a dozen halving windows,
+several event categories and four horizons, we test hundreds of hypotheses. Run
+100 tests on pure noise and about five come back "significant" at 0.05 - and it
+is those five that end up as headlines about a cyclical pattern.
 
-Dwie korekty, dwie filozofie:
+Two corrections, two philosophies:
 
-* Bonferroni kontroluje prawdopodobienstwo POPELNIENIA CHOCBY JEDNEGO bledu
-  I rodzaju (FWER). Konserwatywna, wlasciwa gdy pojedynczy falszywy wniosek
-  jest kosztowny - np. gdy zamierzasz na nim postawic pieniadze.
-* Benjamini-Hochberg kontroluje ODSETEK falszywych odkryc wsrod odrzuconych
-  (FDR). Lagodniejsza, wlasciwa na etapie generowania hipotez do dalszego
-  badania.
+* Bonferroni controls the probability of making EVEN ONE type I error (FWER).
+  Conservative; the right choice when a single false conclusion is expensive,
+  for instance when you intend to put money behind it.
+* Benjamini-Hochberg controls the PROPORTION of false discoveries among the
+  rejections (FDR). Gentler; the right choice while generating hypotheses for
+  further study.
 
-Uczciwosc wymaga zliczania WSZYSTKICH testow, ktore wykonales, a nie tylko
-tych, ktore trafily do raportu. Dlatego `correct` przyjmuje cala tabele
-skanu, a `n_tests_override` pozwala jawnie doliczyc proby odrzucone po drodze.
+Honesty requires counting every test you ran, not only the ones that made it
+into the report. That is why `correct` takes the whole scan table, and why
+`n_tests_override` exists for tests you discarded along the way.
 """
 from __future__ import annotations
 
@@ -28,11 +27,11 @@ METHODS = ("bonferroni", "bh", "none")
 
 
 def _valid_mask(p: np.ndarray) -> np.ndarray:
-    """Hipotezy, ktorych w ogole nie dalo sie przetestowac (np. puste okno).
+    """Hypotheses that could not be tested at all, e.g. an empty window.
 
-    Zostaja w tabeli jako NaN, ale nie biora udzialu w korekcie: ani nie
-    powiekszaja licznika testow, ani - co wazniejsze - nie moga zepsuc
-    monotonizacji BH, ktora idzie od konca posortowanej listy.
+    They stay in the table as NaN but take no part in the correction: they
+    neither inflate the test count nor - more importantly - corrupt the
+    monotonicity step of BH, which walks backwards through the sorted list.
     """
     return np.isfinite(p)
 
@@ -49,7 +48,7 @@ def bonferroni(p_values: np.ndarray | pd.Series, n_tests: int | None = None) -> 
 def benjamini_hochberg(
     p_values: np.ndarray | pd.Series, n_tests: int | None = None
 ) -> np.ndarray:
-    """Wartosci q metoda BH (monotoniczne, obciete do 1)."""
+    """BH q-values: monotone and clipped to 1."""
     p = np.asarray(p_values, dtype=float)
     out = np.full(p.shape, np.nan)
     valid = _valid_mask(p)
@@ -61,7 +60,7 @@ def benjamini_hochberg(
     order = np.argsort(tested)
     ranked = tested[order]
     adjusted = ranked * m / (np.arange(1, len(ranked) + 1))
-    # Wymuszenie monotonicznosci od konca - inaczej q moze malec wraz z p.
+    # Enforce monotonicity from the end, otherwise q can decrease as p rises.
     adjusted = np.minimum.accumulate(adjusted[::-1])[::-1]
 
     restored = np.empty_like(adjusted)
@@ -78,9 +77,9 @@ def correct(
     p_column: str = "p_value",
     n_tests_override: int | None = None,
 ) -> pd.DataFrame:
-    """Dokleja skorygowane p/q i decyzje do tabeli skanu hipotez."""
+    """Attach adjusted p/q values and decisions to a hypothesis scan table."""
     if method not in METHODS:
-        raise ValueError(f"nieznana metoda: {method} (dostepne: {METHODS})")
+        raise ValueError(f"unknown method: {method} (available: {METHODS})")
     out = scan.copy()
     if out.empty:
         return out
@@ -104,21 +103,21 @@ def correct(
 
 
 def expected_false_discoveries(n_tests: int, alpha: float = 0.05) -> float:
-    """Ile "odkryc" da sam przypadek przy tylu testach - liczba do raportu."""
+    """How many "discoveries" chance alone yields at this many tests."""
     return n_tests * alpha
 
 
 def summarize(corrected: pd.DataFrame) -> str:
     if corrected.empty:
-        return "brak hipotez do podsumowania"
+        return "no hypotheses to summarize"
     n_tests = corrected.attrs.get("n_tests", len(corrected))
     alpha = corrected.attrs.get("alpha", 0.05)
     raw = int(corrected["significant_raw"].sum())
     adjusted = int(corrected["significant_adjusted"].sum())
     untestable = corrected.attrs.get("n_untestable", 0)
-    skipped = f" | pominiete (brak danych): {untestable}" if untestable else ""
+    skipped = f" | skipped (no data): {untestable}" if untestable else ""
     return (
-        f"{n_tests} hipotez | istotne surowo: {raw} "
-        f"(sam przypadek dalby ~{expected_false_discoveries(n_tests, alpha):.1f}) "
-        f"| po korekcie {corrected.attrs.get('method', '?')}: {adjusted}{skipped}"
+        f"{n_tests} hypotheses | significant raw: {raw} "
+        f"(chance alone would give ~{expected_false_discoveries(n_tests, alpha):.1f}) "
+        f"| after {corrected.attrs.get('method', '?')} correction: {adjusted}{skipped}"
     )

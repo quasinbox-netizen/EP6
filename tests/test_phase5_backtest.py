@@ -1,7 +1,7 @@
-"""Faza 5 - backtest.
+"""Phase 5 - backtest.
 
-Baseline kup-i-trzymaj jest w kazdym istotnym tescie: strategia, ktora go
-nie bije, jest gorsza niezaleznie od tego, jak dobrze wyglada sama.
+The buy-and-hold baseline appears in every test that matters: a strategy that
+does not beat it is worse, however good it looks on its own.
 """
 from __future__ import annotations
 
@@ -40,14 +40,14 @@ def close(prices) -> pd.Series:
     return prices.set_index("date")["close"]
 
 
-# --- baseline i mechanika -------------------------------------------------
+# --- baseline and mechanics ----------------------------------------------------
 
 
 def test_buy_and_hold_tracks_the_asset(close):
-    result = run_backtest(close, buy_and_hold(close.index), FREE, name="kup i trzymaj")
+    result = run_backtest(close, buy_and_hold(close.index), FREE, name="buy and hold")
     asset_return = close.iloc[-1] / close.iloc[0] - 1
-    # Bez kosztow kup-i-trzymaj to dokladnie zwrot aktywa: sygnal z dnia t
-    # zbiera zwrot dnia t+1, wiec pierwszy dzien idzie na wejscie w pozycje.
+    # With no costs buy-and-hold is exactly the asset return: the signal from
+    # day t collects the return of day t+1, so the first day buys the position.
     assert result.metrics["total_return"] == pytest.approx(asset_return, rel=1e-9)
     assert result.metrics["time_in_market"] == pytest.approx(1.0, abs=0.01)
     assert result.metrics["n_position_changes"] == 1
@@ -62,20 +62,20 @@ def test_flat_signal_earns_nothing(close):
 
 
 def test_execution_lag_blocks_same_day_knowledge(close):
-    """Sygnal "wiedzacy" dzisiejszy zwrot dziala tylko przy zerowym opoznieniu."""
+    """A signal that "knows" today's return only works at zero lag."""
     daily_return = close.pct_change()
     oracle = (daily_return > 0).astype(float)
 
     cheating = run_backtest(close, oracle, BacktestConfig(0, 0, execution_lag_days=0))
     honest = run_backtest(close, oracle, BacktestConfig(0, 0, execution_lag_days=1))
 
-    assert cheating.metrics["total_return"] > 10.0, "kontrola: bez opoznienia to maszynka do pieniedzy"
+    assert cheating.metrics["total_return"] > 10.0, "control: with no lag this is a money machine"
     assert honest.metrics["total_return"] < cheating.metrics["total_return"] / 100
     assert honest.metrics["sharpe"] < 1.0
 
 
 def test_signal_is_not_shifted_twice(close):
-    """Pozycja dnia t ma byc sygnalem z t-1, nie z t-2."""
+    """The position on day t must be the signal from t-1, not from t-2."""
     signal = pd.Series(0.0, index=close.index)
     signal.iloc[10:20] = 1.0
     result = run_backtest(close, signal, FREE)
@@ -93,12 +93,12 @@ def test_short_positions_require_opt_in(close):
     assert with_shorts.positions.min() == -1.0
 
 
-# --- koszty ---------------------------------------------------------------
+# --- costs ---------------------------------------------------------------------
 
 
 def test_costs_reduce_returns(close):
     signal = pd.Series(0.0, index=close.index)
-    signal.iloc[::10] = 1.0  # duzy obrot
+    signal.iloc[::10] = 1.0  # heavy turnover
 
     free = run_backtest(close, signal, BacktestConfig(0, 0))
     cheap = run_backtest(close, signal, BacktestConfig(5, 5))
@@ -110,7 +110,7 @@ def test_costs_reduce_returns(close):
 
 
 def test_cost_is_charged_on_turnover_not_on_trade_count(close):
-    """Zmiana pozycji o 0.1 kosztuje dziesiec razy mniej niz o 1.0."""
+    """Changing the position by 0.1 costs ten times less than by 1.0."""
     config = BacktestConfig(fee_bps=10, slippage_bps=10)
     small = pd.Series(0.0, index=close.index)
     small.iloc[100] = 0.1
@@ -129,7 +129,7 @@ def test_buy_and_hold_pays_entry_cost_once(close):
     assert result.costs.sum() == pytest.approx(config.cost_rate, rel=1e-9)
 
 
-# --- metryki --------------------------------------------------------------
+# --- metrics -------------------------------------------------------------------
 
 
 def test_max_drawdown_matches_hand_calculation():
@@ -164,7 +164,7 @@ def test_win_rate_counts_only_days_in_market(close):
     assert result.metrics["time_in_market"] == pytest.approx(100 / len(close), abs=0.01)
 
 
-# --- strategie i porownanie ----------------------------------------------
+# --- strategies and comparison -------------------------------------------------
 
 
 def test_halving_strategy_is_out_of_market_between_cycles():
@@ -201,12 +201,12 @@ def test_combine_all_requires_both_conditions():
 
 
 def test_comparison_table_includes_baseline(close):
-    baseline = run_backtest(close, buy_and_hold(close.index), FREE, name="kup i trzymaj")
+    baseline = run_backtest(close, buy_and_hold(close.index), FREE, name="buy and hold")
     strategy = run_backtest(
         close, halving_window(close.index, days_after=180), FREE, name="halving 180d"
     )
     table = compare([baseline, strategy])
-    assert list(table.index) == ["kup i trzymaj", "halving 180d"]
+    assert list(table.index) == ["buy and hold", "halving 180d"]
     assert "sharpe" in table.columns and "max_drawdown" in table.columns
 
 

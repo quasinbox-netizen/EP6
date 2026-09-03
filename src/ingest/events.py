@@ -1,21 +1,22 @@
-"""Rejestr zdarzen historycznych - recznie prowadzony CSV.
+"""Registry of historical events - a hand-maintained CSV.
 
-Zdarzenia sa jedynym zbiorem w projekcie, ktory nie ma zrodla API. Plik
-data/raw/events.csv jest wersjonowany i celowo krotki: kazdy wiersz to
-zdarzenie, ktore w momencie wystapienia bylo publicznie znane.
+Events are the only dataset in this project without an API behind it. The file
+data/raw/events.csv is version-controlled and deliberately short: each row is
+an event that was publicly known at the moment it happened.
 
-Kolumny:
-    name           - identyfikator (unikalny razem z data),
-    date           - dzien zdarzenia (UTC),
+Columns:
+    name           - identifier (unique together with the date),
+    date           - the day of the event (UTC),
     category       - halving | regulation | macro | market_structure | credit_event,
-    description    - jedno zdanie kontekstu,
-    available_from - kiedy rynek sie o tym dowiedzial (domyslnie = date),
-    source         - link lub odnosnik do zrodla; UZUPELNIJ przed wnioskowaniem.
+    description    - one sentence of context,
+    available_from - when the market learned about it (defaults to date),
+    source         - link or citation; FILL THIS IN before drawing conclusions.
 
-Ostrzezenie metodologiczne: lista zdarzen wybranych po fakcie jest z natury
-obciazona (pamietamy te, po ktorych cos sie stalo). Wyniki event study na
-recznej liscie traktuj jako hipotezy, nie dowody - dlatego
-analysis/event_study.py zawsze raportuje przedzial ufnosci i liczbe zdarzen.
+Methodological warning: a list of events chosen after the fact is inherently
+biased - we remember the ones that were followed by something. Treat event
+study results on a hand-made list as hypotheses, not proof, which is why
+analysis/event_study.py always reports a confidence interval and the number of
+events.
 """
 from __future__ import annotations
 
@@ -41,7 +42,7 @@ def load_events_csv(path: str | Path) -> pd.DataFrame:
     df = pd.read_csv(path, comment="#")
     missing = [c for c in REQUIRED_COLUMNS if c not in df.columns]
     if missing:
-        raise ValueError(f"{path}: brakuje kolumn {missing}")
+        raise ValueError(f"{path}: missing columns {missing}")
 
     df["date"] = pd.to_datetime(df["date"]).dt.normalize()
     if "available_from" in df.columns:
@@ -56,13 +57,13 @@ def load_events_csv(path: str | Path) -> pd.DataFrame:
     unknown = sorted(set(df["category"]) - VALID_CATEGORIES)
     if unknown:
         raise ValueError(
-            f"{path}: nieznane kategorie {unknown}; dozwolone: {sorted(VALID_CATEGORIES)}"
+            f"{path}: unknown categories {unknown}; allowed: {sorted(VALID_CATEGORIES)}"
         )
     duplicates = df.duplicated(subset=["name", "date"])
     if duplicates.any():
-        raise ValueError(f"{path}: zduplikowane zdarzenia: {df.loc[duplicates, 'name'].tolist()}")
+        raise ValueError(f"{path}: duplicate events: {df.loc[duplicates, 'name'].tolist()}")
     if (df["available_from"] < df["date"]).any():
-        raise ValueError(f"{path}: available_from wczesniejsze niz date")
+        raise ValueError(f"{path}: available_from is earlier than date")
     return df.sort_values("date").reset_index(drop=True)
 
 

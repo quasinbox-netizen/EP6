@@ -1,30 +1,30 @@
-# Rejestr zdarzen historycznych. Plik jest wersjonowany i prowadzony recznie.
+# Registry of historical events. Version-controlled and maintained by hand.
 #
-# ZANIM WYCIAGNIESZ WNIOSKI: uzupelnij kolumne source i zweryfikuj daty.
-# Ponizsza lista to material startowy, a nie zweryfikowane zrodlo prawdy.
-# Daty dotycza dnia UTC, w ktorym informacja stala sie publiczna.
+# BEFORE YOU DRAW CONCLUSIONS: fill in the `source` column and verify the dates.
+# The list below is starting material, not a verified source of truth.
+# Dates refer to the UTC day on which the information became public.
 #
-# Lista ulozona po fakcie jest obciazona doborem prob (pamietamy zdarzenia,
-# po ktorych rynek sie poruszyl). Dodawaj takze zdarzenia "nudne" - te,
-# ktore wygladaly wtedy grozniej niz sie skonczylo.
+# A list assembled after the fact is subject to selection bias - we remember the
+# events the market reacted to. Add the boring ones too: the ones that looked
+# alarming at the time and came to nothing.
 name,date,category,description,available_from,source
-halving_2012,2012-11-28,halving,Pierwsze polowienie nagrody z 50 do 25 BTC,2012-11-28,
-halving_2016,2016-07-09,halving,Polowienie z 25 do 12.5 BTC,2016-07-09,
-halving_2020,2020-05-11,halving,Polowienie z 12.5 do 6.25 BTC,2020-05-11,
-halving_2024,2024-04-20,halving,Polowienie z 6.25 do 3.125 BTC,2024-04-20,
-mtgox_halt,2014-02-25,credit_event,Mt. Gox wstrzymuje handel i znika ze strony,2014-02-25,
-mtgox_bankruptcy,2014-02-28,credit_event,Mt. Gox sklada wniosek o upadlosc w Japonii,2014-02-28,
-china_ico_ban,2017-09-04,regulation,Chiny zakazuja ICO,2017-09-04,
-cboe_futures,2017-12-10,market_structure,Start kontraktow terminowych BTC na CBOE,2017-12-10,
-cme_futures,2017-12-17,market_structure,Start kontraktow terminowych BTC na CME,2017-12-17,
-covid_crash,2020-03-12,macro,Zalamanie rynkow ryzyka na starcie pandemii,2020-03-12,
-fed_zero_qe,2020-03-15,macro,Fed tnie stopy do zera i uruchamia skup aktywow,2020-03-15,
-china_mining_ban,2021-05-21,regulation,Chiny zapowiadaja rozprawe z kopalniami i handlem,2021-05-21,
-pboc_illegal,2021-09-24,regulation,PBoC uznaje transakcje kryptowalutowe za nielegalne,2021-09-24,
-fed_first_hike_2022,2022-03-16,macro,Pierwsza podwyzka stop w cyklu zaciesniania,2022-03-16,
-terra_collapse,2022-05-09,credit_event,Utrata parytetu i upadek UST/LUNA,2022-05-09,
-celsius_halt,2022-06-12,credit_event,Celsius wstrzymuje wyplaty,2022-06-12,
-ftx_collapse,2022-11-08,credit_event,FTX wstrzymuje wyplaty; upadlosc 11 listopada,2022-11-08,
-svb_usdc_depeg,2023-03-10,credit_event,Upadek SVB i chwilowa utrata parytetu USDC,2023-03-10,
-spot_etf_launch,2024-01-11,market_structure,Start obrotu amerykanskimi ETF-ami spot na BTC,2024-01-11,
-fed_first_cut_2024,2024-09-18,macro,Pierwsza obnizka stop po cyklu zaciesniania,2024-09-18,
+halving_2012,2012-11-28,halving,First block reward halving: 50 to 25 BTC,2012-11-28,
+halving_2016,2016-07-09,halving,Halving from 25 to 12.5 BTC,2016-07-09,
+halving_2020,2020-05-11,halving,Halving from 12.5 to 6.25 BTC,2020-05-11,
+halving_2024,2024-04-20,halving,Halving from 6.25 to 3.125 BTC,2024-04-20,
+mtgox_halt,2014-02-25,credit_event,Mt. Gox halts trading and its site goes dark,2014-02-25,
+mtgox_bankruptcy,2014-02-28,credit_event,Mt. Gox files for bankruptcy in Japan,2014-02-28,
+china_ico_ban,2017-09-04,regulation,China bans ICOs,2017-09-04,
+cboe_futures,2017-12-10,market_structure,BTC futures launch on CBOE,2017-12-10,
+cme_futures,2017-12-17,market_structure,BTC futures launch on CME,2017-12-17,
+covid_crash,2020-03-12,macro,Risk assets collapse at the start of the pandemic,2020-03-12,
+fed_zero_qe,2020-03-15,macro,The Fed cuts rates to zero and starts asset purchases,2020-03-15,
+china_mining_ban,2021-05-21,regulation,China announces a crackdown on mining and trading,2021-05-21,
+pboc_illegal,2021-09-24,regulation,The PBoC declares cryptocurrency transactions illegal,2021-09-24,
+fed_first_hike_2022,2022-03-16,macro,First rate hike of the tightening cycle,2022-03-16,
+terra_collapse,2022-05-09,credit_event,UST/LUNA loses its peg and collapses,2022-05-09,
+celsius_halt,2022-06-12,credit_event,Celsius halts withdrawals,2022-06-12,
+ftx_collapse,2022-11-08,credit_event,FTX halts withdrawals - bankruptcy on 11 November,2022-11-08,
+svb_usdc_depeg,2023-03-10,credit_event,SVB fails and USDC briefly loses its peg,2023-03-10,
+spot_etf_launch,2024-01-11,market_structure,US spot BTC ETFs begin trading,2024-01-11,
+fed_first_cut_2024,2024-09-18,macro,First rate cut after the tightening cycle,2024-09-18,

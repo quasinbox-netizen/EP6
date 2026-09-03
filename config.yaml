@@ -1,5 +1,5 @@
-# btc-cycle-lab — konfiguracja projektu.
-# Wszystkie ścieżki są względne wobec katalogu głównego repo.
+# btc-cycle-lab - project configuration.
+# Every path is relative to the repository root.
 
 paths:
   raw: data/raw
@@ -8,55 +8,56 @@ paths:
 
 price:
   symbol: BTCUSD
-  # Które źródła pobierać.
+  # Which sources to download.
   sources: [binance, bitstamp, coinbase]
-  # Kolejność zszywania: dla danego dnia wygrywa pierwsze źródło, które ten
-  # dzień ma. Binance jest najgłębszym rynkiem, ale startuje 2017-08-17,
-  # więc halvingi 2012 i 2016 pokrywa wyłącznie Bitstamp.
+  # Stitching order: for a given day the first source that has it wins.
+  # Binance is the deepest market but starts on 2017-08-17, so the 2012 and
+  # 2016 halvings are covered by Bitstamp alone.
   stitch_priority: [binance, bitstamp, coinbase]
-  start: "2011-08-18"     # pierwsza sesja BTC/USD na Bitstampie
-  # Maksymalna akceptowalna mediana rozbieżności na zakładce źródeł.
-  # Binance kwotuje BTC/USDT, więc epizody utraty parytetu USDT tu wychodzą.
+  start: "2011-08-18"     # the first BTC/USD session on Bitstamp
+  # Largest acceptable median divergence on the overlap between sources.
+  # Binance quotes BTC/USDT, so USDT de-pegging episodes show up here.
   overlap_tolerance: 0.01
-  # Dzienny bar zamyka się o 00:00 UTC dnia następnego.
+  # A daily bar closes at 00:00 UTC of the following day.
   timezone: UTC
 
-# Grupa kontrolna — aktywa, które NIE mają halvingu.
-# Sens: jeśli „efekt halvingu" widać także tutaj, to nie jest efekt halvingu,
-# tylko wspólny ruch rynków ryzyka w tamtym okresie. Porównanie jest sparowane
-# po zdarzeniach (różnica w różnicach), bo te same halvingi wypadają w tych
-# samych warunkach makro dla obu aktywów.
+# Control group - assets that do NOT have a halving.
+# The point: if the "halving effect" is visible here too, it is not a halving
+# effect but the common move of risk assets over that period. The comparison is
+# paired across events (difference in differences), because the same halvings
+# fall in the same macro conditions for both assets.
 control:
   symbols:
-    NASDAQ: "^IXIC"     # indeks giełdowy — najbliższy odpowiednik „ryzyka" dla BTC
-    SP500: "^GSPC"      # szerszy rynek
-    GOLD: "GC=F"        # aktywo o podaży ograniczonej, ale bez harmonogramu emisji
+    NASDAQ: "^IXIC"     # equity index - the closest analogue of "risk" for BTC
+    SP500: "^GSPC"      # the broader market
+    GOLD: "GC=F"        # a supply-limited asset, but with no emission schedule
   primary: NASDAQ
   source: yahoo
   start: "2011-01-01"
-  # NASDAQ handluje się ~252 dni w roku, BTC 365. Okna liczymy w dniach
-  # KALENDARZOWYCH (szereg kontrolny jest przenoszony na kalendarz przez
-  # ffill ostatniego znanego zamknięcia), inaczej „365 dni po halvingu"
-  # znaczyłoby dla NASDAQ prawie 17 miesięcy.
+  # The NASDAQ trades ~252 days a year, Bitcoin 365. Windows are counted in
+  # CALENDAR days (the control series is mapped onto the calendar by carrying
+  # the last known close forward); otherwise "365 days after the halving"
+  # would mean almost 17 months for the NASDAQ.
   align: calendar
 
 macro:
-  # Serie z Yahoo Finance — bez klucza API, dostępne tego samego dnia po zamknięciu.
+  # Yahoo Finance series - no API key, known the same day after the close.
   yahoo:
-    dxy: "DX-Y.NYB"       # indeks dolara
+    dxy: "DX-Y.NYB"       # dollar index
     spx: "^GSPC"
-    us10y: "^TNX"         # rentowność 10Y (w %, x10 w Yahoo — normalizujemy)
-    us13w: "^IRX"         # bon 13-tyg., proxy stopy krótkiej
+    us10y: "^TNX"         # 10-year yield
+    us13w: "^IRX"         # 13-week bill, a proxy for the short rate
     gold: "GC=F"
-  # Serie z FRED — wymagają darmowego klucza (FRED_API_KEY w .env).
-  # publication_lag_days = ile dni po końcu okresu obserwacji dana jest publicznie znana.
-  # To jest jedyne zabezpieczenie przed look-ahead bias na danych makro.
+  # FRED series - require a free key (FRED_API_KEY in .env).
+  # publication_lag_days = how many days after the end of the observation
+  # period the value becomes publicly known. This is the only safeguard
+  # against look-ahead bias in macro data.
   fred:
     m2:
       series_id: M2SL
-      # Zapasowe opóźnienie, używane tylko gdy brak daty publikacji z archiwum
-      # wersji. Zmierzone na prawdziwych wersjach M2SL: mediana 43 dni, maks 58 —
-      # czyli o dwa tygodnie więcej niż podpowiada intuicja "miesiąc po końcu okresu".
+      # Fallback lag, used only when no publication date is available from the
+      # vintage archive. Measured on the real M2SL vintages: median 43 days,
+      # max 58 - two weeks more than the intuitive "a month after period end".
       publication_lag_days: 45
       frequency: monthly
     indpro:
@@ -65,55 +66,55 @@ macro:
       frequency: monthly
     fed_funds:
       series_id: DFF
-      # DFF ma ponad 5000 dat wersji, czyli więcej niż limit FRED dla pierwszych
-      # publikacji (2000). Pobieramy ją bez archiwum wersji — dla serii dziennej,
-      # publikowanej następnego dnia i praktycznie nierewidowanej, stałe
-      # opóźnienie 1 dnia jest wierne.
+      # DFF has over 5000 vintage dates, more than the FRED limit for first
+      # releases (2000). We fetch it without the vintage archive - for a daily
+      # series published the next day and essentially never revised, a fixed
+      # one-day lag is faithful.
       publication_lag_days: 1
       frequency: daily
     unrate:
       series_id: UNRATE
       publication_lag_days: 7
       frequency: monthly
-  # ISM Manufacturing PMI nie jest dostępne w FRED (licencja ISM).
-  # Jeśli masz własne dane, wrzuć je do data/raw/manual/pmi.csv
-  # w formacie: observation_date,value[,available_from]
+  # ISM Manufacturing PMI is not available through FRED (ISM licence).
+  # If you have your own copy, drop it into data/raw/manual/pmi.csv
+  # in the format: observation_date,value[,available_from]
   manual_dir: data/raw/manual
 
 features:
-  # Okna zdarzeniowe używane przez features/events.py i analizę.
+  # Event windows used by features/events.py and by the analysis.
   event_windows: [7, 30, 90]
   halving_windows: [30, 90, 180, 365]
 
 backtest:
-  # Koszty jednostronne, w punktach bazowych obrotu.
+  # One-way costs, in basis points of turnover.
   fee_bps: 10.0
   slippage_bps: 15.0
-  # Sygnał policzony na zamknięciu dnia t wchodzi w życie na zamknięciu t+lag.
+  # A signal computed at the close of day t collects the return of day t+lag.
   execution_lag_days: 1
   initial_equity: 10000.0
-  # Dni handlowych w roku — BTC handluje się 365 dni.
+  # Trading days per year - Bitcoin trades all 365.
   periods_per_year: 365
 
 validation:
-  # Podział po cyklach halvingowych: cykle treningowe vs testowy.
+  # Split by halving cycle: training cycles vs test cycles.
   train_cycles: [0, 1, 2]
   test_cycles: [3, 4]
   alpha: 0.05
   fdr_method: bh          # bh | bonferroni
   bootstrap_iterations: 2000
-  block_length_days: 30   # bootstrap blokowy — BTC ma autokorelację zmienności
+  block_length_days: 30   # block bootstrap - BTC has volatility autocorrelation
   random_seed: 20260901
-  # Walidacja krocząca — kilkanaście rozłącznych okien testowych zamiast
-  # jednego podziału po cyklach. Embargo musi pokrywać horyzont celu,
-  # bo fwd_return_90d w ostatnim dniu treningu zawiera ceny ze zbioru testowego.
+  # Walk-forward validation - a dozen or more disjoint test windows instead of
+  # a single split by cycle. The embargo must cover the target horizon, because
+  # fwd_return_90d on the last training day contains prices from the test set.
   walk_forward:
     train_days: 730
     test_days: 365
-    # Krok MUSI być >= test_days, inaczej okna testowe zachodzą na siebie
-    # i test t po foldach przestaje być ważny (zaniżałby p-value).
-    # Pipeline sprawdza rozłączność na faktycznych indeksach i przy nakładaniu
-    # w ogóle nie raportuje testu t — zostaje sam test znaku.
+    # The step MUST be >= test_days, otherwise the test windows overlap and the
+    # t-test across folds stops being valid (it would understate the p-value).
+    # The pipeline checks disjointness on the actual indices and, when they
+    # overlap, does not report the t-test at all - only the sign test remains.
     step_days: 365
     embargo_days: 90
-    expanding: true     # okno treningowe rośnie, jak w praktyce
+    expanding: true     # the training window grows, as it would in practice

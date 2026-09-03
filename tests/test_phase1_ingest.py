@@ -1,4 +1,4 @@
-"""Faza 1 - dane. Testy kontraktu bazy i kontroli jakosci."""
+"""Phase 1 - data. Tests of the database contract and the quality checks."""
 from __future__ import annotations
 
 import numpy as np
@@ -54,7 +54,7 @@ def test_detects_non_positive_and_stale(prices):
 
 
 def test_outlier_threshold_is_robust_to_a_single_crash(prices):
-    """Jeden krach nie moze podniesc progu tak, by przestal byc widoczny."""
+    """A single crash must not raise the threshold enough to hide itself."""
     crashed = prices.copy()
     crashed.loc[1500, "close"] = crashed.loc[1500, "close"] * 0.35
     report = check_prices(crashed)
@@ -68,7 +68,7 @@ def test_store_prices_is_idempotent(db_path, prices):
         second = store_prices(conn, prices, "BTCUSD", "synthetic")
         stored = read_prices(conn, "BTCUSD")
     assert first == second == len(prices)
-    assert len(stored) == len(prices), "ponowny import nie moze duplikowac wierszy"
+    assert len(stored) == len(prices), "re-importing must not duplicate rows"
 
 
 def test_stored_prices_carry_next_day_availability(db_path, prices):
@@ -76,11 +76,11 @@ def test_stored_prices_carry_next_day_availability(db_path, prices):
         store_prices(conn, prices, "BTCUSD", "synthetic")
         stored = read_prices(conn, "BTCUSD")
     lag = (stored["available_from"] - stored["date"]).dt.days
-    assert (lag == 1).all(), "bar dnia D jest znany dopiero po jego zamknieciu"
+    assert (lag == 1).all(), "the bar for day D is known only after it closes"
 
 
 def test_read_macro_respects_publication_date(db_path):
-    """Serie makro nie moga byc widoczne przed data publikacji."""
+    """Macro series must not be visible before their publication date."""
     observations = pd.DataFrame(
         {
             "series": "m2",
@@ -144,7 +144,7 @@ def test_manual_csv_defaults_to_configured_lag(tmp_path):
 
 
 def test_empty_frame_reports_cleanly():
-    report = check_prices(pd.DataFrame(columns=["date", "close"]), name="pusty")
+    report = check_prices(pd.DataFrame(columns=["date", "close"]), name="empty")
     assert report.rows == 0
     assert report.first_date is None
     assert np.isfinite(0)

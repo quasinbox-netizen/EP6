@@ -1,9 +1,9 @@
-"""Faza 3 - event study.
+"""Phase 3 - event study.
 
-Dwa rodzaje testow, oba konieczne:
-* NEGATYWNE - na czystym szumie metoda nie moze znajdowac wzorcow,
-* MOCY      - gdy wstrzykniemy znany efekt, metoda musi go znalezc.
-Sam test negatywny przeszedlby tez kod, ktory nigdy nic nie wykrywa.
+Two kinds of test, both necessary:
+* NEGATIVE - on pure noise the method must not find patterns,
+* POWER    - when we inject a known effect, the method must find it.
+A negative test alone would also be passed by code that never detects anything.
 """
 from __future__ import annotations
 
@@ -38,7 +38,7 @@ def anchors() -> list[str]:
     return ["2014-01-15", "2015-06-10", "2017-03-20", "2019-08-05", "2020-11-11"]
 
 
-# --- kontrakt okna --------------------------------------------------------
+# --- the window contract -------------------------------------------------------
 
 
 def test_window_matrix_has_expected_shape(noise, anchors):
@@ -50,7 +50,7 @@ def test_window_matrix_has_expected_shape(noise, anchors):
 
 
 def test_events_without_full_window_are_skipped_not_truncated(noise):
-    """Zdarzenie bez pelnego okna wypada z proby i jest raportowane."""
+    """An event without a complete window drops out and is reported."""
     early = ["2013-01-05", "2016-01-01"]
     matrix, skipped = event_window_matrix(log_returns(noise), early, pre=30, post=90)
     assert len(matrix) == 1
@@ -63,15 +63,15 @@ def test_event_not_present_in_index_is_skipped(noise):
     assert pd.Timestamp("2050-01-01") in skipped
 
 
-# --- testy negatywne: szum -----------------------------------------------
+# --- negative tests: noise -----------------------------------------------------
 
 
 def test_no_false_pattern_on_pure_noise(anchors):
-    """Na bladzeniu losowym rozklad p-value ma byc ~jednostajny.
+    """On a random walk the p-value distribution must be ~uniform.
 
-    Pojedyncze losowanie nie jest testem: przy nominalnym 5% co dwudziesta
-    proba szumu DA istotny wynik i tak ma byc. Sprawdzamy wiec mediane
-    p-value z 20 niezaleznych prob - dla rozkladu jednostajnego jest to 0.5.
+    A single draw is not a test: at a nominal 5%, one noise sample in twenty
+    WILL give a significant result, and that is correct. So we check the median
+    p-value across 20 independent samples - for a uniform distribution it is 0.5.
     """
     p_values = []
     for seed in range(20):
@@ -83,18 +83,18 @@ def test_no_false_pattern_on_pure_noise(anchors):
 
 
 def test_confidence_interval_is_wide_when_events_are_few(anchors):
-    """Przy n=5 przedzial ufnosci musi byc szeroki - to nie jest wada."""
+    """At n=5 the confidence interval must be wide - that is not a defect."""
     prices = random_walk_prices(3000, start="2013-01-01", seed=42)
     result = event_study(prices, anchors, pre=30, post=90, n_boot=1000)
     width = result.car_summary["ci_high"] - result.car_summary["ci_low"]
-    assert width > 0.30, "przedzial ufnosci z 5 zdarzen nie moze byc waski"
-    # Bootstrap percentylowy jest przy tak malym n wezszy - stad nie decyduje.
+    assert width > 0.30, "a confidence interval from 5 events cannot be narrow"
+    # The percentile bootstrap is narrower at such small n - hence it does not decide.
     boot_width = result.car_summary["boot_ci_high"] - result.car_summary["boot_ci_low"]
     assert boot_width < width
 
 
 def test_false_positive_rate_stays_near_nominal():
-    """Na 40 losowych probach istotnych wynikow ma byc ~5%, nie 30%."""
+    """Across 40 random samples ~5% should be significant, not 30%."""
     rejections = 0
     trials = 40
     for seed in range(trials):
@@ -103,8 +103,8 @@ def test_false_positive_rate_stays_near_nominal():
         result = event_study(prices, events, pre=30, post=60, n_boot=1000, seed=seed)
         if result.car_summary["p_value"] < 0.05:
             rejections += 1
-    # Przy 40 probach i nominalnym 5% dopuszczamy do 5 odrzucen (~12%).
-    assert rejections <= 5, f"za duzo falszywych odkryc: {rejections}/{trials}"
+    # With 40 samples at a nominal 5% we allow up to 5 rejections (~12%).
+    assert rejections <= 5, f"too many false discoveries: {rejections}/{trials}"
 
 
 def test_circular_shift_test_is_calm_on_noise(noise):
@@ -116,15 +116,15 @@ def test_circular_shift_test_is_calm_on_noise(noise):
     assert result["p_value"] > 0.05
 
 
-# --- testy mocy: wstrzykniety efekt --------------------------------------
+# --- power tests: an injected effect -------------------------------------------
 
 
 def test_detects_injected_drift(anchors):
-    """Wstrzykniety dryf, ktory wyraznie gorruje nad szumem, musi byc wykryty.
+    """An injected drift that clearly dominates the noise must be detected.
 
-    Uzywamy spokojniejszego szeregu (sigma 1.5%/dzien): przy zmiennosci BTC
-    rzedu 4% dziennie piec zdarzen NIE wystarcza, by wykryc dryf 0.6%/dzien -
-    to nie wada metody, tylko realny limit mocy przy n=5.
+    We use a calmer series (sigma 1.5%/day): at Bitcoin-scale volatility of
+    around 4% a day, five events are NOT enough to detect a 0.6%/day drift -
+    that is not a flaw in the method, just the real power limit at n=5.
     """
     calm = random_walk_prices(3000, start="2013-01-01", seed=42, sigma=0.015)
     seeded = inject_drift(calm, anchors, window=60, daily_drift=0.006)
@@ -135,10 +135,10 @@ def test_detects_injected_drift(anchors):
 
 
 def test_five_events_cannot_detect_a_drift_buried_in_btc_scale_noise(noise, anchors):
-    """Uczciwy limit mocy: przy zmiennosci BTC 5 zdarzen to za malo.
+    """An honest power limit: at Bitcoin volatility, 5 events are too few.
 
-    Ten test pilnuje, zeby nikt nie "poprawil" metody tak, by zaczela
-    znajdowac efekty, na ktorych wykrycie nie ma danych.
+    This test exists so that nobody "improves" the method into finding effects
+    the data cannot support.
     """
     seeded = inject_drift(noise, anchors, window=60, daily_drift=0.006)
     result = event_study(seeded, anchors, pre=30, post=60, n_boot=2000)
@@ -146,7 +146,7 @@ def test_five_events_cannot_detect_a_drift_buried_in_btc_scale_noise(noise, anch
 
 
 def test_abnormal_return_removes_pre_event_trend():
-    """Trend obecny juz przed zdarzeniem nie moze byc liczony jako efekt."""
+    """A trend already present before the event must not count as the effect."""
     trending = random_walk_prices(2000, start="2015-01-01", seed=5, mu=0.003, sigma=0.02)
     events = ["2017-01-10", "2018-04-20", "2019-09-30"]
     raw = event_study(trending, events, pre=30, post=60, abnormal=False, n_boot=1500)
@@ -166,7 +166,7 @@ def test_circular_shift_test_detects_real_window_effect(noise):
     assert result["p_value"] < 0.05
 
 
-# --- skan wielu okien -----------------------------------------------------
+# --- scanning many windows -----------------------------------------------------
 
 
 def test_window_scan_returns_one_row_per_hypothesis(noise):
@@ -189,7 +189,7 @@ def test_window_scan_ignores_missing_columns(noise):
     assert window_scan(frame, ["nie_istnieje"], "target").empty
 
 
-# --- korelacje ------------------------------------------------------------
+# --- correlations --------------------------------------------------------------
 
 
 def test_rolling_correlation_tracks_a_regime_change():
@@ -197,14 +197,14 @@ def test_rolling_correlation_tracks_a_regime_change():
     index = pd.date_range("2015-01-01", periods=1200, freq="D")
     base = pd.Series(rng.normal(0, 0.02, 1200), index=index)
     other = base.copy()
-    other.iloc[:600] = rng.normal(0, 0.02, 600)  # pierwsza polowa: brak zwiazku
+    other.iloc[:600] = rng.normal(0, 0.02, 600)  # first half: no relationship
     correlation = rolling_correlation(base, other, window=120)
     assert abs(correlation.iloc[300]) < 0.3
     assert correlation.iloc[-1] > 0.9
 
 
 def test_hac_regression_reports_wider_errors_than_naive_ols():
-    """Bledy HAC musza byc szersze przy autokorelowanych resztach."""
+    """HAC errors must be wider when the residuals are autocorrelated."""
     import statsmodels.api as sm
 
     rng = np.random.default_rng(11)

@@ -1,9 +1,9 @@
-"""Parsowanie odpowiedzi FRED - testy bez sieci i bez klucza.
+"""Parsing FRED responses - tests without network or key.
 
-Chodzi o jedna rzecz: `available_from` dla M2 musi byc data PIERWSZEJ
-publikacji, nie data obserwacji i nie data dzisiejszej rewizji. Reszta
-projektu opiera sie na tym polu, wiec kazdy przypadek brzegowy odpowiedzi
-FRED ma tu swoj test.
+It comes down to one thing: `available_from` for M2 must be the date of the
+FIRST publication, not the observation date and not today's revision. The rest
+of the project rests on that field, so every edge case of a FRED response has
+its own test here.
 """
 from __future__ import annotations
 
@@ -21,7 +21,7 @@ from ingest.quality import check_macro
 
 
 def observation(date: str, value: str, realtime: str | None = None) -> dict:
-    """Wiersz w formacie, w jakim zwraca go FRED (wartosci jako tekst)."""
+    """A row in the shape FRED returns it (values as text)."""
     return {
         "realtime_start": realtime or FRED_NO_VINTAGE_SENTINEL,
         "realtime_end": "9999-12-31",
@@ -30,11 +30,11 @@ def observation(date: str, value: str, realtime: str | None = None) -> dict:
     }
 
 
-# --- daty publikacji ------------------------------------------------------
+# --- publication dates ---------------------------------------------------------
 
 
 def test_vintage_date_becomes_publication_date():
-    """M2 za luty 2020 poznalismy pod koniec marca - i tak ma byc w bazie."""
+    """February 2020 M2 became known in late March - the database must say so."""
     payload = [
         observation("2020-01-31", "15420.0", "2020-02-27"),
         observation("2020-02-29", "15500.5", "2020-03-26"),
@@ -57,7 +57,7 @@ def test_missing_values_are_dropped():
 
 
 def test_series_without_vintage_history_falls_back_to_fixed_lag():
-    """Sentinel 1776-07-04 oznacza brak archiwum wersji."""
+    """The 1776-07-04 sentinel means there is no vintage archive."""
     payload = [observation("2020-01-31", "15420.0"), observation("2020-02-29", "15500.5")]
     series = parse_fred_observations(payload, publication_lag_days=30)
     assert (series["lag_source"] == "fallback").all()
@@ -65,11 +65,11 @@ def test_series_without_vintage_history_falls_back_to_fixed_lag():
 
 
 def test_observations_older_than_the_vintage_archive_use_fixed_lag():
-    """Nie udajemy, ze o M2 z 1960 r. dowiedzielismy sie w 1997 r.
+    """We do not pretend 1960 M2 became known in 1997.
 
-    ALFRED trzyma wersje mniej wiecej od lat 90. Obserwacje wczesniejsze
-    dostaja `realtime_start` rowny poczatkowi archiwum - gdyby wziac je
-    doslownie, kazde okno kroczace sprzed 1997 r. bylo by puste.
+    ALFRED keeps vintages from roughly the 1990s. Earlier observations receive
+    a `realtime_start` equal to the start of the archive - taken literally,
+    every rolling window before 1997 would be empty.
     """
     payload = [
         observation("1960-01-31", "300.0", "1997-01-10"),
@@ -84,7 +84,7 @@ def test_observations_older_than_the_vintage_archive_use_fixed_lag():
 
 
 def test_implausibly_long_vintage_lag_falls_back():
-    """Opoznienie roczne to skutek rewizji metodologii, nie data publikacji."""
+    """A year-long lag is the result of a methodology revision, not a publication date."""
     payload = [
         observation("2015-01-31", "11800.0", "2015-02-26"),
         observation("2015-02-28", "11850.0", "2016-08-01"),
@@ -122,12 +122,12 @@ def test_empty_payload_returns_empty_frame():
     assert parse_fred_observations([]).empty
 
 
-# --- integracja z faza makro ---------------------------------------------
+# --- integration with the macro phase ------------------------------------------
 
 
 @pytest.fixture
 def m2_from_fred() -> pd.DataFrame:
-    """Realistyczny M2: miesieczny, publikowany ~4 tygodnie po koncu miesiaca."""
+    """A realistic M2: monthly, published ~4 weeks after the month ends."""
     dates = pd.date_range("2011-01-31", "2026-06-30", freq="ME")
     payload = [
         observation(
@@ -145,7 +145,7 @@ def m2_from_fred() -> pd.DataFrame:
 def test_m2_is_invisible_before_its_publication_date(m2_from_fred):
     index = pd.to_datetime(["2020-04-25", "2020-04-26", "2020-05-25", "2020-05-26"])
     values = asof_series(m2_from_fred, "m2", index)
-    # Obserwacja za kwiecien publikowana 26 maja - 25 maja jeszcze jej nie ma.
+    # The April observation is published on 26 May - on 25 May it does not exist yet.
     assert values.iloc[2] == values.iloc[1]
     assert values.iloc[3] > values.iloc[2]
 
@@ -173,14 +173,14 @@ def test_forcing_a_missing_source_fails_loudly(m2_from_fred):
         macro_phase(m2_from_fred, index, liquidity_source="dxy_chg_3m_inv")
 
 
-# --- klucz ---------------------------------------------------------------
+# --- the API key ---------------------------------------------------------------
 
 
 def test_missing_key_raises_a_helpful_error(monkeypatch):
-    """Bez klucza ma poleciec czytelny wyjatek, a nie 400 z API.
+    """Without a key we want a readable exception, not a 400 from the API.
 
-    Podmieniamy `secret`, a nie zmienna srodowiskowa: `load_config` wczytuje
-    .env przy pierwszym uzyciu, wiec skasowana zmienna wrocilaby z pliku.
+    We patch `secret` rather than the environment variable: `load_config`
+    reads .env on first use, so a deleted variable would come back from file.
     """
     import ingest.macro as macro_module
 
@@ -191,30 +191,30 @@ def test_missing_key_raises_a_helpful_error(monkeypatch):
 
 @pytest.mark.network
 def test_live_fred_returns_real_m2():
-    """Uruchamia sie tylko z prawdziwym kluczem w .env."""
+    """Runs only with a real key in .env."""
     from config import secret
 
     if not secret("FRED_API_KEY"):
-        pytest.skip("brak FRED_API_KEY - wklej klucz do .env")
+        pytest.skip("no FRED_API_KEY - paste a key into .env")
 
     series = fetch_fred("M2SL", publication_lag_days=45)
-    # Archiwum wersji M2SL zaczyna sie w 1980 r., wiec pierwszych publikacji
-    # jest mniej niz obserwacji w zwyklym szeregu (ten siega 1959 r.).
+    # The M2SL vintage archive starts in 1980, so there are fewer first
+    # releases than observations in the plain series (which reaches 1959).
     assert len(series) > 400
     assert series["date"].min() <= pd.Timestamp("1990-01-01")
     assert series["date"].max() > pd.Timestamp("2025-01-01")
     assert series.attrs["vintages_available"] is True
     lag = (series["available_from"] - series["date"]).dt.days
     assert (lag >= 0).all()
-    assert 14 <= lag.median() <= 60, "publikacja M2 to okolo miesiaca po koncu okresu"
-    assert series.attrs["vintage_rows"] > 0, "brak dat publikacji z archiwum wersji"
+    assert 14 <= lag.median() <= 60, "M2 is published about a month after the period ends"
+    assert series.attrs["vintage_rows"] > 0, "no publication dates from the vintage archive"
 
 
-# --- sekrety i limity API -------------------------------------------------
+# --- secrets and API limits ----------------------------------------------------
 
 
 def test_api_key_never_appears_in_error_messages():
-    """Klucz siedzi w query stringu - surowy URL w wyjatku to wyciek."""
+    """The key travels in the query string - a raw URL in an exception is a leak."""
     from ingest.http import FetchError, redact
 
     url = "https://api.stlouisfed.org/fred/series/observations?series_id=DFF&api_key=abc123secret&file_type=json"
@@ -229,14 +229,14 @@ def test_redaction_covers_common_secret_parameter_names():
     from ingest.http import redact
 
     for name in ("api_key", "apikey", "token", "access_key", "secret"):
-        assert "wartosc" not in redact(f"https://x/y?{name}=wartosc&z=1")
+        assert "secretvalue" not in redact(f"https://x/y?{name}=secretvalue&z=1")
 
 
 def test_series_with_too_many_vintages_falls_back_to_plain_request(monkeypatch):
-    """DFF ma ponad 5000 wersji, a FRED oddaje pierwsze publikacje do 2000.
+    """DFF has over 5000 vintages while FRED serves first releases up to 2000.
 
-    Zamiast rezygnowac z serii, pobieramy ja bez archiwum wersji - dla serii
-    dziennej publikowanej nastepnego dnia stale opoznienie jest wierne.
+    Instead of dropping the series we fetch it without the vintage archive -
+    for a daily series published the next day, a fixed lag is faithful.
     """
     import ingest.macro as macro_module
     from ingest.http import FetchError
@@ -260,7 +260,7 @@ def test_series_with_too_many_vintages_falls_back_to_plain_request(monkeypatch):
     monkeypatch.setattr(macro_module, "get_json", fake_get_json)
     series = macro_module.fetch_fred("DFF", publication_lag_days=1, api_key="test")
 
-    assert len(calls) == 2, "najpierw proba z wersjami, potem zwykle zapytanie"
+    assert len(calls) == 2, "first the vintage attempt, then the plain request"
     assert "output_type=4" in calls[0] and "output_type=4" not in calls[1]
     assert series.attrs["vintages_requested"] is True
     assert series.attrs["vintages_available"] is False
@@ -268,7 +268,7 @@ def test_series_with_too_many_vintages_falls_back_to_plain_request(monkeypatch):
 
 
 def test_other_http_errors_are_not_silently_retried(monkeypatch):
-    """Tylko limit wersji uzasadnia fallback - reszta bledow ma bolec."""
+    """Only the vintage limit justifies a fallback - other errors must hurt."""
     import ingest.macro as macro_module
     from ingest.http import FetchError
 

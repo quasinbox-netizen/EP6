@@ -1,7 +1,7 @@
-"""Faza 4 - walidacja statystyczna.
+"""Phase 4 - statistical validation.
 
-Test kluczowy: wzorzec znaleziony przez przeszukanie wielu hipotez na czystym
-szumie musi zostac ODRZUCONY po korekcie na wielokrotne testowanie.
+The key test: a pattern found by searching many hypotheses on pure noise must
+be REJECTED once corrected for multiple testing.
 """
 from __future__ import annotations
 
@@ -29,12 +29,12 @@ from validation.splits import (
 from validation.synthetic import random_walk_prices
 
 
-# --- korekty --------------------------------------------------------------
+# --- corrections --------------------------------------------------------------
 
 
 def test_bonferroni_scales_by_number_of_tests():
     assert bonferroni([0.01], 10)[0] == pytest.approx(0.10)
-    assert bonferroni([0.5], 10)[0] == 1.0  # obciete do 1
+    assert bonferroni([0.5], 10)[0] == 1.0  # clipped to 1
 
 
 def test_bh_is_monotonic_and_less_conservative_than_bonferroni():
@@ -42,7 +42,7 @@ def test_bh_is_monotonic_and_less_conservative_than_bonferroni():
     bh = benjamini_hochberg(p)
     bonf = bonferroni(p)
     assert (bh <= bonf + 1e-12).all()
-    assert (np.diff(bh[np.argsort(p)]) >= -1e-12).all(), "q musi rosnac wraz z p"
+    assert (np.diff(bh[np.argsort(p)]) >= -1e-12).all(), "q must rise with p"
 
 
 def test_bh_matches_textbook_example():
@@ -53,29 +53,29 @@ def test_bh_matches_textbook_example():
 
 
 def test_untestable_hypotheses_do_not_poison_the_correction():
-    """Hipoteza bez danych (NaN) nie moze zepsuc q pozostalym.
+    """A hypothesis without data (NaN) must not corrupt q for the rest.
 
-    Monotonizacja BH idzie od konca posortowanej listy, wiec pojedynczy NaN
-    na koncu potrafi wyzerowac - a raczej "zNaNowac" - cala kolumne.
+    The BH monotonicity step walks backwards through the sorted list, so a
+    single NaN at the end can turn the whole column into NaN.
     """
     p = np.array([0.001, 0.02, np.nan, 0.5, np.nan])
     q = benjamini_hochberg(p)
     assert np.isfinite(q[[0, 1, 3]]).all()
     assert np.isnan(q[[2, 4]]).all()
-    assert q[0] == pytest.approx(0.003)  # 3 testowalne hipotezy, nie 5
+    assert q[0] == pytest.approx(0.003)  # 3 testable hypotheses, not 5
 
     scan = pd.DataFrame({"hypothesis": list("abcde"), "p_value": p})
     corrected = correct(scan, method="bh")
     assert corrected.attrs["n_tests"] == 3
     assert corrected.attrs["n_untestable"] == 2
-    # q = [0.003, 0.03, 0.5] przy trzech testowalnych hipotezach
+    # q = [0.003, 0.03, 0.5] with three testable hypotheses
     assert corrected["significant_adjusted"].sum() == 2
-    assert "pominiete" in summarize(corrected)
+    assert "skipped" in summarize(corrected)
 
 
 def test_bonferroni_ignores_untestable_hypotheses():
     q = bonferroni(np.array([0.01, np.nan, np.nan]))
-    assert q[0] == pytest.approx(0.01)  # jeden testowalny wynik, mnoznik 1
+    assert q[0] == pytest.approx(0.01)  # one testable result, multiplier 1
     assert np.isnan(q[1:]).all()
 
 
@@ -83,11 +83,11 @@ def test_expected_false_discoveries_is_reported():
     assert expected_false_discoveries(200, 0.05) == pytest.approx(10.0)
 
 
-# --- test glowny: falszywe odkrycie znika po korekcie --------------------
+# --- the main test: a false discovery dies after correction --------------------
 
 
 def _scan_noise_for_patterns(seed: int, n_hypotheses: int = 60) -> pd.DataFrame:
-    """Przeszukuje szum wieloma oknami - fabryka falszywych odkryc."""
+    """Search noise with many windows - a factory of false discoveries."""
     prices = random_walk_prices(2500, start="2014-01-01", seed=seed)
     returns = log_returns(prices).dropna()
     frame = pd.DataFrame({"target": returns})
@@ -105,16 +105,16 @@ def _scan_noise_for_patterns(seed: int, n_hypotheses: int = 60) -> pd.DataFrame:
 
 
 def test_search_over_noise_produces_raw_significant_hits():
-    """Kontrola zalozenia: przeszukiwanie szumu MUSI dawac surowe trafienia."""
+    """Check the premise: searching noise MUST produce raw hits."""
     scan = _scan_noise_for_patterns(seed=3)
-    assert (scan["p_value"] < 0.05).sum() >= 1, "bez trafien nie ma czego korygowac"
+    assert (scan["p_value"] < 0.05).sum() >= 1, "with no hits there is nothing to correct"
 
 
 def test_false_positive_from_scanning_is_rejected_after_correction():
-    """Najlepsza hipoteza z przeszukania szumu nie moze przezyc korekty."""
+    """The best hypothesis from a noise search must not survive correction."""
     scan = _scan_noise_for_patterns(seed=3)
     best = scan.sort_values("p_value").iloc[0]
-    assert best["p_value"] < 0.05, "punkt wyjscia: surowo istotny wynik"
+    assert best["p_value"] < 0.05, "starting point: a raw significant result"
 
     corrected_bh = correct(scan, method="bh", alpha=0.05)
     corrected_bonf = correct(scan, method="bonferroni", alpha=0.05)
@@ -123,7 +123,7 @@ def test_false_positive_from_scanning_is_rejected_after_correction():
 
 
 def test_correction_keeps_a_genuinely_strong_effect():
-    """Kontrola drugiej strony: prawdziwy silny efekt ma przezyc korekte."""
+    """The other direction: a genuinely strong effect must survive correction."""
     prices = random_walk_prices(2500, start="2014-01-01", seed=9)
     returns = log_returns(prices).dropna()
     frame = pd.DataFrame({"target": returns})
@@ -158,10 +158,10 @@ def test_summarize_mentions_chance_level():
     scan = pd.DataFrame({"hypothesis": [f"h{i}" for i in range(40)],
                          "p_value": np.linspace(0.001, 0.9, 40)})
     text = summarize(correct(scan, method="bh"))
-    assert "40 hipotez" in text and "przypadek" in text
+    assert "40 hypotheses" in text and "chance" in text
 
 
-# --- podzialy -------------------------------------------------------------
+# --- splits --------------------------------------------------------------------
 
 
 def test_cycle_index_matches_halving_schedule():
@@ -178,10 +178,10 @@ def test_cycle_split_puts_later_cycles_in_test():
 
 
 def test_cycle_split_embargo_covers_target_horizon():
-    """Bez embarga ostatnie dni treningu widza ceny ze zbioru testowego."""
+    """Without an embargo the last training days see prices from the test set."""
     index = pd.date_range("2012-01-01", "2026-01-01", freq="D")
     naive = cycle_split(index, [0, 1, 2], [3, 4])
-    with pytest.raises(AssertionError, match="luka"):
+    with pytest.raises(AssertionError, match="gap"):
         assert_no_overlap(naive, horizon_days=90)
 
     embargoed = cycle_split(index, [0, 1, 2], [3, 4], embargo_days=120)
@@ -216,12 +216,12 @@ def test_split_frame_returns_disjoint_pieces():
     assert train.index.intersection(test.index).empty
 
 
-# --- replikacja -----------------------------------------------------------
+# --- replication ---------------------------------------------------------------
 
 
 def test_replication_requires_more_than_matching_sign():
     train = {"difference": 0.01, "p_value": 0.001}
-    weak = {"difference": 0.001, "p_value": 0.04}   # ten sam znak, efekt zniknal
+    weak = {"difference": 0.001, "p_value": 0.04}   # same sign, effect gone
     strong = {"difference": 0.009, "p_value": 0.01}
     assert not replicate_finding(train, weak)["replicated"]
     assert replicate_finding(train, strong)["replicated"]
@@ -241,7 +241,7 @@ def test_replication_fails_when_out_of_sample_is_insignificant():
     assert not replicate_finding(train, noisy)["replicated"]
 
 
-# --- walidacja kroczaca ---------------------------------------------------
+# --- walk-forward validation ---------------------------------------------------
 
 
 def test_window_effect_is_difference_of_means():
@@ -263,7 +263,7 @@ def test_window_effect_is_nan_when_a_side_is_empty():
 
 
 def test_sign_agreement_is_a_coin_flip_under_the_null():
-    """Losowe znaki nie moga dawac istotnosci."""
+    """Random signs must not produce significance."""
     from validation.splits import sign_agreement_test
 
     rng = np.random.default_rng(5)
@@ -286,7 +286,7 @@ def test_sign_agreement_detects_a_stable_effect():
 
 
 def test_sign_agreement_also_flags_a_consistent_flip():
-    """Konsekwentne odwracanie znaku tez nie jest przypadkiem - test dwustronny."""
+    """A consistent sign flip is not chance either - the test is two-sided."""
     from validation.splits import sign_agreement_test
 
     result = sign_agreement_test([0.01] * 10, [-0.01] * 10)
@@ -295,10 +295,10 @@ def test_sign_agreement_also_flags_a_consistent_flip():
 
 
 def test_five_folds_cannot_reach_significance_even_when_perfect():
-    """Uczciwy limit mocy: przy 5 foldach pelna zgodnosc daje p=0.0625.
+    """An honest power limit: at 5 folds perfect agreement gives p=0.0625.
 
-    Ten test pilnuje, zeby nikt nie "poprawil" metody tak, by przy piaciu
-    oknach zaczela wypluwac istotne wyniki.
+    This test exists so that nobody "improves" the method into producing
+    significant results from five windows.
     """
     from validation.splits import sign_agreement_test
 

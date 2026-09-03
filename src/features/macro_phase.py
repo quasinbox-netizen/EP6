@@ -1,14 +1,14 @@
-"""Faza makro - rezim plynnosci i stop, liczony wylacznie z danych znanych w danym dniu.
+"""Macro phase - liquidity and rate regimes, built only from data known that day.
 
-Cala logika opiera sie na jednym prymitywie: `asof_series`. Dla kazdego dnia
-kalendarzowego bierze ostatnia obserwacje, ktorej data PUBLIKACJI nie jest
-pozniejsza niz ten dzien. Transformacje (r/r, zmiana 3M) liczone sa najpierw
-na osi obserwacji, a dopiero potem mapowane na dni - wartosc r/r staje sie
-znana wtedy, kiedy opublikowano jej pozniejszy skladnik.
+Everything here rests on one primitive: `asof_series`. For each calendar day it
+takes the latest observation whose PUBLICATION date is not later than that day.
+Transformations (year-over-year, 3-month change) are computed first on the
+observation axis and only then mapped onto days - a year-over-year value becomes
+known when its later component is published.
 
-Progi rezimow uzywaja median ROZSZERZAJACYCH SIE (expanding), nie pelnej
-proby. Mediana z calej historii to klasyczny, cichy look-ahead: w 2015 r.
-nie znalismy mediany z lat 2015-2026.
+Regime thresholds use EXPANDING medians, not the full-sample median. A
+full-history median is the classic quiet look-ahead: in 2015 we did not know
+the median of 2015-2026.
 """
 from __future__ import annotations
 
@@ -18,7 +18,7 @@ import pandas as pd
 LIQUIDITY_SOURCES = ("m2_yoy", "dxy_chg_3m_inv")
 RATES_SOURCES = ("fed_funds_chg_3m", "us13w_chg_3m", "us10y_chg_3m")
 
-MIN_HISTORY_DAYS = 365  # zanim uznamy rezim, potrzebujemy roku historii
+MIN_HISTORY_DAYS = 365  # a year of history before we call a regime at all
 
 
 def asof_series(
@@ -28,11 +28,11 @@ def asof_series(
     *,
     transform=None,
 ) -> pd.Series:
-    """Wartosc serii `series` znana na kazdy dzien z `index`.
+    """The value of `series` known on each day of `index`.
 
-    `transform` dostaje szereg indeksowany data obserwacji i zwraca szereg
-    o tym samym indeksie (np. zmiana r/r). Mapowanie na dni kalendarzowe
-    odbywa sie po dacie publikacji.
+    `transform` receives a series indexed by observation date and returns a
+    series with the same index (e.g. year-over-year change). Mapping onto
+    calendar days happens afterwards, by publication date.
     """
     index = pd.DatetimeIndex(pd.to_datetime(index)).normalize()
     subset = macro[macro["series"] == series]
@@ -85,7 +85,7 @@ def _diff(periods: int):
 
 
 def macro_features(macro: pd.DataFrame, index: pd.DatetimeIndex) -> pd.DataFrame:
-    """Surowe cechy makro w ujeciu punkt-w-czasie (bez klasyfikacji rezimu)."""
+    """Raw macro features, point-in-time, without regime labels."""
     index = pd.DatetimeIndex(pd.to_datetime(index)).normalize()
     out = pd.DataFrame(index=index)
     out.index.name = "date"
@@ -94,24 +94,24 @@ def macro_features(macro: pd.DataFrame, index: pd.DatetimeIndex) -> pd.DataFrame
 
     present = set(macro["series"].unique())
 
-    # Serie miesieczne: r/r to 12 obserwacji wstecz.
+    # Monthly series: year-over-year means 12 observations back.
     for name in ("m2", "indpro", "unrate"):
         if name in present:
             out[f"{name}_yoy"] = asof_series(macro, name, index, transform=_yoy(12))
 
-    # Serie dzienne: zmiana w oknie ~63 sesji (kwartal).
+    # Daily series: change over roughly 63 sessions (a quarter).
     for name in ("fed_funds", "us13w", "us10y", "dxy", "spx", "gold"):
         if name in present:
             out[f"{name}_level"] = asof_series(macro, name, index)
             out[f"{name}_chg_3m"] = asof_series(macro, name, index, transform=_diff(63))
     if "dxy_chg_3m" in out.columns:
-        # Slabszy dolar = luzniejsze warunki finansowe, stad znak przeciwny.
+        # A weaker dollar means looser financial conditions, hence the sign flip.
         out["dxy_chg_3m_inv"] = -out["dxy_chg_3m"]
     return out
 
 
 def _expanding_sign_regime(series: pd.Series, labels: tuple[str, str]) -> pd.Series:
-    """Klasyfikacja wzgledem mediany rozszerzajacej sie (bez wiedzy o przyszlosci)."""
+    """Classify against an expanding median - no knowledge of the future."""
     threshold = series.expanding(min_periods=MIN_HISTORY_DAYS).median()
     regime = pd.Series(pd.NA, index=series.index, dtype="object")
     valid = series.notna() & threshold.notna()
@@ -127,23 +127,23 @@ def macro_phase(
     liquidity_source: str | None = None,
     rates_source: str | None = None,
 ) -> pd.DataFrame:
-    """Cechy makro + etykieta fazy.
+    """Macro features plus a phase label.
 
-    Faza to iloczyn dwoch osi:
-      plynnosc (expanding / contracting) x stopy (rising / falling).
-    Jesli brakuje danych do ktorejkolwiek osi, faza jest pusta (NA) - lepszy
-    brak etykiety niz etykieta zmyslona z proxy, ktorego nie ma.
+    The phase is the product of two axes:
+      liquidity (expanding / contracting) x rates (rising / falling).
+    If data for either axis is missing the phase is empty (NA) - no label is
+    better than a label invented from a proxy that is not there.
 
-    Domyslnie wybieramy pierwsze dostepne zrodlo z listy priorytetow
-    (M2 przed proxy dolarowym). Jawne podanie `liquidity_source` /
-    `rates_source` pozwala porownac wersje na prawdziwym M2 z wersja na
-    proxy - patrz pipeline.macro_phase_comparison.
+    By default we take the first available source from the priority list (M2
+    before the dollar proxy). Passing `liquidity_source` / `rates_source`
+    explicitly allows comparing the real-M2 version against the proxy - see
+    pipeline.macro_phase_comparison.
     """
     features = macro_features(macro, index)
     if liquidity_source is not None and liquidity_source not in features.columns:
-        raise ValueError(f"brak kolumny {liquidity_source} - czy ta seria jest w bazie?")
+        raise ValueError(f"no column {liquidity_source} - is that series in the database?")
     if rates_source is not None and rates_source not in features.columns:
-        raise ValueError(f"brak kolumny {rates_source} - czy ta seria jest w bazie?")
+        raise ValueError(f"no column {rates_source} - is that series in the database?")
     liquidity_source = liquidity_source or next(
         (c for c in LIQUIDITY_SOURCES if c in features.columns), None
     )

@@ -1,4 +1,4 @@
-"""Faza 2 - cechy. Sedno: zadna cecha nie moze uzywac danych z przyszlosci."""
+"""Phase 2 - features. The point: no feature may use data from the future."""
 from __future__ import annotations
 
 import numpy as np
@@ -29,7 +29,7 @@ def inputs() -> FeatureInputs:
     prices = random_walk_prices(3000, start="2013-01-01", seed=11)
     prices["available_from"] = prices["date"] + pd.Timedelta(days=1)
 
-    # Miesieczna seria makro publikowana z 30-dniowym opoznieniem.
+    # A monthly macro series published with a 30-day lag.
     observation_dates = pd.date_range("2012-01-31", "2021-12-31", freq="ME")
     macro = pd.DataFrame(
         {
@@ -71,7 +71,7 @@ def inputs() -> FeatureInputs:
     return FeatureInputs(prices=prices, macro=macro, events=events)
 
 
-# --- halving --------------------------------------------------------------
+# --- halving -------------------------------------------------------------------
 
 
 def test_halving_distance_counts_from_last_halving():
@@ -114,7 +114,7 @@ def test_halving_window_expires_after_n_days():
     assert flags.loc[pd.Timestamp("2020-06-11")] == 0
 
 
-# --- makro ----------------------------------------------------------------
+# --- macro ---------------------------------------------------------------------
 
 
 def test_asof_series_waits_for_publication_date():
@@ -128,7 +128,7 @@ def test_asof_series_waits_for_publication_date():
     )
     index = pd.to_datetime(["2020-02-15", "2020-03-01", "2020-03-30", "2020-03-31"])
     values = asof_series(macro, "m2", index)
-    assert np.isnan(values.iloc[0]), "przed publikacja nie znamy nawet starszej obserwacji"
+    assert np.isnan(values.iloc[0]), "before publication even the older observation is unknown"
     assert values.iloc[1] == 100.0
     assert values.iloc[2] == 100.0
     assert values.iloc[3] == 110.0
@@ -153,7 +153,7 @@ def test_macro_phase_produces_labels_once_history_exists(inputs):
     }
 
 
-# --- zdarzenia ------------------------------------------------------------
+# --- events --------------------------------------------------------------------
 
 
 def test_event_flag_is_zero_before_the_event(inputs):
@@ -173,7 +173,7 @@ def test_days_since_event_is_nan_before_first_event(inputs):
     assert days.loc[pd.Timestamp("2017-09-14")] == 10
 
 
-# --- cechy cenowe i cele --------------------------------------------------
+# --- price features and targets ------------------------------------------------
 
 
 def test_price_features_use_only_past_data(inputs):
@@ -194,11 +194,11 @@ def test_forward_returns_are_targets_not_features(inputs):
     assert np.isclose(frame["fwd_return_30d"].iloc[0], expected)
 
 
-# --- test glowny: brak look-ahead ----------------------------------------
+# --- the main test: no look-ahead ----------------------------------------------
 
 
 def test_no_lookahead_in_full_feature_frame(inputs):
-    """Kazdy sprawdzany dzien musi wyjsc tak samo, gdy zna sie tylko przeszlosc."""
+    """Every checked day must come out the same when only the past is known."""
     test_dates = [
         "2014-06-15", "2015-11-20", "2016-07-20", "2017-12-01",
         "2018-08-08", "2019-04-01", "2020-03-20", "2020-12-31",
@@ -207,13 +207,13 @@ def test_no_lookahead_in_full_feature_frame(inputs):
 
 
 def test_lookahead_detector_catches_a_planted_leak(inputs):
-    """Kontrola detektora: cecha z jawnym wyciekiem musi zostac zlapana."""
+    """Control on the detector: a feature with an obvious leak must be caught."""
 
     def leaky_build(as_of):
         frame = build_features(inputs, as_of=as_of)
         if frame.empty:
             return frame
-        # Klasyczny wyciek: normalizacja mediana z CALEJ proby.
+        # The classic leak: normalising by the median of the WHOLE sample.
         frame["leak_zscore"] = frame["close"] / frame["close"].median()
         return frame
 
@@ -224,11 +224,11 @@ def test_lookahead_detector_catches_a_planted_leak(inputs):
 
 def test_point_in_time_build_stops_at_the_cutoff(inputs):
     frame = build_features(inputs, as_of="2017-01-01")
-    # Bar dnia D jest znany dopiero D+1, wiec ostatni wiersz to 2016-12-31.
+    # The bar for day D is known only on D+1, so the last row is 2016-12-31.
     assert frame.index.max() == pd.Timestamp("2016-12-31")
 
 
-# --- zszywanie zrodel -----------------------------------------------------
+# --- source stitching -----------------------------------------------------
 
 
 def test_stitch_prefers_higher_priority_source():

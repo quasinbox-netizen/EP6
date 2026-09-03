@@ -1,15 +1,15 @@
-"""Lokalna baza SQLite: surowe ceny, makro, zdarzenia i log pobran.
+"""Local SQLite database: raw prices, macro, events and an ingest log.
 
-Kontrakt czasowy - kluczowy dla calego projektu:
+The time contract - central to the whole project:
 
-* `date`           - data OBSERWACJI (dzien, ktorego dotyczy wartosc),
-* `available_from` - pierwszy dzien, w ktorym wartosc byla publicznie znana.
+* `date`           - the OBSERVATION date (the day the value refers to),
+* `available_from` - the first day the value was publicly known.
 
-Dla cen roznica wynosi jeden dzien (bar dzienny D jest kompletny dopiero
-o 00:00 UTC dnia D+1). Dla makro potrafi wynosic tygodnie - M2 za dany
-miesiac publikowane jest ~30 dni po jego zakonczeniu. Kazde zapytanie
-analityczne filtruje po `available_from`, nigdy po `date`; to jedyne
-miejsce, w ktorym zapobiegamy look-ahead bias na poziomie danych.
+For prices the difference is one day (the daily bar for D is only complete at
+00:00 UTC on D+1). For macro it can be weeks - M2 for a given month is
+published about 30 days after that month ends. Every analytical query filters
+on `available_from`, never on `date`; this is the single place where look-ahead
+bias is prevented at the data level.
 """
 from __future__ import annotations
 
@@ -105,7 +105,7 @@ def _placeholders(n: int) -> str:
 def _rows_from_frame(df: pd.DataFrame, columns: Sequence[str]) -> list[tuple]:
     missing = [c for c in columns if c not in df.columns]
     if missing:
-        raise ValueError("brakuje kolumn: " + ", ".join(missing))
+        raise ValueError("missing columns: " + ", ".join(missing))
     out = df.loc[:, list(columns)].copy()
     for col in out.columns:
         if pd.api.types.is_datetime64_any_dtype(out[col]):
@@ -115,7 +115,7 @@ def _rows_from_frame(df: pd.DataFrame, columns: Sequence[str]) -> list[tuple]:
 
 
 def upsert_prices(conn: sqlite3.Connection, df: pd.DataFrame) -> int:
-    """Wstawia/aktualizuje bary. Idempotentne - ponowne pobranie nie duplikuje."""
+    """Insert or update bars. Idempotent - re-fetching does not duplicate."""
     if df.empty:
         return 0
     df = df.copy()
@@ -217,11 +217,11 @@ def read_macro(
     series: str | Iterable[str] | None = None,
     as_of: str | None = None,
 ) -> pd.DataFrame:
-    """Odczyt makro. `as_of` filtruje po dacie PUBLIKACJI, nie obserwacji.
+    """Read macro data. `as_of` filters on the PUBLICATION date, not observation.
 
-    Dzieki temu read_macro(conn, as_of="2020-03-01") zwraca dokladnie ten
-    zbior informacji, jaki byl dostepny 1 marca 2020 - takze dla serii
-    publikowanych z opoznieniem.
+    So read_macro(conn, as_of="2020-03-01") returns exactly the set of
+    information available on 1 March 2020 - including for series published
+    with a lag.
     """
     query = "SELECT * FROM macro WHERE 1=1"
     params: list[object] = []
@@ -254,10 +254,10 @@ def read_events(
 
 
 def table_summary(conn: sqlite3.Connection) -> pd.DataFrame:
-    """Krotki przeglad zawartosci bazy - uzywany przez CLI i dashboard."""
+    """A short overview of what the database holds - used by CLI and dashboard."""
     rows = []
-    # Ceny grupujemy po symbolu I zrodle - inaczej wszystkie aktywa kontrolne
-    # zlewaja sie w jeden wiersz "yahoo" i nie widac, czy ktoregos brakuje.
+    # Prices are grouped by symbol AND source - otherwise every control asset
+    # collapses into a single "yahoo" row and a missing one is invisible.
     for table, key in (
         ("prices", "symbol || ':' || source"),
         ("macro", "series"),

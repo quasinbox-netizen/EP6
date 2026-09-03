@@ -1,12 +1,13 @@
-"""Dashboard Streamlit - wylacznie warstwa prezentacji.
+"""Streamlit dashboard - presentation layer only.
 
-Zasada: zero logiki badawczej w tym pliku. Kazda liczba pochodzi z modulu
-w src/ i przechodzi przez te same funkcje, co CLI. Jesli chcesz zmienic
-sposob liczenia czegokolwiek, zrob to w src/ - inaczej wykres i terminal
-zaczna pokazywac rozne rzeczy, a wierzyc bedziesz temu ladniejszemu.
+The rule: no research logic in this file. Every number comes from a module in
+src/ and passes through the same functions as the CLI. If you want to change
+how something is computed, do it in src/ - otherwise the chart and the
+terminal will start showing different things and you will believe the
+prettier one.
 
-Uruchomienie:
-    streamlit run dashboard/app.py
+Run it with:
+    python run.py dashboard
 """
 from __future__ import annotations
 
@@ -45,37 +46,37 @@ COLORS = {
 }
 
 
-@st.cache_data(show_spinner="Wczytuje dane z lokalnej bazy...")
+@st.cache_data(show_spinner="Loading data from the local database...")
 def cached_data():
     return load_lab_data()
 
 
-@st.cache_data(show_spinner="Licze event study...")
+@st.cache_data(show_spinner="Computing the event study...")
 def cached_halving_study(post: int):
     return halving_event_study(cached_data(), post=post)
 
 
-@st.cache_data(show_spinner="Licze event study dla kategorii...")
+@st.cache_data(show_spinner="Computing event studies per category...")
 def cached_category_studies(post: int):
     return category_event_studies(cached_data(), post=post)
 
 
-@st.cache_data(show_spinner="Porownuje z grupa kontrolna...")
+@st.cache_data(show_spinner="Comparing against the control group...")
 def cached_control(post: int):
     return control_comparison(cached_data(), post=post)
 
 
-@st.cache_data(show_spinner="Skanuje hipotezy...")
+@st.cache_data(show_spinner="Scanning hypotheses...")
 def cached_scan():
     return scan_hypotheses(cached_data())
 
 
-@st.cache_data(show_spinner="Sprawdzam replikacje poza proba...")
+@st.cache_data(show_spinner="Checking out-of-sample replication...")
 def cached_out_of_sample():
     return out_of_sample_check(cached_data())
 
 
-@st.cache_data(show_spinner="Uruchamiam backtesty...")
+@st.cache_data(show_spinner="Running backtests...")
 def cached_backtests():
     table, results = run_strategies(cached_data())
     curves = pd.DataFrame({r.name: r.equity for r in results})
@@ -121,7 +122,7 @@ def price_chart(data, halving_window_days: int, show_events: bool) -> go.Figure:
         yaxis_type="log",
         height=460,
         margin=dict(l=10, r=10, t=30, b=10),
-        yaxis_title="cena (skala log)",
+        yaxis_title="price (log scale)",
         hovermode="x unified",
     )
     return figure
@@ -140,12 +141,12 @@ def car_chart(result, title: str) -> go.Figure:
         go.Scatter(
             x=table.index, y=table["car_ci_low"], fill="tonexty",
             fillcolor=COLORS["band"], line=dict(width=0),
-            name="95% przedzial ufnosci",
+            name="95% confidence interval",
         )
     )
     figure.add_trace(
         go.Scatter(
-            x=table.index, y=table["car"], name="sredni CAR",
+            x=table.index, y=table["car"], name="mean CAR",
             line=dict(color=COLORS["car"], width=2),
         )
     )
@@ -153,8 +154,8 @@ def car_chart(result, title: str) -> go.Figure:
     figure.update_layout(
         title=title,
         height=420,
-        xaxis_title="dni od zdarzenia",
-        yaxis_title="skumulowany zwrot nadzwyczajny",
+        xaxis_title="days from the event",
+        yaxis_title="cumulative abnormal return",
         margin=dict(l=10, r=10, t=50, b=10),
         yaxis_tickformat=".0%",
     )
@@ -167,11 +168,11 @@ def equity_chart(curves: pd.DataFrame) -> go.Figure:
         figure.add_trace(
             go.Scatter(
                 x=curves.index, y=curves[column], name=column,
-                line=dict(width=2.5 if column == "kup i trzymaj" else 1.4),
+                line=dict(width=2.5 if column == "buy and hold" else 1.4),
             )
         )
     figure.update_layout(
-        yaxis_type="log", height=440, yaxis_title="kapital (skala log)",
+        yaxis_type="log", height=440, yaxis_title="equity (log scale)",
         margin=dict(l=10, r=10, t=30, b=10), hovermode="x unified",
     )
     return figure
@@ -181,35 +182,35 @@ def main() -> None:
     config = load_config()
     st.title("BTC Cycle Lab")
     st.caption(
-        "Narzedzie do badania, czy cykl halvingowy i zdarzenia makro cokolwiek "
-        "wyjasniaja w cenie BTC. Kazdy wynik jest podany z przedzialem ufnosci "
-        "i liczba obserwacji - bez tego nie jest wynikiem."
+        "A tool for testing whether the halving cycle and macro events explain "
+        "anything in the price of BTC. Every result comes with a confidence "
+        "interval and a count of observations - without those it is not a result."
     )
 
     data = cached_data()
     if data.is_empty:
         st.error(
-            "Baza jest pusta. Uruchom najpierw pobieranie danych:\n\n"
-            "`python -m cli ingest --what all` (z katalogu repo, PYTHONPATH=src)"
+            "The database is empty. Download the data first:\n\n"
+            "`python run.py ingest --what all`"
         )
         st.stop()
 
     with st.sidebar:
-        st.header("Ustawienia")
-        halving_window_days = st.slider("Okno halvingowe na wykresie (dni)", 30, 730, 365, 5)
-        study_post = st.slider("Horyzont event study (dni po zdarzeniu)", 30, 730, 365, 5)
-        show_events = st.checkbox("Pokaz zdarzenia na wykresie", value=True)
+        st.header("Settings")
+        halving_window_days = st.slider("Halving window on the chart (days)", 30, 730, 365, 5)
+        study_post = st.slider("Event study horizon (days after the event)", 30, 730, 365, 5)
+        show_events = st.checkbox("Show events on the chart", value=True)
         st.divider()
         st.caption(
-            f"Dane: {data.features.index.min().date()} - {data.features.index.max().date()} "
-            f"({len(data.features)} dni)\n\n"
-            f"Zszycie: {', '.join(config['price']['stitch_priority'])}\n\n"
-            f"Koszty: {config['backtest']['fee_bps']} bps + "
-            f"{config['backtest']['slippage_bps']} bps poslizgu"
+            f"Data: {data.features.index.min().date()} - {data.features.index.max().date()} "
+            f"({len(data.features)} days)\n\n"
+            f"Stitching: {', '.join(config['price']['stitch_priority'])}\n\n"
+            f"Costs: {config['backtest']['fee_bps']} bps fees + "
+            f"{config['backtest']['slippage_bps']} bps slippage"
         )
 
     tab_price, tab_study, tab_control, tab_validation, tab_backtest = st.tabs(
-        ["Cena i cykle", "Event study", "Grupa kontrolna", "Walidacja", "Backtest"]
+        ["Price and cycles", "Event study", "Control group", "Validation", "Backtest"]
     )
 
     with tab_price:
@@ -217,11 +218,11 @@ def main() -> None:
             price_chart(data, halving_window_days, show_events), use_container_width=True
         )
         columns = st.columns(4)
-        columns[0].metric("Dni w probie", f"{len(data.features):,}")
-        columns[1].metric("Halvingi w probie", len(CONFIRMED_HALVINGS))
-        columns[2].metric("Zdarzenia w rejestrze", len(data.events))
-        columns[3].metric("Serie makro", data.macro["series"].nunique() if not data.macro.empty else 0)
-        with st.expander("Rejestr zdarzen"):
+        columns[0].metric("Days in sample", f"{len(data.features):,}")
+        columns[1].metric("Halvings in sample", len(CONFIRMED_HALVINGS))
+        columns[2].metric("Events in registry", len(data.events))
+        columns[3].metric("Macro series", data.macro["series"].nunique() if not data.macro.empty else 0)
+        with st.expander("Event registry"):
             st.dataframe(
                 data.events.loc[:, ["date", "category", "name", "description"]],
                 use_container_width=True, hide_index=True,
@@ -230,16 +231,17 @@ def main() -> None:
     with tab_study:
         study = cached_halving_study(study_post)
         st.plotly_chart(
-            car_chart(study, f"Halvingi (n={study.n_events})"), use_container_width=True
+            car_chart(study, f"Halvings (n={study.n_events})"), use_container_width=True
         )
         st.info(study.summary())
         if study.n_events < 10:
             st.warning(
-                f"Przedzial ufnosci jest szeroki, bo probka liczy {study.n_events} zdarzen. "
-                "To nie jest wada metody - to jest cala dostepna informacja."
+                f"The confidence interval is wide because the sample holds "
+                f"{study.n_events} events. That is not a flaw in the method - it is "
+                "all the information there is."
             )
 
-        st.subheader("Kategorie zdarzen")
+        st.subheader("Event categories")
         studies = cached_category_studies(min(study_post, 180))
         if studies:
             rows = [
@@ -247,20 +249,20 @@ def main() -> None:
                 for name, result in studies.items()
             ]
             st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
-            choice = st.selectbox("Wykres dla kategorii", sorted(studies))
+            choice = st.selectbox("Chart for category", sorted(studies))
             st.plotly_chart(
                 car_chart(studies[choice], f"{choice} (n={studies[choice].n_events})"),
                 use_container_width=True,
             )
         st.caption(
-            "P-value w tej tabeli sa SUROWE. Do wnioskowania sluzy zakladka Walidacja."
+            "The p-values in this table are RAW. Use the Validation tab for inference."
         )
 
     with tab_control:
         st.caption(
-            "Halving dotyczy wylacznie bitcoina, wiec to, co robily w tym samym "
-            "oknie aktywa bez halvingu, jest testem placebo. Roznica liczona jest "
-            "parami po zdarzeniach, zeby wspolne warunki makro sie skrocily."
+            "A halving concerns Bitcoin alone, so what assets without a halving "
+            "did over the same window is a placebo test. The difference is computed "
+            "pairwise across events so that shared macro conditions cancel out."
         )
         report = cached_control(study_post)
         if "error" in report:
@@ -269,31 +271,31 @@ def main() -> None:
             for name, comparison in report["comparisons"].items():
                 st.subheader(f"BTC vs {name}")
                 if comparison.table.empty:
-                    st.info("brak wspolnych zdarzen z pelnym oknem")
+                    st.info("no shared events with a complete window")
                     continue
                 st.dataframe(comparison.table, use_container_width=True)
                 verdict = comparison.verdict()
-                if "NIE jest wspolny" in verdict:
+                if "NOT common" in verdict:
                     st.success(verdict)
                 else:
                     st.warning(verdict)
                 placebo = report["placebos"][name]
                 if placebo.car_summary:
                     st.caption(
-                        f"Placebo - {name} potraktowany jak BTC: "
+                        f"Placebo - {name} treated like BTC: "
                         f"CAR({placebo.car_summary['offset']}d) = "
                         f"{placebo.car_summary['car']:+.1%}, "
                         f"p = {placebo.car_summary['p_value']:.3f}"
                     )
-                with st.expander(f"CAR pojedynczych zdarzen ({name})"):
+                with st.expander(f"CAR of individual events ({name})"):
                     st.dataframe(comparison.per_event, use_container_width=True)
 
     with tab_validation:
         scan = cached_scan()
         if scan.empty:
-            st.info("Brak hipotez do sprawdzenia.")
+            st.info("No hypotheses to check.")
         else:
-            st.subheader("Skan okien z korekta na wielokrotne testowanie")
+            st.subheader("Window scan with multiple-testing correction")
             st.info(summarize(scan))
             st.dataframe(
                 scan.loc[
@@ -304,7 +306,7 @@ def main() -> None:
             )
         out_of_sample = cached_out_of_sample()
         if not out_of_sample.empty:
-            st.subheader("Replikacja poza proba (podzial po cyklach)")
+            st.subheader("Out-of-sample replication (split by cycle)")
             st.dataframe(
                 out_of_sample.loc[
                     :, ["hypothesis", "train_effect", "test_effect", "same_sign",
@@ -314,17 +316,17 @@ def main() -> None:
             )
             survivors = out_of_sample[out_of_sample["replicated"]]["hypothesis"].tolist()
             if survivors:
-                st.success(f"Przetrwalo poza proba: {', '.join(survivors)}")
+                st.success(f"Survived out of sample: {', '.join(survivors)}")
             else:
                 st.warning(
-                    "Zadna hipoteza nie powtorzyla sie poza proba treningowa. "
-                    "To najczestszy i najbardziej pouczajacy wynik w tym projekcie."
+                    "No hypothesis replicated outside the training sample. That is "
+                    "the most common and most instructive result in this project."
                 )
 
     with tab_backtest:
         table, curves = cached_backtests()
         if table.empty:
-            st.info("Brak wynikow backtestu.")
+            st.info("No backtest results.")
         else:
             st.plotly_chart(equity_chart(curves), use_container_width=True)
             st.dataframe(
@@ -334,14 +336,14 @@ def main() -> None:
                 ],
                 use_container_width=True,
             )
-            baseline = table.loc["kup i trzymaj"]
+            baseline = table.loc["buy and hold"]
             better = [
                 name for name in table.index
-                if name != "kup i trzymaj" and table.loc[name, "sharpe"] > baseline["sharpe"]
+                if name != "buy and hold" and table.loc[name, "sharpe"] > baseline["sharpe"]
             ]
             st.caption(
-                "Porownanie zawsze wzgledem kup-i-trzymaj. Lepszy Sharpe: "
-                + (", ".join(better) if better else "zadna strategia")
+                "Always compared against buy-and-hold. Better Sharpe: "
+                + (", ".join(better) if better else "no strategy")
             )
 
 

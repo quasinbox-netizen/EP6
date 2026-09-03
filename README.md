@@ -1,315 +1,352 @@
 # btc-cycle-lab
 
-Lokalne laboratorium do badania, czy cykl halvingowy i zdarzenia makro cokolwiek
-wyjaśniają w cenie BTC.
+A local research lab for testing whether the Bitcoin halving cycle and macro
+events explain anything in the price of BTC.
 
-Projekt jest zbudowany wokół jednej tezy: **łatwo znaleźć wzorzec, trudno pokazać,
-że nie jest przypadkiem.** Dlatego każdy wynik wychodzi stąd z przedziałem ufności,
-liczbą obserwacji i korektą na liczbę przetestowanych hipotez — a backtest zawsze
-porównuje się z „kup i trzymaj".
+The project is built around a single premise: **finding a pattern is easy,
+showing it is not chance is hard.** So every result leaves here with a
+confidence interval, a count of observations and a correction for the number of
+hypotheses tested — and every backtest is compared against buy-and-hold.
+
+**Its own headline finding is negative.** On data from 2011 to 2026 the
+apparent halving effect does not survive correction for multiple testing, does
+not replicate out of sample, and cannot be distinguished from what the NASDAQ
+did over the same windows. See [Results](#results).
+
+> **This is not investment advice.** Read [DISCLAIMER.md](DISCLAIMER.md) before
+> using any number from this tool to decide what to do with money.
 
 ---
 
-## Szybki start (Windows)
+## Quick start
 
-Wymagany jest tylko Python 3.11 lub nowszy. Reszta robi się sama — launcher
-tworzy środowisko wirtualne i instaluje zależności przy pierwszym uruchomieniu.
+You need Python 3.11 or newer. Everything else happens automatically — the
+launcher creates a virtual environment and installs dependencies on first run.
+Nothing is installed system-wide.
+
+**Windows**
 
 ```bat
 .\btc.cmd ingest --what all
 ```
 
-Potem dowolna z komend:
-
-```bat
-.\btc.cmd all
-```
-
-| komenda | co robi |
-|---|---|
-| `.\btc.cmd ingest --what all` | pobiera ceny, makro, grupę kontrolną i zdarzenia |
-| `.\btc.cmd quality` | raport jakości danych i szwu między giełdami |
-| `.\btc.cmd study --post 365` | event study wokół halvingów i kategorii zdarzeń |
-| `.\btc.cmd control` | grupa kontrolna: NASDAQ, S&P 500, złoto |
-| `.\btc.cmd macro` | oś płynności: prawdziwe M2 vs proxy dolarowe |
-| `.\btc.cmd validate` | skan hipotez z korektą + replikacja poza próbą |
-| `.\btc.cmd backtest` | strategie vs „kup i trzymaj" |
-| `.\btc.cmd all` | wszystko po kolei |
-
-Dashboard i testy mają własne launchery:
-
-```bat
-.\dashboard.cmd
-```
-
-```bat
-.\test.cmd offline
-```
-
-`.\test.cmd` bez argumentu uruchamia też testy odpytujące prawdziwe API.
-
-Prefiks `.\` jest wymagany w PowerShellu, a w `cmd.exe` bywa wymagany, gdy
-w systemie ustawiono `NoDefaultCurrentDirectoryInExePath` — dlatego wszędzie
-podaję go od razu.
-
-Skrypty są w `.cmd`, a nie w `.ps1`, celowo: domyślna polityka wykonywania
-PowerShella blokuje niepodpisane `.ps1`, a `.cmd` uruchomi się wszędzie.
-
-### Przenośność
-
-Cały katalog można skopiować na pendrive'a albo na inny komputer z Windowsem
-i po prostu uruchomić `.\btc.cmd`. Środowisko wirtualne ma w środku ścieżki
-bezwzględne, więc po przeniesieniu przestaje działać — launcher to wykrywa
-(próbuje zaimportować zależności) i odtwarza je od zera. Baza, konfiguracja
-i wyniki są trzymane względem katalogu repo, więc jadą razem z folderem.
-
-Czego przenosiny **nie** zabiorą: pliku `.env` z kluczem FRED, bo jest poza
-kontrolą wersji. Launcher utworzy go z szablonu, ale klucz trzeba wkleić
-ponownie. Bez niego działa wszystko poza serią M2 z FRED.
-
-**Trzymaj folder blisko korzenia dysku** — np. `C:\projekty\btc`, a nie kilka
-poziomów w głąb `Dokumenty`. Windows ma limit 260 znaków na ścieżkę, a instalacja
-Streamlita rozpakowuje bardzo głęboko zagnieżdżone pliki przykładowe; przy ścieżce
-repo dłuższej niż ~120 znaków instalacja przerywa się z `No such file or directory`.
-Launcher ostrzega o tym przed startem i podpowiada obejście w komunikacie błędu.
-Sprawdzone: w `C:\ptest-ep6` setup przechodzi, w ścieżce ~150-znakowej pada.
-
-### Bez launchera
-
-Moduł sam dokleja `src` do ścieżki, więc `PYTHONPATH` nie jest potrzebny:
-
-```bat
-.venv\Scripts\python.exe src\cli.py study --post 365
-```
-
-W bashu (Git Bash, WSL) to samo:
+**macOS and Linux**
 
 ```bash
-.venv/Scripts/python src/cli.py study --post 365
+./btc ingest --what all
 ```
 
-## Skąd biorą się dane
+**Any platform, no wrapper**
 
-| Źródło | Zakres | Klucz API | Rola |
+```bash
+python run.py ingest --what all
+```
+
+The wrappers are one-line shims around `run.py`; use whichever is convenient.
+The examples below use `run.py` because it is identical everywhere.
+
+Then run any of these:
+
+| command | what it does |
+|---|---|
+| `run.py ingest --what all` | download prices, macro, control group and events |
+| `run.py quality` | data quality report and the seam between exchanges |
+| `run.py features` | build and save the feature frame |
+| `run.py study --post 365` | event study around halvings and event categories |
+| `run.py control` | control group: NASDAQ, S&P 500, gold |
+| `run.py macro` | liquidity axis: real M2 vs the dollar proxy |
+| `run.py validate` | hypothesis scan with correction + out-of-sample replication |
+| `run.py walkforward` | walk-forward validation across 13 disjoint windows |
+| `run.py backtest` | strategies vs buy-and-hold |
+| `run.py all` | everything in sequence |
+| `run.py dashboard` | browser dashboard on port 8511 |
+| `run.py test` | the test suite (`test offline` skips network tests) |
+| `run.py doctor` | environment diagnostics — start here in a bug report |
+
+### Notes per platform
+
+**Windows.** On PowerShell the `.\` prefix is required; in `cmd.exe` it is
+required when `NoDefaultCurrentDirectoryInExePath` is set, so the examples
+always include it. The wrapper is `.cmd` rather than `.ps1` on purpose: the
+default PowerShell execution policy blocks unsigned `.ps1` files.
+
+**Keep the folder close to the drive root**, e.g. `C:\projects\btc`. Windows
+limits paths to 260 characters and installing Streamlit unpacks deeply nested
+example files; with a repo path longer than about 120 characters the install
+fails with `No such file or directory`. The launcher warns about this before
+it starts.
+
+**Debian and Ubuntu.** `python3-venv` is a separate package and is required:
+
+```bash
+sudo apt install python3 python3-venv python3-pip
+```
+
+**macOS.** The system Python is usually old enough to matter; `brew install
+python@3.13` or the installer from python.org both work.
+
+**If `./btc` is not executable** (the bit does not survive a zip download),
+either `chmod +x btc` once or just use `python3 run.py`.
+
+### Portability
+
+The whole folder can be copied to a USB stick or another machine. A virtual
+environment stores absolute paths internally, so it breaks when moved — the
+launcher detects this (by trying to import the dependencies) and rebuilds it
+from scratch. The database, configuration and results live relative to the
+project folder, so they travel with it.
+
+What moving does **not** carry: the `.env` file with your FRED key, which is
+outside version control. The launcher recreates it from the template, but the
+key has to be pasted again. Without it everything works except the M2 series.
+
+---
+
+## Where the data comes from
+
+| Source | Coverage | API key | Role |
 |---|---|---|---|
-| Binance (BTC/USDT) | od 2017-08-17 | nie | najgłębszy rynek — źródło prawdy od 2017 |
-| Bitstamp (BTC/USD) | od 2011-08-18 | nie | jedyne pokrywające halvingi 2012 i 2016 |
-| Coinbase (BTC/USD) | od 2015-07-20 | nie | walidacja krzyżowa |
-| Yahoo Finance | od 2009 | nie | DXY, S&P 500, rentowności, złoto |
-| Yahoo Finance (kontrola) | od 2011 | nie | NASDAQ (^IXIC), S&P 500, złoto — grupa kontrolna |
-| FRED | od lat 60. | **tak** (darmowy) | M2, produkcja przemysłowa, stopa Fed, bezrobocie |
+| Binance (BTC/USDT) | from 2017-08-17 | no | deepest market — source of truth from 2017 |
+| Bitstamp (BTC/USD) | from 2011-08-18 | no | the only one covering the 2012 and 2016 halvings |
+| Coinbase (BTC/USD) | from 2015-07-20 | no | cross-validation |
+| Yahoo Finance | from 2009 | no | DXY, S&P 500, yields, gold |
+| Yahoo Finance (control) | from 2011 | no | NASDAQ (^IXIC), S&P 500, gold |
+| FRED | from the 1960s | **yes** (free) | M2, industrial production, Fed funds, unemployment |
 
-Binance ma najwięcej danych w sensie głębokości i wolumenu, ale jego historia zaczyna
-się w 2017 r. — sama giełda wcześniej nie istniała. Dlatego szereg jest **zszywany**:
-Bitstamp do 2017-08, dalej Binance. Szew jest jawny i sprawdzany na zakładce
-(mediana rozbieżności na wspólnych dniach: **0,06%**, maksimum 9% w grudniu 2017,
-czyli w szczycie manii, gdy giełdy realnie się rozjeżdżały).
+Binance has the most data in terms of depth and volume, but its history starts
+in 2017 — the exchange did not exist before that. So the series is **stitched**:
+Bitstamp up to 2017-08, Binance afterwards. The seam is explicit and checked on
+the overlap (median divergence on shared days: **0.06%**, maximum 9% in
+December 2017, at the peak of the mania, when exchanges genuinely diverged).
 
-M2 i PMI nie mają darmowego API bez klucza. M2 zaciągniesz z FRED po wklejeniu
-darmowego klucza do `.env`; ISM PMI ma licencję, która wyklucza redystrybucję —
-wrzuć własny plik do `data/raw/manual/pmi.csv`, moduł go podchwyci.
-Bez klucza FRED faza makro liczy się z proxy rynkowych (DXY, krzywa stóp) —
-`cli macro` pokazuje, którym źródłem liczona jest oś płynności, a gdy dostępne
-są oba, mierzy ich zgodność.
+M2 and PMI have no free key-less API. M2 comes from FRED once you paste a free
+key into `.env`; ISM PMI has a licence that forbids redistribution, so drop
+your own file into `data/raw/manual/pmi.csv` and the tool will pick it up.
+Without a FRED key the macro phase falls back to market proxies (DXY, the rate
+curve) — and `run.py macro` reports which source the liquidity axis is built
+from, plus, when both are available, how much they agree.
 
-Dane z FRED pobierane są jako **pierwsze publikacje** (`output_type=4`), więc
-`available_from` to prawdziwa data wejścia liczby do obiegu. Zmierzone na
-prawdziwych wersjach M2SL: **mediana opóźnienia publikacji to 43 dni**, maksimum 58
-— o dwa tygodnie więcej, niż podpowiada intuicja „miesiąc po końcu okresu".
-Wszystkie 559 obserwacji dostało datę z archiwum wersji, zero fallbacku.
+See [DATA_SOURCES.md](DATA_SOURCES.md) for attribution requirements and known
+redistribution restrictions. **Yahoo Finance prohibits redistributing its
+data** — this matters if you host the dashboard publicly.
 
-Trzy przypadki brzegowe, każdy z testem w `tests/test_fred_vintages.py`:
+### First releases, not revisions
 
-* sentinel `1776-07-04` — seria bez archiwum wersji,
-* opóźnienie dłuższe niż ~5 miesięcy — obserwacja starsza od archiwum ALFRED
-  albo skutek rewizji metodologii,
-* **za dużo wersji** — FRED oddaje pierwsze publikacje do 2000 dat wersji, a DFF
-  ma ich 5113. Przekraczają ten limit serie *dzienne*, czyli dokładnie te
-  publikowane następnego dnia i praktycznie nierewidowane, więc pobieramy je
-  bez archiwum wersji, ze stałym opóźnieniem 1 dnia.
+FRED data is fetched as **first releases** (`output_type=4`), so
+`available_from` is the date the number actually entered circulation. Measured
+on the real M2SL vintages: the **median publication lag is 43 days**, maximum
+58 — two weeks more than the intuitive "a month after the period ends". All 559
+observations received a date from the vintage archive, with zero fallbacks.
 
-Komunikaty błędów przechodzą przez `ingest.http.redact` — klucz API siedzi
-w query stringu, więc surowy URL w treści wyjątku byłby wyciekiem do logów.
+Three edge cases, each with a test in `tests/test_fred_vintages.py`:
 
----
+* the `1776-07-04` sentinel — a series with no vintage archive,
+* a lag longer than ~5 months — an observation older than the ALFRED archive,
+  or the result of a methodology revision,
+* **too many vintages** — FRED serves first releases up to 2000 vintage dates
+  and DFF has 5113. The series exceeding that limit are the *daily* ones, i.e.
+  exactly those published the next day and essentially never revised, so we
+  fetch them without the archive using a fixed one-day lag.
 
-## Grupa kontrolna: test placebo
-
-Halving jest zdarzeniem **wyłącznie bitcoinowym**. NASDAQ w tym samym oknie nie ma
-prawa nic o nim wiedzieć — więc jeśli reaguje tak samo, to znaczy, że mierzymy
-wspólny ruch rynków ryzyka, a nie połowienie nagrody.
-
-Test jest **sparowany po zdarzeniach** (różnica w różnicach): dla każdego halvingu
-liczymy CAR bitcoina i CAR kontroli w tym samym oknie, a wnioskujemy z rozkładu
-ich różnicy. Parowanie ma znaczenie — halving 2020 wypadł w środku pandemicznego
-odbicia, które podniosło oba aktywa; porównanie dwóch osobnych średnich zgubiłoby
-ten fakt.
-
-**Kalendarz to nie szczegół.** NASDAQ handluje się ~252 dni w roku, BTC 365.
-Bez wyrównania „365 dni po halvingu" znaczy dla NASDAQ 365 *wierszy*, czyli
-ok. 511 dni kalendarzowych — a zdarzenie wypadające w weekend w ogóle nie istnieje
-w indeksie. Na danych testowych kosztuje to **3 z 4 zdarzeń**
-(`test_without_calendar_alignment_most_events_are_lost`). Dlatego szereg kontrolny
-przenosimy na pełny kalendarz przez `ffill` — operację wyłącznie wsteczną.
-
-## Kontrakt czasowy — najważniejsza rzecz w tym repo
-
-Każdy wiersz w bazie ma **dwie** daty:
-
-* `date` — dzień, którego wartość dotyczy,
-* `available_from` — dzień, w którym była publicznie znana.
-
-Dla cen różnica to jeden dzień (bar dnia D domyka się o północy). Dla M2 to
-około miesiąca. Cała analiza filtruje po `available_from`, nigdy po `date`.
-Dane z FRED pobieramy jako **pierwsze publikacje** (`output_type=4`), a nie
-zrewidowane — zrewidowane M2 za marzec 2020 poznaliśmy w 2021 r.
-
-Sprawdza to `features/checks.py` metodą punkt-w-czasie: dla wybranego dnia t cechy
-budowane są dwa razy — raz z całą historią, raz wyłącznie z danych opublikowanych
-do t — i muszą wyjść identycznie. Test celowo zawiera też **podłożony wyciek**
-(normalizacja medianą z całej próby), żeby udowodnić, że detektor działa.
+Error messages pass through `ingest.http.redact` — the API key travels in the
+query string, so a raw URL inside an exception would leak it into logs.
 
 ---
 
-## Struktura
+## The time contract — the most important thing in this repo
 
-```
-src/
-├── ingest/      pobieranie (4 giełdy, FRED, Yahoo, ręczne CSV) + kontrola jakości
-├── features/    halving_distance, macro_phase, event_flags + detektor look-ahead
-├── analysis/    event_study, korelacje z błędami HAC, grupa kontrolna (placebo)
-├── backtest/    silnik z kosztami i poślizgiem + strategie
-├── validation/  podziały po cyklach, walk-forward, Bonferroni/BH, dane syntetyczne
-├── pipeline.py  spina wszystko — używane i przez CLI, i przez dashboard
-└── cli.py
-dashboard/       Streamlit — czysta prezentacja, zero logiki (pilnuje tego test)
-tests/           148 testów: po jednym pliku na fazę + wersje FRED + grupa kontrolna
-```
+Every row in the database carries **two** dates:
+
+* `date` — the day the value refers to,
+* `available_from` — the day it was publicly known.
+
+For prices the difference is one day (the bar for day D closes at midnight).
+For M2 it is about six weeks. The entire analysis filters on `available_from`,
+never on `date`.
+
+`features/checks.py` verifies this point-in-time: for a chosen day t the
+features are built twice — once with the whole history, once with only the data
+published up to t — and must come out identical. The test deliberately includes
+a **planted leak** (normalising by the median of the whole sample) to prove the
+detector works.
 
 ---
 
-## Decyzje metodologiczne (i dlaczego takie)
+## Control group: the placebo test
 
-**Jednostką obserwacji jest zdarzenie, nie dzień.** Przy czterech halvingach
-niepewność bierze się z tego, że mieliśmy cztery halvingi — nie z tego, że
-mieliśmy 1460 dni. Wnioskowanie idzie więc z rozkładu t o n−1 stopniach swobody
-po zdarzeniach. Bootstrap percentylowy jest raportowany obok, ale **nie decyduje**:
-przy n = 3–5 dawał ~30% fałszywych odkryć zamiast 5% (mierzone w
+A halving is a **Bitcoin-only** event. The NASDAQ over the same window has no
+way of knowing about it — so if it reacts the same way, we are measuring the
+common move of risk assets rather than a reward halving.
+
+The test is **paired across events** (difference in differences): for each
+halving we compute Bitcoin's CAR and the control's CAR over the same window and
+infer from the distribution of their difference. Pairing matters — the 2020
+halving fell in the middle of the pandemic rebound, which lifted both assets;
+comparing two separate means would lose that.
+
+**The calendar is not a detail.** The NASDAQ trades ~252 days a year, Bitcoin
+365. Without alignment, "365 days after the halving" means 365 *rows* for the
+NASDAQ, i.e. about 511 calendar days — and an event falling on a weekend does
+not exist in the index at all. On test data that costs **3 of 4 events**
+(`test_without_calendar_alignment_most_events_are_lost`). So the control series
+is mapped onto the full calendar with `ffill`, a strictly backward-looking
+operation.
+
+---
+
+## Methodological decisions (and why)
+
+**The unit of observation is the event, not the day.** With four halvings the
+uncertainty comes from having had four halvings, not from having had 1460 days.
+Inference therefore uses the t distribution with n−1 degrees of freedom across
+events. The percentile bootstrap is reported alongside but **does not decide**:
+at n = 3–5 it produced ~30% false discoveries instead of 5% (measured in
 `test_false_positive_rate_stays_near_nominal`).
 
-**Zwrot nadzwyczajny liczony względem okna sprzed zdarzenia** (−250..−31 dni),
-nie względem średniej z całej próby — bo średnia z całej próby zawiera to,
-co zdarzenie ma dopiero wyjaśnić.
+**Abnormal returns are measured against a pre-event window** (−250..−31 days),
+not against the full-sample mean — the full-sample mean already contains
+whatever the event is supposed to explain.
 
-**Test „okno vs reszta próby" przez cykliczne przesunięcia maski.** Zwykły test t
-na dziennych zwrotach zakłada niezależność, której w cenach nie ma, i systematycznie
-zawyża istotność. Permutacja przez rotację zachowuje autokorelację obu szeregów.
+**The "window vs rest of sample" test uses circular shifts of the mask.** A
+plain t-test on daily returns assumes independence, which prices do not have,
+and systematically overstates significance. Rotation preserves the
+autocorrelation of both series.
 
-**Embargo między treningiem a testem.** Cel `fwd_return_90d` w dniu t zawiera ceny
-z t+90, więc bez luki ostatnie dni treningu widzą zbiór testowy.
+**An embargo between training and test.** The target `fwd_return_90d` on day t
+contains prices from t+90, so without a gap the last training days see the test
+set.
 
-**Walidacja krocząca zamiast jednego podziału.** Podział po cyklach daje *jeden*
-zbiór testowy — „nie powtórzyło się" jest tam pojedynczą obserwacją. Walk-forward
-daje 13 rozłącznych okien rocznych (2013-11 → 2026-09) i pozwala policzyć, jak
-często znak efektu przeżywa przejście z treningu na test. Pod hipotezą zerową to
-rzut monetą, więc liczba zgodnych foldów ma rozkład dwumianowy.
+**Walk-forward instead of a single split.** Splitting by cycle gives *one* test
+set — "it did not replicate" is a single observation there. Walk-forward gives
+13 disjoint yearly windows (2013-11 → 2026-09) and lets us count how often the
+sign of an effect survives the move from training to test. Under the null that
+is a coin flip, so the number of agreeing folds is binomial.
 
-Krok między foldami **musi** być co najmniej równy długości okna testowego —
-inaczej okna zachodzą na siebie i test t po foldach przestaje być ważny.
-Pipeline sprawdza rozłączność na faktycznych indeksach, a nie na parametrach,
-i przy nakładaniu w ogóle nie raportuje testu t. Pierwsza wersja konfiguracji
-miała ten błąd (krok 182 dni przy oknie 365) i zawyżała istotność.
+The step between folds **must** be at least the length of the test window,
+otherwise the windows overlap and the t-test across folds stops being valid.
+The pipeline checks disjointness on the actual indices, not on the parameters,
+and reports no t-test when they overlap. The first version of the config had
+this bug (a 182-day step with a 365-day window) and overstated significance.
 
-**Koszt naliczany od obrotu, nie od liczby transakcji.** Sygnał z dnia t wchodzi
-z opóźnieniem — zerowe opóźnienie to handel po cenie, która dopiero się ustala.
-Różnicę widać w `test_execution_lag_blocks_same_day_knowledge`: ten sam „sygnał"
-daje +1000× bez opóźnienia i nic z opóźnieniem.
+**Costs are charged on turnover, not per trade.** A signal from day t takes
+effect with a lag — zero lag means trading at a price that has not settled yet.
+`test_execution_lag_blocks_same_day_knowledge` shows the difference: the same
+"signal" returns +1000× with no lag and nothing with one.
 
 ---
 
-## Co wyszło na prawdziwych danych (2011-08 – 2026-09, 5494 dni)
+## Results
 
-**Event study, halvingi:** CAR po 365 dniach = **+125%**, przedział ufności
-**[−190%, +441%]**, p = 0,30, n = 4.
-Czyli: efekt może być ogromny albo ujemny — przy czterech obserwacjach nie da się
-tego rozstrzygnąć. To nie jest porażka metody, to jest cała dostępna informacja.
+On 5494 days, 2011-08-18 → 2026-09-01. The full snapshot lives in
+[data/processed/RESULTS.md](data/processed/RESULTS.md).
 
-**Skan 23 hipotez** (okna halvingowe × kategorie zdarzeń × fazy makro): 0 istotnych
-surowo, 0 po korekcie BH. Sam przypadek dałby ~1,2 „odkrycia".
+**Event study, halvings.** CAR after 365 days = **+125.2%**, confidence
+interval **[−190.5%, +441.0%]**, p = 0.296, n = 4. The effect may be enormous
+or negative — with four observations there is no way to tell. That is not a
+failure of the method; it is all the information there is.
 
-**Oś płynności: prawdziwe M2 vs proxy dolarowe.** Zanim doszedł klucz FRED, oś
-płynności liczona była z odwróconego indeksu dolara. Obie wersje zgadzają się
-w **42,3%** dni — czyli *poniżej* poziomu przypadku (dla osi binarnej losowo byłoby
-50%), bo w tej próbie są wręcz przeciwstawne:
+**Control group** (CAR at 365 days, paired across events):
 
-| | proxy: contracting | proxy: expanding |
-|---|---|---|
-| **M2: contracting** | 1588 | 2193 |
-| **M2: expanding** | 767 | 582 |
-
-Skutek jest jakościowy, nie ilościowy. Faza „płynność rośnie, stopy rosną" ma
-**−20,6%** w skali roku licząc z M2 i **+105,9%** licząc z proxy. Ta sama etykieta,
-przeciwny wniosek. Dlatego `cli macro` raportuje, którym źródłem liczona jest oś —
-wniosek z proxy nie przenosi się na M2 i odwrotnie.
-
-**Replikacja poza próbą** (cykle 0–2 → trening, 3–4 → test): **żadna** hipoteza się
-nie powtórzyła. Efekty zmieniały znak albo kurczyły się do ułamka.
-
-**Grupa kontrolna wokół halvingów** (CAR po 365 dniach, n = 4):
-
-| | CAR BTC | CAR kontroli | różnica | 95% CI różnicy | p |
+| | CAR BTC | CAR control | difference | 95% CI | p |
 |---|---|---|---|---|---|
-| vs NASDAQ | +125,2% | +17,0% | +108,2% | [−169,4%, +385,8%] | 0,303 |
-| vs S&P 500 | +125,2% | +13,7% | +111,5% | [−167,7%, +390,7%] | 0,293 |
-| vs złoto | +125,2% | −17,3% | +142,5% | [−200,5%, +485,4%] | 0,278 |
+| vs NASDAQ | +125.2% | +17.0% | +108.2% | [−169.4%, +385.8%] | 0.303 |
+| vs S&P 500 | +125.2% | +13.7% | +111.5% | [−167.7%, +390.7%] | 0.293 |
+| vs gold | +125.2% | −17.3% | +142.5% | [−200.5%, +485.4%] | 0.278 |
 
-Bitcoin rósł po halvingach mocniej niż grupa kontrolna, ale przy czterech
-zdarzeniach **nie da się tego odróżnić od zera**. Placebo działa poprawnie w drugą
-stronę: metoda potraktowana na NASDAQ nie „znajduje" tam efektu halvingu
-(CAR +17,0%, p = 0,307) — czyli brak wyniku dla BTC nie wynika z tego, że metoda
-nigdy nic nie wykrywa.
+None of these differences is distinguishable from zero. The placebo works in
+the other direction: run on the NASDAQ, the method does *not* find a halving
+effect there (+17.0%, p = 0.307) — so the absence of a result for BTC is not
+the method being powerless.
 
-W krótkim oknie (30 dni) kontrola wypada **lepiej** niż BTC: NASDAQ +5,3% vs
-BTC −0,9%.
+**Validation.** 23 hypotheses (halving windows × event categories × macro
+phases): **0** significant raw, **0** after Benjamini-Hochberg correction, **0**
+replicating out of sample. Chance alone would have given ~1.2.
 
-**Backtest** (10 bps prowizji + 15 bps poślizgu):
+**Walk-forward.** 13 disjoint windows: **0** significant after correction, on
+both the sign test and the out-of-sample effect. The strongest case is
+`phase_expanding_rising` with **5 of 5** matching signs — the best possible
+outcome — and still p = 0.0625, because at five windows significance is
+unreachable.
 
-| strategia | zwrot | CAGR | Sharpe | maxDD | ekspozycja |
+**Liquidity axis: real M2 vs the dollar proxy.** The two agree on **42.3%** of
+5130 compared days — *below* chance level (50% for a binary axis), because in
+this sample they are opposed. The phase "liquidity rising, rates rising"
+returns **−20.6%** a year computed from M2 and **+105.9%** computed from the
+proxy. Same label, opposite conclusion. Do not treat the proxy as an
+approximation of M2.
+
+**Backtest** (10 bps fees + 15 bps slippage):
+
+| strategy | return | CAGR | Sharpe | maxDD | exposure |
 |---|---|---|---|---|---|
-| kup i trzymaj | +715 635% | 80,3% | 1,14 | −84,9% | 100% |
-| trend 50/200 | +885 999% | 82,9% | **1,27** | −78,3% | 61% |
-| halving +365d | +254 351% | 68,4% | **1,42** | −71,0% | 27% |
-| halving +180d | +2 555% | 24,3% | 0,87 | −70,3% | 13% |
-| makro (płynność ↑, stopy ↓, M2) | +257% | 8,8% | 0,46 | −57,4% | 10% |
+| buy and hold | +715,635% | 80.3% | 1.14 | −84.9% | 100% |
+| trend 50/200 | +885,999% | 82.9% | **1.27** | −78.3% | 61% |
+| halving +365d | +254,351% | 68.4% | **1.42** | −71.0% | 27% |
+| halving +180d | +2,555% | 24.3% | 0.87 | −70.3% | 13% |
+| macro (M2 up, rates down) | +257% | 8.8% | 0.46 | −57.4% | 10% |
 
-„Halving +365d" ma najlepszy Sharpe przy 27% czasu w rynku — i jednocześnie
-nie przechodzi walidacji statystycznej. To jest dokładnie ta sytuacja, dla której
-powstał ten projekt: **wynik wygląda dobrze i nie ma za nim dowodu.** Cztery cykle
-to cztery obserwacje, a strategia „bądź w rynku rok po halvingu" pokrywa się
-w dużej mierze z „bądź w rynku w hossie".
-
----
-
-## Ograniczenia, o których trzeba pamiętać
-
-* **Rejestr zdarzeń jest ułożony po fakcie** i przez to obciążony — pamiętamy te
-  zdarzenia, po których rynek się poruszył. Kolumna `source` w `data/raw/events.csv`
-  jest celowo pusta: uzupełnij i zweryfikuj daty, zanim cokolwiek z tego wywnioskujesz.
-  Dodawaj też zdarzenia „nudne", które wtedy wyglądały groźnie, a skończyły się niczym.
-* **Cztery halvingi to sufit mocy statystycznej.** Test
-  `test_five_events_cannot_detect_a_drift_buried_in_btc_scale_noise` pilnuje,
-  żeby nikt „nie poprawił" metody tak, by zaczęła znajdować efekty, na których
-  wykrycie nie ma danych.
-* **Binance kwotuje USDT, nie USD.** Poza epizodami utraty parytetu różnica jest
-  ułamkiem procenta, ale zszycie ją raportuje zamiast milcząco akceptować.
-* **Backtest nie zna finansowania, podatków ani ograniczeń płynności** przy dużych
-  zleceniach. Poślizg 15 bps jest założeniem, nie pomiarem.
+The only strategy with a better Sharpe than buy-and-hold at meaningful
+exposure — `halving +365d`, 1.42 at 27% time in market — **fails every
+statistical check above and is indistinguishable from the NASDAQ**. Four cycles
+are four observations, and "be in the market for a year after the halving"
+largely overlaps with "be in the market during a bull run".
 
 ---
 
-## Co dalej
+## Layout
 
-1. Uzupełnić `source` w rejestrze zdarzeń i dodać zdarzenia bez reakcji rynku.
-2. ~~Wkleić klucz FRED i powtórzyć fazę makro na prawdziwym M2 zamiast proxy.~~ zrobione
-3. ~~Dołożyć drugą klasę aktywów jako grupę kontrolną.~~ zrobione — NASDAQ, S&P 500, złoto
-4. ~~Walk-forward na oknach rocznych zamiast pojedynczego podziału po cyklach.~~ zrobione
+```
+run.py           cross-platform launcher and installer
+btc / btc.cmd    thin wrappers around it
+src/
+├── ingest/      fetching (4 exchanges, FRED, Yahoo, manual CSV) + quality checks
+├── features/    halving distance, macro phase, event flags + look-ahead detector
+├── analysis/    event study, HAC correlations, control group (placebo)
+├── backtest/    engine with costs and slippage + strategies
+├── validation/  splits, walk-forward, Bonferroni/BH, synthetic data
+├── pipeline.py  assembles everything - used by both the CLI and the dashboard
+└── cli.py
+dashboard/       Streamlit - presentation only, no logic (a test enforces this)
+tests/           145 offline tests + network tests, one file per phase
+```
+
+The dashboard must not compute statistics. If a number appears on screen it
+comes from `pipeline.py`, so the terminal and the browser can never disagree.
+
+---
+
+## Limitations worth remembering
+
+* **The event registry was assembled after the fact** and is biased by that —
+  we remember the events the market reacted to. The `source` column in
+  `data/raw/events.csv` is deliberately empty: fill it in and verify the dates
+  before drawing conclusions. Add the boring events too, the ones that looked
+  alarming and came to nothing. This is the weakest part of the project and the
+  most valuable thing to contribute.
+* **Four halvings is the ceiling on statistical power.**
+  `test_five_events_cannot_detect_a_drift_buried_in_btc_scale_noise` exists so
+  that nobody "improves" the method into finding effects the data cannot
+  support.
+* **Binance quotes USDT, not USD.** Outside de-pegging episodes the difference
+  is a fraction of a percent, but the stitching reports it rather than
+  silently accepting it.
+* **The backtest models no funding, taxes or liquidity limits** on large
+  orders. The 15 bps slippage is an assumption, not a measurement.
+
+## What next
+
+1. Fill in `source` in the event registry and add events the market ignored.
+2. Add a second control asset class outside equities.
+3. Package for PyPI so `pip install` works.
+
+## Documents
+
+| File | Contents |
+|---|---|
+| [DISCLAIMER.md](DISCLAIMER.md) | not investment advice — read this first |
+| [LICENSE](LICENSE) | MIT |
+| [TERMS.md](TERMS.md) | terms of use |
+| [PRIVACY.md](PRIVACY.md) | privacy policy (the tool collects nothing) |
+| [DATA_SOURCES.md](DATA_SOURCES.md) | attribution and redistribution restrictions |
+| [CONTRIBUTING.md](CONTRIBUTING.md) | how to contribute, and the house rule |
+| [SECURITY.md](SECURITY.md) | reporting vulnerabilities |

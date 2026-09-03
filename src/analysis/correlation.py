@@ -1,13 +1,13 @@
-"""Korelacje i regresje z bledami odpornymi na autokorelacje.
+"""Correlations and regressions with autocorrelation-robust standard errors.
 
-Domyslne bledy standardowe OLS zakladaja niezaleznosc reszt. Na dziennych
-danych finansowych to zalozenie jest falszywe, a skutek jest jednostronny:
-statystyki t sa zawyzone, wiec "znajdujemy" zaleznosci, ktorych nie ma.
-Dlatego kazda regresja tutaj uzywa bledow Neweya-Westa (HAC).
+Default OLS standard errors assume independent residuals. On daily financial
+data that assumption is false, and the consequence is one-sided: t statistics
+come out too large, so we "find" relationships that are not there. Every
+regression here therefore uses Newey-West (HAC) errors.
 
-Korelacje kroczace sluza do OGLADANIA niestabilnosci zaleznosci w czasie
-(korelacja BTC z SPX byla bliska zera do 2020 r. i wyraznie dodatnia
-pozniej), a nie do wnioskowania - dlatego nie maja p-value.
+Rolling correlations are for LOOKING at how a relationship moves over time
+(Bitcoin's correlation with the S&P was near zero until 2020 and clearly
+positive afterwards), not for inference - which is why they carry no p-values.
 """
 from __future__ import annotations
 
@@ -29,14 +29,14 @@ def rolling_correlation(
 
 
 def hac_lags(n_obs: int) -> int:
-    """Regula Neweya-Westa: liczba opoznien ~ 4 * (n/100)^(2/9)."""
+    """Newey-West rule of thumb: number of lags ~ 4 * (n/100)^(2/9)."""
     return max(1, int(np.floor(4 * (n_obs / 100.0) ** (2.0 / 9.0))))
 
 
 def hac_regression(
     target: pd.Series, predictors: pd.DataFrame, *, lags: int | None = None
 ) -> pd.DataFrame:
-    """OLS z bledami HAC. Zwraca tabele wspolczynnikow, nie obiekt modelu."""
+    """OLS with HAC errors. Returns a coefficient table, not a model object."""
     data = pd.concat([target.rename("__y"), predictors], axis=1).dropna()
     if data.empty or len(data) <= predictors.shape[1] + 1:
         return pd.DataFrame()
@@ -62,12 +62,12 @@ def hac_regression(
 def lead_lag_correlation(
     left: pd.Series, right: pd.Series, max_lag: int = 30, *, step: int = 5
 ) -> pd.DataFrame:
-    """Korelacja przy roznych przesunieciach: czy `right` wyprzedza `left`.
+    """Correlation at various offsets: does `right` lead `left`?
 
-    Dodatni `lag` oznacza, ze `right` jest przesuniety w przod, czyli
-    sprawdzamy, czy jego PRZESZLE wartosci wspolgraja z biezacym `left`.
-    Tylko dodatnie opoznienia maja sens predykcyjny; ujemne pokazujemy dla
-    kontrastu, bo latwo pomylic je z sygnalem.
+    A positive `lag` means `right` is shifted forward, i.e. we are asking
+    whether its PAST values line up with the current `left`. Only positive lags
+    have predictive meaning; negative ones are shown for contrast, because they
+    are easy to mistake for a signal.
     """
     rows = []
     for lag in range(-max_lag, max_lag + 1, step):
@@ -89,7 +89,7 @@ def lead_lag_correlation(
 def regime_returns(
     returns: pd.Series, regime: pd.Series, *, periods_per_year: int = 365
 ) -> pd.DataFrame:
-    """Statystyki zwrotow w podziale na rezimy makro - opis, nie test."""
+    """Return statistics split by macro regime - descriptive, not a test."""
     aligned = pd.DataFrame({"return": returns, "regime": regime}).dropna()
     if aligned.empty:
         return pd.DataFrame()

@@ -1,28 +1,28 @@
-"""Pobieranie dziennych barow OHLCV dla BTC/USD.
+"""Fetching daily OHLCV bars for BTC/USD.
 
-Cztery niezalezne zrodla bez klucza API:
+Four independent sources, none requiring an API key:
 
-* binance  - BTC/USDT od 2017-08. Najglebszy rynek i najwiekszy wolumen,
-             wiec od 2017 r. to on jest zrodlem prawdy. Nie siega jednak
-             halvingow 2012 i 2016 - sama gielda wystartowala w 2017 r.
-* bitstamp - BTC/USD od 2011-08. Jedyne z tych zrodel obejmujace pelna
-             historie cykli, plytsze, ale ciagle.
-* coinbase - BTC/USD od 2015-07, walidacja krzyzowa.
-* yahoo    - agregat rynkowy od 2014-09, trzeci glos przy rozbieznosciach.
+* binance  - BTC/USDT from 2017-08. The deepest market and the largest volume,
+             so from 2017 onwards it is the source of truth. It does not reach
+             the 2012 and 2016 halvings - the exchange itself launched in 2017.
+* bitstamp - BTC/USD from 2011-08. The only one of these covering the full
+             cycle history; shallower, but continuous.
+* coinbase - BTC/USD from 2015-07, cross-validation.
+* yahoo    - a market aggregate from 2014-09, a third voice on divergences.
 
-Stad domyslny szereg jest ZSZYWANY (`stitch_sources`): Bitstamp do
-2017-08, dalej Binance. Szew jest jawny, logowany i sprawdzany na
-zakladce - a nie ukryty w srodku danych.
+Hence the default series is STITCHED (`stitch_sources`): Bitstamp up to
+2017-08, Binance afterwards. The seam is explicit, logged and checked on the
+overlap - not buried inside the data.
 
-Uwaga o parze: Binance kwotuje BTC/USDT, nie BTC/USD. Historycznie roznica
-mieszczi sie w ulamku procenta poza epizodami utraty parytetu USDT
-(np. pazdziernik 2018) - dlatego zszycie porownuje zakladke i raportuje
-odchylenie zamiast je milczaco akceptowac.
+A note on the pair: Binance quotes BTC/USDT, not BTC/USD. Historically the
+difference is a fraction of a percent outside USDT de-pegging episodes (October
+2018, for instance) - which is why stitching compares the overlap and reports
+the deviation instead of silently accepting it.
 
-Kazdy provider zwraca ten sam kontrakt: DataFrame z kolumnami
-[date, open, high, low, close, volume], posortowany rosnaco, bez duplikatow,
-z datami w UTC. Zapis do bazy dokleja `available_from = date + 1 dzien`,
-bo bar dnia D jest kompletny dopiero po jego zamknieciu.
+Every provider returns the same contract: a DataFrame with columns
+[date, open, high, low, close, volume], sorted ascending, without duplicates,
+dates in UTC. Storing appends `available_from = date + 1 day`, because the bar
+for day D is only complete once the day has closed.
 """
 from __future__ import annotations
 
@@ -41,14 +41,14 @@ BITSTAMP_PAIRS = {"BTCUSD": "btcusd"}
 COINBASE_PRODUCTS = {"BTCUSD": "BTC-USD"}
 YAHOO_TICKERS = {
     "BTCUSD": "BTC-USD",
-    # Grupa kontrolna. Halving jest zdarzeniem wylacznie bitcoinowym, wiec
-    # to, co NASDAQ robi wokol tych samych dat, jest testem placebo.
+    # Control group. A halving is a Bitcoin-only event, so whatever the NASDAQ
+    # does around the same dates is a placebo test.
     "NASDAQ": "^IXIC",
     "SP500": "^GSPC",
     "GOLD": "GC=F",
 }
 
-# Pierwszy dzien z danymi w kazdym zrodle - uzywane przy zszywaniu i w CLI.
+# First day with data in each source - used when stitching and in the CLI.
 SOURCE_START = {
     "binance": "2017-08-17",
     "bitstamp": "2011-08-18",
@@ -79,10 +79,10 @@ def _finalize(rows: list[dict], start: str | None, end: str | None) -> pd.DataFr
 
 
 def fetch_binance(symbol: str, start: str, end: str | None = None) -> pd.DataFrame:
-    """Dzienne swiece z Binance (BTC/USDT), stronicowane po 1000 barow.
+    """Daily candles from Binance (BTC/USDT), paged 1000 bars at a time.
 
-    Binance zwraca `openTime` w milisekundach; bar dzienny otwiera sie
-    o 00:00 UTC, wiec data bara to dzien jego otwarcia.
+    Binance returns `openTime` in milliseconds; a daily bar opens at 00:00 UTC,
+    so the bar's date is the day it opened.
     """
     pair = BINANCE_SYMBOLS[symbol]
     day_ms = 86_400_000
@@ -168,7 +168,7 @@ def fetch_coinbase(symbol: str, start: str, end: str | None = None) -> pd.DataFr
     begin = pd.Timestamp(start).normalize()
     finish = pd.Timestamp(end).normalize() if end else pd.Timestamp.now(tz="UTC").tz_localize(None).normalize()
     rows: list[dict] = []
-    window = timedelta(days=280)  # limit API to 300 swiec na zapytanie
+    window = timedelta(days=280)  # the API caps a request at 300 candles
     cursor = begin
     while cursor <= finish:
         chunk_end = min(cursor + window, finish)
@@ -204,7 +204,7 @@ def fetch_yahoo(symbol: str, start: str, end: str | None = None) -> pd.DataFrame
     payload = get_json(url)
     result = payload.get("chart", {}).get("result")
     if not result:
-        raise FetchError(f"yahoo: brak danych dla {ticker}")
+        raise FetchError(f"yahoo: no data for {ticker}")
     block = result[0]
     quote = block["indicators"]["quote"][0]
     rows = [
@@ -231,19 +231,19 @@ PROVIDERS = {
 
 def fetch_prices(source: str, symbol: str, start: str, end: str | None = None) -> pd.DataFrame:
     if source not in PROVIDERS:
-        raise ValueError(f"nieznane zrodlo cen: {source} (dostepne: {sorted(PROVIDERS)})")
+        raise ValueError(f"unknown price source: {source} (available: {sorted(PROVIDERS)})")
     return PROVIDERS[source](symbol, start, end)
 
 
 def stitch_sources(
     frames: dict[str, pd.DataFrame], priority: list[str]
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """Skleja szereg z kilku gield wedlug priorytetu, dzien po dniu.
+    """Stitch a series from several exchanges by priority, day by day.
 
-    Dla kazdego dnia wygrywa pierwsze zrodlo z listy `priority`, ktore ten
-    dzien ma. Zwraca (szereg, raport): raport zawiera liczbe dni z kazdego
-    zrodla, daty szwow i mediane rozbieznosci na zakladkach - bez tego
-    zszywanie jest cichym zrodlem bledow.
+    For each day the first source in `priority` that has it wins. Returns
+    (series, report): the report carries the number of days taken from each
+    source, the seam dates and the median divergence on the overlaps - without
+    those, stitching is a silent source of errors.
     """
     available = [s for s in priority if s in frames and not frames[s].empty]
     if not available:
@@ -284,7 +284,7 @@ def stitch_sources(
         )
     report = pd.DataFrame(report_rows)
 
-    # Rozbieznosc na zakladce z nastepnym zrodlem w kolejnosci priorytetu.
+    # Divergence on the overlap with the next source in priority order.
     overlaps = []
     for higher, lower in zip(available, available[1:]):
         common = indexed[higher].index.intersection(indexed[lower].index)
@@ -310,7 +310,7 @@ def stitch_sources(
 def load_stitched(
     conn: sqlite3.Connection, symbol: str, priority: list[str]
 ) -> pd.DataFrame:
-    """Zszyty szereg zbudowany z tego, co juz jest w bazie."""
+    """The stitched series, built from whatever is already in the database."""
     from storage import read_prices
 
     frames = {}
@@ -325,7 +325,7 @@ def load_stitched(
 def store_prices(
     conn: sqlite3.Connection, df: pd.DataFrame, symbol: str, source: str
 ) -> int:
-    """Zapisuje bary, doklejajac metadane i data dostepnosci (D+1)."""
+    """Store bars, appending metadata and the availability date (D+1)."""
     if df.empty:
         log_ingest(conn, "prices", f"{symbol}:{source}", 0, status="empty")
         return 0

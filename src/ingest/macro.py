@@ -1,20 +1,20 @@
-"""Pobieranie danych makro z kontrola daty publikacji.
+"""Fetching macro data with publication dates under control.
 
-Trzy kanaly:
+Three channels:
 
-* FRED (wymaga darmowego klucza FRED_API_KEY) - M2, produkcja przemyslowa,
-  stopa Fed. Pobieramy PIERWSZE PUBLIKACJE (output_type=4), wiec kazda
-  obserwacja ma prawdziwa date wejscia do obiegu, a nie zrewidowana wartosc
-  znana dopiero dzis. To rozroznienie decyduje o tym, czy backtest jest
-  uczciwy - zrewidowane M2 dla marca 2020 poznalismy w 2021 r.
-* Yahoo Finance (bez klucza) - serie rynkowe (DXY, SPX, rentownosci).
-  Znane tego samego dnia po zamknieciu, wiec available_from = date + 1.
-* Reczne CSV w data/raw/manual/ - dla danych bez darmowego API
-  (np. ISM PMI, ktorego licencja nie pozwala na dystrybucje przez FRED).
+* FRED (needs a free FRED_API_KEY) - M2, industrial production, the Fed funds
+  rate. We fetch FIRST RELEASES (output_type=4), so every observation carries
+  the date it actually entered circulation rather than a revised value known
+  only today. That distinction decides whether a backtest is honest - the
+  revised M2 figure for March 2020 was not known until 2021.
+* Yahoo Finance (no key) - market series (DXY, SPX, yields). Known the same day
+  after the close, hence available_from = date + 1.
+* Manual CSV files in data/raw/manual/ - for data without a free API, such as
+  ISM PMI, whose licence does not permit distribution through FRED.
 
-Uwaga o skali: serie rentownosci z Yahoo (^TNX, ^IRX) miewaly rozne
-konwencje kwotowania na przestrzeni lat. Cechy budowane w
-features/macro_phase.py uzywaja zmian i z-score, ktore sa odporne na skale.
+A note on scale: the Yahoo yield series (^TNX, ^IRX) have used different
+quoting conventions over the years. The features built in
+features/macro_phase.py use changes and z-scores, which are scale-invariant.
 """
 from __future__ import annotations
 
@@ -30,19 +30,19 @@ from storage import log_ingest, upsert_macro
 
 MACRO_COLUMNS = ["date", "value", "available_from"]
 
-# FRED zwraca te wartosci zamiast liczb, gdy obserwacja nie istnieje.
+# FRED returns these instead of numbers when an observation is missing.
 _FRED_MISSING = {".", "", None}
 
-# Data, ktorej FRED uzywa jako "poczatek czasu" w zapytaniach o wersje.
-# Wraca tez w odpowiedzi dla serii bez historii wersji w ALFRED.
+# The date FRED uses as "the beginning of time" in vintage queries. It also
+# comes back in responses for series with no vintage history in ALFRED.
 FRED_NO_VINTAGE_SENTINEL = "1776-07-04"
 
-# Fragment komunikatu FRED, gdy seria ma wiecej wersji, niz format JSON udzwignie.
+# Fragment of the FRED message when a series has more vintages than JSON allows.
 TOO_MANY_VINTAGES = "maximum number of vintage dates"
 
 
 class MissingCredentials(RuntimeError):
-    """Brakuje klucza API wymaganego przez zrodlo."""
+    """A required API key is missing."""
 
 
 def _empty() -> pd.DataFrame:
@@ -56,23 +56,24 @@ def parse_fred_observations(
     use_vintages: bool = True,
     max_extra_lag_days: int = 120,
 ) -> pd.DataFrame:
-    """Zamienia odpowiedz FRED na szereg z data pierwszej publikacji.
+    """Turn a FRED response into a series carrying first-publication dates.
 
-    Wydzielone z `fetch_fred`, zeby dalo sie testowac bez sieci i bez klucza.
+    Split out of `fetch_fred` so it can be tested without network or key.
 
-    Dwa przypadki, w ktorych `realtime_start` NIE jest data publikacji:
+    Two cases where `realtime_start` is NOT the publication date:
 
-    1. Sentinel 1776-07-04 - seria bez historii wersji w ALFRED.
-    2. Opoznienie absurdalnie duze (dluzsze niz `publication_lag_days +
-       max_extra_lag_days`). Zdarza sie to z dwoch powodow i oba trzeba
-       odrzucic tak samo: obserwacja jest starsza niz archiwum wersji
-       (ALFRED trzyma wersje M2SL mniej wiecej od lat 90., wiec obserwacja
-       z 1960 r. dostaje date poczatku archiwum - to nie znaczy, ze o M2
-       z 1960 r. dowiedzielismy sie 35 lat pozniej), albo seria przeszla
-       rewizje metodologii i wpis pochodzi z pozniejszego przeliczenia.
+    1. The 1776-07-04 sentinel - a series with no vintage history in ALFRED.
+    2. An absurdly long lag (longer than `publication_lag_days +
+       max_extra_lag_days`). This happens for two reasons and both must be
+       rejected the same way: the observation is older than the vintage archive
+       (ALFRED keeps M2SL vintages from roughly the 1990s, so a 1960
+       observation receives the archive start date - which does not mean we
+       learned about 1960 M2 thirty-five years later), or the series went
+       through a methodology revision and the entry comes from a later
+       recalculation.
 
-    W obu wracamy do stalego opoznienia publikacji z konfiguracji.
-    Zawsze obowiazuje twarda zasada: publikacja nie moze poprzedzac obserwacji.
+    In both cases we fall back to the fixed publication lag from the config.
+    One hard rule always applies: publication cannot precede observation.
     """
     rows = []
     for obs in observations:
@@ -122,17 +123,17 @@ def fetch_fred(
     use_vintages: bool = True,
     api_key: str | None = None,
 ) -> pd.DataFrame:
-    """Pobiera serie z FRED wraz z data pierwszej publikacji.
+    """Fetch a FRED series together with its first-publication dates.
 
-    `use_vintages=True` prosi o pierwsze publikacje (output_type=4); pole
-    realtime_start jest wtedy data wejscia danej do obiegu. Szczegoly
-    obslugi przypadkow brzegowych: `parse_fred_observations`.
+    `use_vintages=True` asks for first releases (output_type=4); realtime_start
+    is then the date the value entered circulation. For the edge cases see
+    `parse_fred_observations`.
     """
     key = api_key or secret("FRED_API_KEY")
     if not key:
         raise MissingCredentials(
-            "brak FRED_API_KEY - skopiuj .env.example do .env i wklej darmowy klucz "
-            "z https://fred.stlouisfed.org/docs/api/api_key.html"
+            "FRED_API_KEY is missing - copy .env.example to .env and paste a free key "
+            "from https://fred.stlouisfed.org/docs/api/api_key.html"
         )
     base = (
         "https://api.stlouisfed.org/fred/series/observations"
@@ -149,17 +150,17 @@ def fetch_fred(
     except FetchError as exc:
         if not (use_vintages and TOO_MANY_VINTAGES in str(exc)):
             raise
-        # FRED oddaje pierwsze publikacje tylko do 2000 dat wersji. Przekraczaja
-        # ten limit serie DZIENNE (DFF ma ich ponad 5000) - czyli dokladnie te,
-        # ktore publikowane sa nastepnego dnia i praktycznie nie sa rewidowane.
-        # Dla nich stale opoznienie z konfiguracji jest wierne, wiec pobieramy
-        # zwykly szereg zamiast rezygnowac z serii.
+        # FRED serves first releases only up to 2000 vintage dates. The series
+        # exceeding that limit are the DAILY ones (DFF has over 5000) - exactly
+        # those published the next day and essentially never revised. For them
+        # the fixed lag from the config is faithful, so we fetch the plain
+        # series instead of dropping it.
         vintages_used = False
         payload = get_json(base)
 
     observations = payload.get("observations", [])
     if not observations:
-        raise FetchError(f"fred: pusta odpowiedz dla {series_id}")
+        raise FetchError(f"fred: empty response for {series_id}")
     series = parse_fred_observations(
         observations,
         publication_lag_days=publication_lag_days,
@@ -171,7 +172,7 @@ def fetch_fred(
 
 
 def fetch_yahoo_series(ticker: str, start: str = "2009-01-01") -> pd.DataFrame:
-    """Dzienne zamkniecia serii rynkowej. Dostepne po zamknieciu, wiec D+1."""
+    """Daily closes of a market series. Known after the close, hence D+1."""
     period1 = int(pd.Timestamp(start, tz="UTC").timestamp())
     period2 = int(datetime.now(timezone.utc).timestamp())
     url = (
@@ -181,7 +182,7 @@ def fetch_yahoo_series(ticker: str, start: str = "2009-01-01") -> pd.DataFrame:
     payload = get_json(url)
     result = payload.get("chart", {}).get("result")
     if not result:
-        raise FetchError(f"yahoo: brak danych dla {ticker}")
+        raise FetchError(f"yahoo: no data for {ticker}")
     block = result[0]
     closes = block["indicators"]["quote"][0]["close"]
     rows = [
@@ -201,10 +202,10 @@ def fetch_yahoo_series(ticker: str, start: str = "2009-01-01") -> pd.DataFrame:
 
 
 def load_manual_csv(path: str | Path, default_lag_days: int = 30) -> pd.DataFrame:
-    """Wczytuje recznie prowadzona serie.
+    """Load a hand-maintained series.
 
-    Format: observation_date,value[,available_from]. Bez kolumny
-    available_from zakladamy stale opoznienie publikacji.
+    Format: observation_date,value[,available_from]. Without an
+    available_from column we assume the fixed publication lag.
     """
     df = pd.read_csv(path)
     columns = {c.lower().strip(): c for c in df.columns}
@@ -212,7 +213,7 @@ def load_manual_csv(path: str | Path, default_lag_days: int = 30) -> pd.DataFram
     value_col = columns.get("value")
     if not date_col or not value_col:
         raise ValueError(
-            f"{path}: wymagane kolumny observation_date (lub date) oraz value"
+            f"{path}: columns observation_date (or date) and value are required"
         )
     out = pd.DataFrame(
         {

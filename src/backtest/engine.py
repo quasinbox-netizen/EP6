@@ -1,25 +1,26 @@
-"""Silnik backtestu: dzienny, wektorowy, z kosztami i poslizgiem.
+"""Backtest engine: daily, vectorised, with costs and slippage.
 
-Model wykonania - jawnie, bo tu mieszka wiekszosc cichych bledow:
+The execution model, stated explicitly because this is where most silent
+errors live:
 
-* sygnal dnia t powstaje z danych znanych NA ZAMKNIECIU dnia t,
-* zwrot dnia t to zmiana zamkniecia z t-1 na t,
-* przy `execution_lag_days = 1` sygnal z dnia t zbiera zwrot dnia t+1,
-  czyli wchodzisz po zamknieciu, ktore wlasnie zobaczyles, i zarabiasz
-  dopiero ruch nastepnego dnia.
+* the signal for day t is formed from information known AT THE CLOSE of day t,
+* the return of day t is the change from the close of t-1 to the close of t,
+* with `execution_lag_days = 1` the signal from day t earns the return of
+  day t+1 - you enter at the close you just observed and only capture the next
+  day's move.
 
-Zerowe opoznienie oznaczaloby, ze sygnal z dnia t zbiera zwrot dnia t -
-czyli handel po cenie, ktora dopiero sie ustala. To najczestsza przyczyna
-backtestow "dzialajacych" wylacznie w arkuszu; test
-test_execution_lag_blocks_same_day_knowledge pokazuje roznice na liczbach.
+Zero lag would mean the signal from day t earns the return of day t - trading
+at a price that has not settled yet. That is the most common reason a backtest
+"works" only in a spreadsheet; test_execution_lag_blocks_same_day_knowledge
+shows the difference in numbers.
 
-Konsekwencja dla baseline: kup-i-trzymaj bez kosztow zwraca dokladnie
-tyle, ile samo aktywo - pierwszy dzien proby sluzy na wystawienie zlecenia.
+Consequence for the baseline: with no costs, buy-and-hold returns exactly what
+the asset returned - the first day of the sample is spent placing the order.
 
-Koszt naliczamy od OBROTU (|zmiana pozycji|), a nie od liczby transakcji:
-wejscie z 0 na 1 kosztuje tyle samo co wyjscie z 1 na 0, a zmiana 0.5 -> 0.6
-kosztuje jedna dziesiata tego. Prowizja i poslizg sa osobnymi parametrami,
-bo skaluja sie inaczej - prowizje negocjujesz, poslizgu nie.
+Cost is charged on TURNOVER (|change in position|), not per trade: going from
+0 to 1 costs the same as going from 1 to 0, and a change from 0.5 to 0.6 costs
+a tenth of that. Fees and slippage are separate parameters because they scale
+differently - you can negotiate fees, you cannot negotiate slippage.
 """
 from __future__ import annotations
 
@@ -41,7 +42,7 @@ class BacktestConfig:
 
     @property
     def cost_rate(self) -> float:
-        """Koszt jednostronny jako ulamek obrotu."""
+        """One-way cost as a fraction of turnover."""
         return (self.fee_bps + self.slippage_bps) / 10_000.0
 
     @classmethod
@@ -64,14 +65,14 @@ class BacktestResult:
     gross_returns: pd.Series
     costs: pd.Series
     metrics: dict = field(default_factory=dict)
-    name: str = "strategia"
+    name: str = "strategy"
 
     def summary(self) -> str:
         m = self.metrics
         return (
-            f"{self.name}: zwrot {m['total_return']:+.1%} | CAGR {m['cagr']:+.1%} "
+            f"{self.name}: return {m['total_return']:+.1%} | CAGR {m['cagr']:+.1%} "
             f"| Sharpe {m['sharpe']:.2f} | maxDD {m['max_drawdown']:.1%} "
-            f"| ekspozycja {m['time_in_market']:.0%} | koszty {m['total_cost']:.1%}"
+            f"| exposure {m['time_in_market']:.0%} | costs {m['total_cost']:.1%}"
         )
 
 
@@ -97,7 +98,7 @@ def compute_metrics(
     *,
     periods_per_year: int = 365,
 ) -> dict:
-    """Metryki ryzyka i zwrotu. Sam zwrot calkowity nic nie mowi o drodze."""
+    """Risk and return metrics. Total return alone says nothing about the path."""
     returns = net_returns.dropna()
     if returns.empty:
         return {}
@@ -138,14 +139,14 @@ def run_backtest(
     signal: pd.Series,
     config: BacktestConfig | None = None,
     *,
-    name: str = "strategia",
+    name: str = "strategy",
     price_column: str = "close",
 ) -> BacktestResult:
-    """Uruchamia strategie na dziennych zamknieciach.
+    """Run a strategy on daily closes.
 
-    `signal` to DOCELOWA pozycja (0..1, lub -1..1 przy allow_short) znana na
-    zamknieciu danego dnia. Silnik sam naklada opoznienie wykonania - nie
-    przesuwaj sygnalu recznie, bo przesuniesz go dwa razy.
+    `signal` is the TARGET position (0..1, or -1..1 with allow_short) known at
+    the close of that day. The engine applies the execution lag itself - do not
+    shift the signal by hand or you will shift it twice.
     """
     config = config or BacktestConfig()
 
@@ -187,13 +188,13 @@ def run_backtest(
 
 
 def compare(results: list[BacktestResult]) -> pd.DataFrame:
-    """Tabela porownawcza. Baseline zawsze na liscie - inaczej nie ma z czym porownac."""
+    """Comparison table. Always include the baseline - otherwise there is nothing to compare to."""
     rows = []
     for result in results:
-        row = {"strategia": result.name}
+        row = {"strategy": result.name}
         row.update(result.metrics)
         rows.append(row)
-    table = pd.DataFrame(rows).set_index("strategia")
+    table = pd.DataFrame(rows).set_index("strategy")
     preferred = [
         "total_return", "cagr", "sharpe", "sortino", "max_drawdown", "calmar",
         "win_rate", "time_in_market", "turnover_annual", "total_cost", "days",
@@ -203,10 +204,10 @@ def compare(results: list[BacktestResult]) -> pd.DataFrame:
 
 
 def excess_over_baseline(strategy: BacktestResult, baseline: BacktestResult) -> dict:
-    """Roznica wzgledem baseline - jedyna liczba, ktora naprawde interesuje.
+    """Difference against the baseline - the only number that really matters.
 
-    Strategia, ktora zarabia mniej niz kup-i-trzymaj przy wiekszym ryzyku,
-    jest gorsza nawet gdy jej zwrot jest dodatni.
+    A strategy that earns less than buy-and-hold at greater risk is worse, even
+    when its return is positive.
     """
     return {
         "return_difference": strategy.metrics["total_return"] - baseline.metrics["total_return"],

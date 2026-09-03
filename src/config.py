@@ -1,7 +1,7 @@
-"""Wczytywanie konfiguracji i sekretow.
+"""Loading configuration and secrets.
 
-Sekrety ida wylacznie przez zmienne srodowiskowe (.env); config.yaml jest
-wersjonowany i nie moze zawierac kluczy.
+Secrets travel only through environment variables (.env); config.yaml is
+version-controlled and must never contain keys.
 """
 from __future__ import annotations
 
@@ -17,7 +17,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
 def _load_dotenv(path: Path) -> None:
-    """Minimalny loader .env - bez zaleznosci, zeby import configu byl tani."""
+    """A minimal .env loader - dependency-free, so importing config stays cheap."""
     if not path.exists():
         return
     for line in path.read_text(encoding="utf-8").splitlines():
@@ -43,7 +43,7 @@ class Config:
         return self.raw.get(key, default)
 
     def path(self, key: str) -> Path:
-        """Sciezka z sekcji `paths`, rozwinieta wzgledem katalogu repo."""
+        """A path from the `paths` section, resolved against the repo directory."""
         return self.root / self.raw["paths"][key]
 
     @property
@@ -61,7 +61,7 @@ def load_config(path: str | Path | None = None) -> Config:
 
 
 def secret(name: str) -> str | None:
-    """Zwraca sekret ze srodowiska albo None. Nigdy nie loguje wartosci."""
-    load_config()  # gwarantuje, ze .env zostal wczytany
+    """Return a secret from the environment or None. Never logs the value."""
+    load_config()  # guarantees .env has been loaded
     value = os.environ.get(name)
     return value or None

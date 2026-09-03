@@ -1,14 +1,15 @@
-"""Flagi zdarzen - wylacznie wsteczne.
+"""Event flags - strictly backward-looking.
 
-Flaga zapala sie w dniu, w ktorym rynek poznal zdarzenie (`available_from`),
-i gasnie po N dniach. Nie ma tu flag "przed zdarzeniem": w backtescie
-oznaczalyby wiedze o przyszlosci. Okna poprzedzajace istnieja tylko w module
-event study, ktory jest narzedziem opisowym, nie sygnalem.
+A flag turns on the day the market learned about the event (`available_from`)
+and turns off N days later. There are no "before the event" flags: in a
+backtest they would mean knowledge of the future. Preceding windows exist only
+in the event-study module, which is a descriptive tool, not a signal.
 
-Zestaw kolumn jest STALY i nie zalezy od tego, ile zdarzen juz zaszlo.
-Gdyby kolumna pojawiala sie dopiero po pierwszym zdarzeniu danej kategorii,
-ramka cech z 2014 r. mialaby inny ksztalt niz ramka z 2024 r., a test
-look-ahead nie odroznilby "kolumna jeszcze nie istnieje" od "wartosc jest zla".
+The set of columns is FIXED and does not depend on how many events have
+happened yet. If a column only appeared after the first event of its category,
+a feature frame from 2014 would have a different shape than one from 2024, and
+the look-ahead test could not tell "this column does not exist yet" apart from
+"this value is wrong".
 """
 from __future__ import annotations
 
@@ -34,7 +35,7 @@ def event_flags(
     by: str = "category",
     keys: list[str] | None = None,
 ) -> pd.DataFrame:
-    """Flagi 0/1 dla kazdej kategorii (lub nazwy) zdarzenia i kazdego okna."""
+    """Flags 0/1 for every category (or name) and every window length."""
     index = pd.DatetimeIndex(pd.to_datetime(index)).normalize()
     out = pd.DataFrame(index=index)
     out.index.name = "date"
@@ -66,7 +67,7 @@ def days_since_event(
     by: str = "category",
     keys: list[str] | None = None,
 ) -> pd.DataFrame:
-    """Ile dni minelo od ostatniego zdarzenia danej kategorii (NaN przed pierwszym)."""
+    """Days since the last event of each category (NaN before the first one)."""
     index = pd.DatetimeIndex(pd.to_datetime(index)).normalize()
     out = pd.DataFrame(index=index)
     out.index.name = "date"

@@ -1,11 +1,11 @@
-"""Cienka warstwa HTTP: retry z backoffem, staly User-Agent, jasne bledy.
+"""A thin HTTP layer: retry with backoff, a fixed User-Agent, clear errors.
 
-Kazde zrodlo danych przechodzi przez ten modul, zeby ponawianie i limity
-zapytan byly w jednym miejscu, a testy mogly je podmienic.
+Every data source goes through this module so that retrying and rate limits
+live in one place and tests can replace them.
 
-Wazne: komunikaty bledow ZAWSZE przechodza przez `redact`. Klucz API siedzi
-w query stringu, wiec surowy URL w tresci wyjatku wyladowalby w logach,
-w konsoli i w tracebacku wyslanym komukolwiek do pomocy.
+Important: error messages ALWAYS pass through `redact`. The API key travels in
+the query string, so a raw URL in an exception body would end up in logs, in
+the console and in any traceback you paste into a bug report.
 """
 from __future__ import annotations
 
@@ -16,10 +16,10 @@ import urllib.error
 import urllib.request
 from typing import Any
 
-USER_AGENT = "btc-cycle-lab/0.1 (local research; contact: local)"
+USER_AGENT = "btc-cycle-lab/0.1 (local research)"
 DEFAULT_TIMEOUT = 30
 
-# Nazwy parametrow, ktorych wartosci nigdy nie moga trafic do komunikatu.
+# Parameter names whose values must never reach a message.
 SECRET_PARAMS = ("api_key", "apikey", "token", "access_key", "secret")
 _SECRET_PATTERN = re.compile(
     r"(?i)\b(" + "|".join(SECRET_PARAMS) + r")=([^&\s\"']+)"
@@ -27,12 +27,12 @@ _SECRET_PATTERN = re.compile(
 
 
 def redact(text: str) -> str:
-    """Zamienia wartosci sekretow w tekscie na ***."""
+    """Replace secret values in a string with ***."""
     return _SECRET_PATTERN.sub(r"\1=***", text)
 
 
 class FetchError(RuntimeError):
-    """Blad pobrania danych ze zrodla zewnetrznego."""
+    """Failure while fetching data from an external source."""
 
     def __init__(self, message: str):
         super().__init__(redact(message))
@@ -46,7 +46,7 @@ def get_json(
     backoff: float = 1.5,
     sleep: float = 0.0,
 ) -> Any:
-    """Pobiera JSON. Ponawia przy bledach sieci i 5xx/429, nie przy 4xx."""
+    """Fetch JSON. Retries on network errors and 5xx/429, not on other 4xx."""
     last_error: Exception | None = None
     for attempt in range(retries):
         try:
@@ -59,7 +59,7 @@ def get_json(
         except urllib.error.HTTPError as exc:
             last_error = exc
             if exc.code not in (429, 500, 502, 503, 504):
-                # Tresc odpowiedzi zwykle mowi, CO jest nie tak z zapytaniem.
+                # The response body usually says WHAT is wrong with the request.
                 try:
                     detail = exc.read().decode("utf-8", "replace")[:300]
                 except Exception:
@@ -68,4 +68,4 @@ def get_json(
         except (urllib.error.URLError, TimeoutError, json.JSONDecodeError) as exc:
             last_error = exc
         time.sleep(backoff ** attempt)
-    raise FetchError(f"{url} -> nieudane po {retries} probach: {last_error!r}")
+    raise FetchError(f"{url} -> failed after {retries} attempts: {last_error!r}")

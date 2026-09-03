@@ -1,8 +1,8 @@
-"""Faza 6 - spiecie calosci i dashboard.
+"""Phase 6 - the whole thing wired together, plus the dashboard.
 
-Dashboard testujemy dwojako: sprawdzamy, ze wszystkie funkcje, ktorych uzywa,
-dzialaja na kompletnej (syntetycznej) bazie, oraz ze sam plik dashboardu nie
-zawiera logiki badawczej - inaczej wykres i terminal zaczna sie rozjezdzac.
+The dashboard is tested two ways: that every function it calls works against a
+complete (synthetic) database, and that the dashboard file itself contains no
+research logic - otherwise the chart and the terminal would start to drift.
 """
 from __future__ import annotations
 
@@ -34,7 +34,7 @@ DASHBOARD = REPO_ROOT / "dashboard" / "app.py"
 
 @pytest.fixture
 def lab_config(tmp_path, monkeypatch):
-    """Kopia konfiguracji wskazujaca na tymczasowa baze wypelniona szumem."""
+    """A config copy pointing at a temporary database filled with noise."""
     config = load_config()
     db_path = tmp_path / "lab.sqlite"
 
@@ -73,7 +73,7 @@ def lab_config(tmp_path, monkeypatch):
     return config
 
 
-# --- pelny przebieg -------------------------------------------------------
+# --- the full run --------------------------------------------------------------
 
 
 def test_pipeline_builds_a_complete_frame(lab_config):
@@ -93,7 +93,7 @@ def test_hypothesis_columns_cover_halving_and_event_windows(lab_config):
 
 
 def test_halving_study_uses_only_halvings_covered_by_data(lab_config):
-    """Proba konczy sie w 2022 r., wiec halving 2024 musi wypasc - i byc zgloszony."""
+    """The sample ends in 2022, so the 2024 halving must drop out - and be reported."""
     result = halving_event_study(load_lab_data(lab_config), post=180, config=lab_config)
     assert result.n_events == 3
     assert pd.Timestamp("2024-04-20") in result.skipped_events
@@ -116,7 +116,7 @@ def test_scan_is_corrected_for_multiple_testing(lab_config):
 
 
 def test_scan_on_noise_finds_nothing_after_correction(lab_config):
-    """Baza testowa to czysty szum - po korekcie nie moze zostac nic."""
+    """The test database is pure noise - nothing may survive the correction."""
     scan = scan_hypotheses(load_lab_data(lab_config), config=lab_config)
     assert not scan["significant_adjusted"].any()
 
@@ -125,18 +125,18 @@ def test_out_of_sample_check_runs_on_both_splits(lab_config):
     report = out_of_sample_check(load_lab_data(lab_config), config=lab_config)
     assert not report.empty
     assert {"train_effect", "test_effect", "replicated"} <= set(report.columns)
-    assert not report["replicated"].any(), "na szumie nic nie ma prawa sie powtorzyc"
+    assert not report["replicated"].any(), "on noise nothing has any right to replicate"
 
 
 def test_backtests_include_the_baseline(lab_config):
     table, results = run_strategies(load_lab_data(lab_config), config=lab_config)
-    assert "kup i trzymaj" in table.index
+    assert "buy and hold" in table.index
     assert len(results) >= 3
     assert (table["total_cost"] >= 0).all()
     assert (table["max_drawdown"] <= 0).all()
 
 
-# --- dashboard bez logiki -------------------------------------------------
+# --- the dashboard without logic -----------------------------------------------
 
 
 def test_dashboard_exists_and_parses():
@@ -145,7 +145,7 @@ def test_dashboard_exists_and_parses():
 
 
 def test_dashboard_does_not_import_analysis_libraries():
-    """Dashboard nie moze liczyc statystyk na wlasna reke."""
+    """The dashboard must not compute statistics on its own."""
     tree = ast.parse(DASHBOARD.read_text(encoding="utf-8"))
     imported = set()
     for node in ast.walk(tree):
@@ -154,32 +154,32 @@ def test_dashboard_does_not_import_analysis_libraries():
         elif isinstance(node, ast.ImportFrom) and node.module:
             imported.add(node.module.split(".")[0])
     forbidden = {"numpy", "scipy", "statsmodels", "sklearn"}
-    assert not (imported & forbidden), f"logika w dashboardzie: {imported & forbidden}"
+    assert not (imported & forbidden), f"logic in the dashboard: {imported & forbidden}"
 
 
 def test_dashboard_calls_pipeline_for_every_result():
-    """Kazda liczba na ekranie ma pochodzic z pipeline/src, nie z app.py."""
+    """Every number on screen must come from pipeline/src, not from app.py."""
     source = DASHBOARD.read_text(encoding="utf-8")
     for function in (
         "load_lab_data", "halving_event_study", "category_event_studies",
         "scan_hypotheses", "out_of_sample_check", "run_strategies",
         "control_comparison",
     ):
-        assert function in source, f"dashboard nie uzywa {function}"
+        assert function in source, f"the dashboard does not use {function}"
 
 
 def test_dashboard_has_no_hardcoded_statistics():
-    """Zadnych recznych progow istotnosci ani wzorow w warstwie prezentacji."""
+    """No hand-rolled significance thresholds or formulas in the view layer."""
     source = DASHBOARD.read_text(encoding="utf-8")
     for pattern in ("p_value <", "np.mean", ".std(", "ddof=", "1.96"):
-        assert pattern not in source, f"logika statystyczna w dashboardzie: {pattern}"
+        assert pattern not in source, f"statistical logic in the dashboard: {pattern}"
 
 
-# --- grupa kontrolna w pipeline -------------------------------------------
+# --- control group in the pipeline ---------------------------------------------
 
 
 def test_control_comparison_reports_missing_control_clearly(lab_config):
-    """Brak grupy kontrolnej to nie blad - to instrukcja, co pobrac."""
+    """A missing control group is not an error - it is instructions on what to fetch."""
     from pipeline import control_comparison
 
     report = control_comparison(load_lab_data(lab_config), config=lab_config)
@@ -188,7 +188,7 @@ def test_control_comparison_reports_missing_control_clearly(lab_config):
 
 
 def test_control_comparison_runs_when_control_exists(lab_config, tmp_path):
-    """Z aktywem kontrolnym w bazie porownanie ma zwrocic tabele i placebo."""
+    """With a control asset in the database the comparison returns a table and a placebo."""
     from pipeline import control_comparison
     from storage import connect
 
@@ -205,20 +205,20 @@ def test_control_comparison_runs_when_control_exists(lab_config, tmp_path):
     assert not comparison.table.empty
     assert comparison.n_events >= 3
     assert set(comparison.per_event.columns) == {"BTCUSD", "NASDAQ", "difference"}
-    # Roznica musi byc policzona parami, nie jako roznica srednich.
+    # The difference must be computed pairwise, not as a difference of means.
     expected = comparison.per_event["BTCUSD"] - comparison.per_event["NASDAQ"]
     assert np.allclose(comparison.per_event["difference"], expected)
     assert 0.0 <= comparison.summary_at["difference_p_value"] <= 1.0
-    # Kalibracje testu sprawdza test_control_group; tutaj pojedyncze losowanie
-    # nic by nie dowiodlo - przy alpha=0.05 co dwudzieste wyszloby istotne.
+    # Calibration is covered by test_control_group; a single draw here would
+    # prove nothing - at alpha=0.05 one in twenty comes out significant.
     assert not comparison.per_event.empty
 
 
-# --- walidacja kroczaca w pipeline ----------------------------------------
+# --- walk-forward validation in the pipeline -----------------------------------
 
 
 def test_walk_forward_produces_many_disjoint_folds(lab_config):
-    """Sens walk-forward: kilkanascie okien zamiast jednego podzialu."""
+    """The point of walk-forward: many windows instead of one split."""
     from pipeline import walk_forward_check
 
     table = walk_forward_check(load_lab_data(lab_config), config=lab_config)
@@ -229,7 +229,7 @@ def test_walk_forward_produces_many_disjoint_folds(lab_config):
 
 
 def test_walk_forward_finds_nothing_on_noise(lab_config):
-    """Baza testowa to czysty szum - nic nie ma prawa przezyc korekty."""
+    """The test database is pure noise - nothing may survive the correction."""
     from pipeline import walk_forward_check
 
     table = walk_forward_check(load_lab_data(lab_config), config=lab_config)
@@ -238,11 +238,11 @@ def test_walk_forward_finds_nothing_on_noise(lab_config):
 
 
 def test_overlapping_test_windows_suppress_the_t_test(lab_config):
-    """Przy nakladajacych sie oknach test t jest niewazny i NIE moze byc podany.
+    """With overlapping windows the t-test is invalid and must NOT be reported.
 
-    Zaklada on niezaleznosc obserwacji; gdy sasiednie okna testowe dziela
-    polowe dni, p-value byloby zanizone. Pipeline wykrywa to na faktycznych
-    indeksach, a nie na parametrach.
+    It assumes independent observations; when neighbouring test windows share
+    half their days the p-value would be understated. The pipeline detects this
+    on the actual indices rather than on the parameters.
     """
     from pipeline import walk_forward_check
 
@@ -254,14 +254,14 @@ def test_overlapping_test_windows_suppress_the_t_test(lab_config):
         assert table.attrs["test_windows_disjoint"] is False
         assert table["test_effect_p_value"].isna().all()
         assert table["test_effect_p_adjusted"].isna().all()
-        # Test znaku pozostaje wazny - nie zalezy od niezaleznosci okien.
+        # The sign test stays valid - it does not depend on window independence.
         assert table["sign_p_value"].notna().any()
     finally:
         settings["step_days"] = original
 
 
 def test_walk_forward_corrects_both_statistics(lab_config):
-    """Obie statystyki sa hipotezami, wiec obie musza przejsc korekte."""
+    """Both statistics are hypotheses, so both must be corrected."""
     from pipeline import walk_forward_check
 
     table = walk_forward_check(load_lab_data(lab_config), config=lab_config)

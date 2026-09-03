@@ -1,22 +1,23 @@
-"""Grupa kontrolna - test placebo dla efektow "cyklicznych".
+"""Control group - a placebo test for supposedly "cyclical" effects.
 
-Pytanie, na ktore ten modul odpowiada: czy to, co widzimy wokol halvingu,
-jest efektem halvingu, czy po prostu tym, co robily wtedy wszystkie aktywa
-ryzykowne. Halving jest zdarzeniem WYLACZNIE bitcoinowym, wiec NASDAQ w tym
-samym oknie nie ma prawa nic o nim wiedziec. Jesli reaguje tak samo, to
-znaczy, ze mierzymy wspolny rynek, a nie polowienie nagrody.
+The question this module answers: is what we see around a halving an effect of
+the halving, or simply what every risk asset was doing at the time? A halving
+is a Bitcoin-ONLY event, so the NASDAQ in the same window has no way of
+knowing about it. If it reacts the same way, we are measuring the common market
+rather than a reward halving.
 
-Test jest SPAROWANY po zdarzeniach (roznica w roznicach): dla kazdego
-halvingu liczymy CAR bitcoina i CAR kontroli w tym samym oknie, a wnioskujemy
-z rozkladu ich roznicy. Parowanie ma znaczenie - halving 2020 wypadl w
-srodku pandemicznego odbicia, ktore podnioslo oba aktywa. Porownanie dwoch
-osobnych srednich zgubiloby ten fakt, roznica sparowana go usuwa.
+The test is PAIRED across events (difference in differences): for each halving
+we compute Bitcoin's CAR and the control's CAR over the same window, and infer
+from the distribution of their difference. Pairing matters - the 2020 halving
+fell in the middle of the pandemic rebound, which lifted both assets.
+Comparing two separate means would lose that fact; the paired difference
+removes it.
 
-Kalendarz: NASDAQ handluje sie okolo 252 dni w roku, BTC 365. Wszystkie okna
-sa tu KALENDARZOWE - szereg kontrolny przenosimy na pelny kalendarz,
-przenoszac ostatnie znane zamkniecie na dni bez sesji (`ffill`, czyli
-wylacznie w przod, bez zagladania w przyszlosc). Bez tego "365 dni po
-halvingu" znaczyloby dla NASDAQ prawie 17 miesiecy.
+Calendar: the NASDAQ trades about 252 days a year, Bitcoin 365. Every window
+here is a CALENDAR window - the control series is mapped onto the full calendar
+by carrying the last known close forward (`ffill`, strictly backward-looking).
+Without that, "365 days after the halving" would mean almost 17 months for the
+NASDAQ.
 """
 from __future__ import annotations
 
@@ -37,7 +38,7 @@ from analysis.event_study import (
 
 @dataclass
 class ControlComparison:
-    """Wynik porownania aktywa badanego z kontrolnym."""
+    """Result of comparing the studied asset with a control asset."""
 
     treatment_name: str
     control_name: str
@@ -49,33 +50,33 @@ class ControlComparison:
     def verdict(self, alpha: float = 0.05) -> str:
         row = self.summary_at
         if self.n_events < 2:
-            return f"n={self.n_events} - za malo zdarzen na jakikolwiek wniosek"
+            return f"n={self.n_events} - too few events for any conclusion"
         if not np.isfinite(row["difference_p_value"]):
-            return "brak wystarczajacych danych do testu roznicy"
+            return "not enough data for the difference test"
         if row["difference_p_value"] < alpha:
             return (
-                f"Roznica {self.treatment_name} - {self.control_name} = "
+                f"Difference {self.treatment_name} - {self.control_name} = "
                 f"{row['difference']:+.1%} (p={row['difference_p_value']:.3f}) - "
-                "efekt NIE jest wspolny dla obu aktywow"
+                "the effect is NOT common to both assets"
             )
         return (
-            f"Roznica {self.treatment_name} - {self.control_name} = "
+            f"Difference {self.treatment_name} - {self.control_name} = "
             f"{row['difference']:+.1%} [{row['difference_ci_low']:+.1%}, "
             f"{row['difference_ci_high']:+.1%}], p={row['difference_p_value']:.3f} - "
-            "nie da sie odroznic od tego, co robila grupa kontrolna"
+            "indistinguishable from what the control group did"
         )
 
 
 def to_calendar(prices: pd.DataFrame, price_column: str = "close") -> pd.DataFrame:
-    """Przenosi szereg na pelny kalendarz dzienny.
+    """Map a series onto the full daily calendar.
 
-    Dni bez sesji dostaja ostatnie znane zamkniecie (`ffill`). To operacja
-    wylacznie wsteczna: w sobote znamy piatkowe zamkniecie, nie poniedzialkowe.
+    Non-trading days receive the last known close (`ffill`). This is strictly
+    backward-looking: on Saturday we know Friday's close, not Monday's.
 
-    Skutek uboczny, o ktorym trzeba pamiec: weekendy maja zerowy zwrot, wiec
-    srednia dzienna i zmiennosc licza sie na 365, a nie 252 dni. Dla CAR jest
-    to bez znaczenia - suma zwrotow w oknie zalezy tylko od zamkniec na jego
-    koncach - i wlasnie CAR jest tu jednostka porownania.
+    One side effect to keep in mind: weekends carry a zero return, so the daily
+    mean and volatility are computed over 365 rather than 252 days. For CAR
+    this is irrelevant - the sum of returns over a window depends only on the
+    closes at its ends - and CAR is exactly the unit of comparison here.
     """
     frame = prices.copy()
     if "date" in frame.columns:
@@ -98,10 +99,10 @@ def per_event_car(
     estimation_window: tuple[int, int] = DEFAULT_ESTIMATION_WINDOW,
     price_column: str = "close",
 ) -> pd.Series:
-    """CAR kazdego zdarzenia osobno, w dniach kalendarzowych.
+    """CAR for each event separately, in calendar days.
 
-    Zwraca szereg indeksowany data zdarzenia - to jest surowiec dla testu
-    sparowanego.
+    Returns a series indexed by event date - the raw material for the paired
+    test.
     """
     returns = log_returns(prices, price_column)
     matrix, _ = event_window_matrix(returns, event_dates, pre=pre, post=post)
@@ -131,12 +132,12 @@ def compare_with_control(
     horizons: list[int] | None = None,
     align_calendar: bool = True,
 ) -> ControlComparison:
-    """Roznica w roznicach: CAR badanego minus CAR kontroli, po zdarzeniach.
+    """Difference in differences: treatment CAR minus control CAR, across events.
 
-    `horizons` to punkty, w ktorych raportujemy wynik (domyslnie 30/90/180
-    i pelne okno). Dla kazdego liczymy sparowana roznice i test t o n-1
-    stopniach swobody - tak samo jak w event_study, bo jednostka obserwacji
-    dalej jest zdarzenie.
+    `horizons` are the points at which we report (default 30/90/180 and the
+    full window). For each one we compute the paired difference and a t-test
+    with n-1 degrees of freedom - the same as in event_study, because the unit
+    of observation is still the event.
     """
     horizons = sorted({h for h in (horizons or [30, 90, 180, post]) if h <= post})
     control = to_calendar(control_prices) if align_calendar else control_prices
@@ -209,10 +210,10 @@ def placebo_event_study(
     n_boot: int = 2000,
     seed: int = 20260901,
 ):
-    """Event study na aktywie kontrolnym - ten sam kod, inne aktywo.
+    """Event study on the control asset - same code, different asset.
 
-    Jesli halvingi "dzialaja" takze na NASDAQ, problem jest w metodzie albo
-    w probie, a nie w bitcoinie.
+    If halvings also "work" on the NASDAQ, the problem is in the method or the
+    sample, not in Bitcoin.
     """
     return event_study(
         to_calendar(control_prices),

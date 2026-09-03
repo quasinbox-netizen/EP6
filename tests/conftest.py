@@ -1,8 +1,8 @@
-"""Wspolne fixtury testow.
+"""Shared test fixtures.
 
-Zaden test nie chodzi do sieci ani do bazy produkcyjnej: dane sa
-syntetyczne, baza tymczasowa. Testy sieciowe (oznaczone `network`)
-uruchamiasz swiadomie: pytest -m network.
+No test reaches the network or the production database: the data is synthetic
+and the database temporary. Network tests (marked `network`) are run
+deliberately: pytest -m network.
 """
 from __future__ import annotations
 
@@ -21,7 +21,7 @@ from validation.synthetic import random_walk_prices  # noqa: E402
 
 @pytest.fixture
 def prices() -> pd.DataFrame:
-    """Czysty szum: 3000 dni bladzenia losowego bez zadnego wzorca."""
+    """Pure noise: 3000 days of a random walk with no pattern at all."""
     return random_walk_prices(3000, start="2013-01-01", seed=7)
 
 

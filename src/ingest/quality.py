@@ -1,8 +1,8 @@
-"""Kontrola jakosci surowych danych.
+"""Quality control on raw data.
 
-Raport jest struktura danych, nie printem - dzieki temu te same funkcje
-zasilaja testy, CLI i dashboard. Zadna z kontroli nie modyfikuje danych;
-naprawa jest swiadoma decyzja uzytkownika, nie efektem ubocznym importu.
+The report is a data structure, not a print - that way the same functions feed
+the tests, the CLI and the dashboard. None of the checks modifies the data;
+fixing it is a deliberate decision by the user, not a side effect of importing.
 """
 from __future__ import annotations
 
@@ -53,7 +53,7 @@ class QualityReport:
         }
 
     def summary(self) -> str:
-        parts = [f"{self.name}: {self.rows} wierszy"]
+        parts = [f"{self.name}: {self.rows} rows"]
         if self.first_date is not None:
             parts.append(f"{self.first_date.date()} -> {self.last_date.date()}")
         parts.extend(f"{k}={v}" for k, v in self.problems.items() if v)
@@ -67,11 +67,11 @@ def check_prices(
     outlier_sigma: float = 8.0,
     max_stale_days: int = 3,
 ) -> QualityReport:
-    """Sprawdza brakujace dni, duplikaty i wartosci odstajace w barach OHLCV.
+    """Check for missing days, duplicates and outliers in OHLCV bars.
 
-    Prog odstajacych liczony jest odchyleniem medianowym (MAD), nie
-    odchyleniem standardowym - pojedyncze zalamanie o 40% nie moze
-    samo podnosic progu tak, by przestac byc widoczne.
+    The outlier threshold uses the median absolute deviation (MAD) rather than
+    the standard deviation - a single 40% crash must not raise the threshold
+    enough to hide itself.
     """
     if df.empty:
         return QualityReport(name=name, rows=0, first_date=None, last_date=None)
@@ -100,7 +100,8 @@ def check_prices(
     else:
         ohlc_violations = pd.DatetimeIndex([])
 
-    # Wartosci niedodatnie sa raportowane osobno; tu tylko nie moga psuc logarytmu.
+    # Non-positive values are reported separately; here they must simply not
+    # break the logarithm.
     safe_close = unique["close"].where(unique["close"] > 0)
     log_return = np.log(safe_close).diff()
     median = log_return.median()
@@ -130,7 +131,7 @@ def check_prices(
 
 
 def _stale_runs(series: pd.Series, max_stale_days: int) -> list[tuple[pd.Timestamp, int]]:
-    """Znajduje serie identycznych zamkniec dluzsze niz prog (zamrozony feed)."""
+    """Find runs of identical closes longer than the threshold (a frozen feed)."""
     if series.empty:
         return []
     changed = series.ne(series.shift())
@@ -145,10 +146,10 @@ def _stale_runs(series: pd.Series, max_stale_days: int) -> list[tuple[pd.Timesta
 def compare_sources(
     left: pd.DataFrame, right: pd.DataFrame, *, tolerance: float = 0.05
 ) -> pd.DataFrame:
-    """Porownuje zamkniecia z dwoch zrodel na wspolnych dniach.
+    """Compare closes from two sources on their common days.
 
-    Zwraca tylko dni, w ktorych roznica wzgledna przekracza tolerancje -
-    to zwykle sygnal awarii jednego z API albo splitu w danych.
+    Returns only the days where the relative difference exceeds the tolerance -
+    usually a sign that one API broke or that the data has a split in it.
     """
     a = left.set_index(pd.to_datetime(left["date"]).dt.normalize())["close"]
     b = right.set_index(pd.to_datetime(right["date"]).dt.normalize())["close"]
@@ -168,9 +169,9 @@ def compare_sources(
 
 
 def check_macro(df: pd.DataFrame, *, name: str = "macro") -> dict[str, Any]:
-    """Kontrola serii makro: kolejnosc dat, duplikaty, spojnosc publikacji."""
+    """Checks on a macro series: date ordering, duplicates, publication sanity."""
     if df.empty:
-        return {"name": name, "rows": 0, "is_clean": False, "detail": "brak danych"}
+        return {"name": name, "rows": 0, "is_clean": False, "detail": "no data"}
     data = df.copy()
     data["date"] = pd.to_datetime(data["date"])
     data["available_from"] = pd.to_datetime(data["available_from"])

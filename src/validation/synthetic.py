@@ -1,11 +1,11 @@
-"""Generatory danych syntetycznych - poligon dla testow i kalibracji.
+"""Synthetic data generators - the proving ground for tests and calibration.
 
-Sluza dwom rzeczom:
+They serve two purposes:
 
-1. Testom negatywnym: na czystym szumie zadna metoda nie ma prawa
-   znajdowac wzorcow czesciej niz na poziomie istotnosci.
-2. Testom mocy: gdy WSTRZYKNIEMY znany efekt, metoda musi go znalezc -
-   inaczej brak wyniku na prawdziwych danych nic nie znaczy.
+1. Negative tests: on pure noise no method may find patterns more often than
+   the significance level allows.
+2. Power tests: when we INJECT a known effect, the method must find it -
+   otherwise the absence of a result on real data means nothing.
 """
 from __future__ import annotations
 
@@ -22,7 +22,7 @@ def random_walk_prices(
     sigma: float = 0.04,
     initial: float = 100.0,
 ) -> pd.DataFrame:
-    """Bary OHLCV z geometrycznego bladzenia losowego (brak jakiegokolwiek wzorca)."""
+    """OHLCV bars from a geometric random walk - no pattern of any kind."""
     rng = np.random.default_rng(seed)
     log_returns = rng.normal(mu, sigma, n_days)
     close = initial * np.exp(np.cumsum(log_returns))
@@ -50,12 +50,13 @@ def inject_drift(
     window: int = 30,
     daily_drift: float = 0.004,
 ) -> pd.DataFrame:
-    """Dodaje staly dryf w oknie `window` dni po kazdej dacie kotwiczacej.
+    """Add constant drift in the `window` days following each anchor date.
 
-    Uzywane w testach mocy: znany, wstrzykniety efekt musi zostac wykryty.
+    Used in power tests: a known, injected effect has to be detected.
     """
     out = prices.copy()
     dates = pd.to_datetime(pd.Index(anchor_dates))
+    # pandas returns read-only views, hence copy=True: we mutate this array.
     log_returns = np.log(out["close"]).diff().fillna(0.0).to_numpy(copy=True)
     day_index = pd.DatetimeIndex(out["date"])
     for anchor in dates:
@@ -71,10 +72,10 @@ def inject_drift(
 def block_bootstrap(
     values: np.ndarray, *, block_length: int = 30, size: int | None = None, rng=None
 ) -> np.ndarray:
-    """Bootstrap blokowy - zachowuje autokorelacje i grupowanie zmiennosci.
+    """Block bootstrap - preserves autocorrelation and volatility clustering.
 
-    Zwykly bootstrap i.i.d. zawyza istotnosc na szeregach finansowych,
-    bo zaklada niezaleznosc dni, ktorej w cenach nie ma.
+    A plain i.i.d. bootstrap overstates significance on financial series
+    because it assumes days are independent, which prices are not.
     """
     rng = rng or np.random.default_rng()
     values = np.asarray(values)
@@ -85,6 +86,6 @@ def block_bootstrap(
     block_length = max(1, min(block_length, n))
     n_blocks = int(np.ceil(size / block_length))
     starts = rng.integers(0, n, size=n_blocks)
-    # Bootstrap kolowy: bloki moga sie zawijac, wiec kazdy dzien ma rowna szanse.
+    # Circular bootstrap: blocks may wrap, so every day gets an equal chance.
     indices = (starts[:, None] + np.arange(block_length)[None, :]) % n
     return values[indices.reshape(-1)[:size]]

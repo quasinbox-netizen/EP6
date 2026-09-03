@@ -1,14 +1,14 @@
-"""Cechy cyklu halvingowego.
+"""Halving-cycle features.
 
-Daty halvingow sa danymi statycznymi (wysokosc bloku 210 000 x n, czas
-potwierdzenia w UTC). Data nastepnego halvingu jest PROGNOZA - wynika z
-protokolu, ale zalezy od tempa wydobycia, wiec waha sie o okolo +/- 2 tyg.
+Halving dates are static data (block height 210,000 x n, confirmation time in
+UTC). The date of the NEXT halving is a FORECAST - it follows from the protocol
+but depends on mining speed, so it moves by roughly two weeks either way.
 
-Kontrakt czasowy: `days_since_halving` jest w pelni wsteczne. Natomiast
-`days_to_next_halving` i `cycle_progress` korzystaja z daty przyszlego
-zdarzenia. Jest to uzasadnione (harmonogram byl znany z grubsza z wyprzedzeniem),
-ale nie jest darmowe - dlatego funkcje maja tryb `strict`, ktory zeruje te
-kolumny, i backtest domyslnie ich NIE uzywa.
+Time contract: `days_since_halving` is entirely backward-looking. By contrast,
+`days_to_next_halving` and `cycle_progress` use the date of a future event.
+That is defensible (the schedule was roughly known in advance) but it is not
+free - which is why these functions have a `strict` mode that drops those
+columns, and why the backtest does NOT use them by default.
 """
 from __future__ import annotations
 
@@ -16,13 +16,13 @@ import pandas as pd
 
 GENESIS = pd.Timestamp("2009-01-03")
 
-# (data, wysokosc bloku, czy potwierdzona)
+# (date, block height, confirmed)
 HALVINGS: list[tuple[pd.Timestamp, int, bool]] = [
     (pd.Timestamp("2012-11-28"), 210_000, True),
     (pd.Timestamp("2016-07-09"), 420_000, True),
     (pd.Timestamp("2020-05-11"), 630_000, True),
     (pd.Timestamp("2024-04-20"), 840_000, True),
-    (pd.Timestamp("2028-04-20"), 1_050_000, False),  # prognoza
+    (pd.Timestamp("2028-04-20"), 1_050_000, False),  # projected
 ]
 
 HALVING_DATES = pd.DatetimeIndex([d for d, _, _ in HALVINGS])
@@ -30,7 +30,7 @@ CONFIRMED_HALVINGS = pd.DatetimeIndex([d for d, _, confirmed in HALVINGS if conf
 
 
 def cycle_index(dates: pd.DatetimeIndex) -> pd.Series:
-    """Numer cyklu: ile halvingow juz sie odbylo na dany dzien (0 przed pierwszym)."""
+    """Cycle number: how many halvings have happened by that day (0 before the first)."""
     dates = pd.DatetimeIndex(dates)
     counts = [int((CONFIRMED_HALVINGS <= day).sum()) for day in dates]
     return pd.Series(counts, index=dates, name="cycle_index", dtype="int64")
@@ -47,10 +47,10 @@ def _next_halving(day: pd.Timestamp) -> pd.Timestamp | None:
 
 
 def halving_features(dates: pd.DatetimeIndex, *, strict: bool = False) -> pd.DataFrame:
-    """Ramka cech cyklu dla podanych dni.
+    """Cycle features for the given days.
 
-    strict=True zostawia wylacznie cechy wsteczne (bez wiedzy o dacie
-    kolejnego halvingu) - taki wariant nadaje sie do backtestu bez zastrzezen.
+    strict=True keeps only backward-looking features (no knowledge of the next
+    halving date) - that variant is fit for backtesting without caveats.
     """
     dates = pd.DatetimeIndex(pd.to_datetime(dates)).normalize()
     previous = [_previous_halving(day) for day in dates]
@@ -86,13 +86,13 @@ def halving_features(dates: pd.DatetimeIndex, *, strict: bool = False) -> pd.Dat
 def halving_windows(
     dates: pd.DatetimeIndex, windows: list[int], *, direction: str = "after"
 ) -> pd.DataFrame:
-    """Flagi 0/1: czy dzien lezy w oknie N dni po (lub przed) halvingiem.
+    """Flags 0/1: does the day fall within N days after (or before) a halving?
 
-    Okna "przed" wymagaja znajomosci przyszlej daty halvingu - w backtescie
-    uzywaj ich tylko wtedy, gdy swiadomie akceptujesz to zalozenie.
+    "Before" windows require knowing the future halving date - use them in a
+    backtest only if you accept that assumption deliberately.
     """
     if direction not in {"after", "before"}:
-        raise ValueError("direction musi byc 'after' albo 'before'")
+        raise ValueError("direction must be 'after' or 'before'")
     dates = pd.DatetimeIndex(pd.to_datetime(dates)).normalize()
     out = pd.DataFrame(index=dates)
     out.index.name = "date"

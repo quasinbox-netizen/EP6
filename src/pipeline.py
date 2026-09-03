@@ -1,7 +1,7 @@
-"""Warstwa spinajaca moduly w kompletne przebiegi.
+"""The layer that assembles the modules into complete runs.
 
-Cel: CLI i dashboard maja byc cienkie. Cala logika badawcza mieszka tutaj,
-zeby wynik z terminala i wynik z przegladarki nie mogly sie rozjechac.
+The point: the CLI and the dashboard stay thin. All research logic lives here,
+so that the terminal result and the browser result cannot drift apart.
 """
 from __future__ import annotations
 
@@ -52,7 +52,7 @@ class LabData:
 
 
 def load_lab_data(config=None, *, horizons: list[int] | None = None) -> LabData:
-    """Wczytuje wszystko z bazy i buduje ramke cech z celami."""
+    """Load everything from the database and build the feature frame with targets."""
     config = config or load_config()
     symbol = config["price"]["symbol"]
     priority = config["price"].get("stitch_priority", config["price"]["sources"])
@@ -98,7 +98,7 @@ def halving_event_study(data: LabData, *, pre: int = 30, post: int = 365, config
 
 
 def category_event_studies(data: LabData, *, pre: int = 30, post: int = 90, config=None) -> dict:
-    """Event study osobno dla kazdej kategorii zdarzen z rejestru."""
+    """A separate event study for each event category in the registry."""
     config = config or load_config()
     results = {}
     if data.events.empty:
@@ -118,12 +118,11 @@ def category_event_studies(data: LabData, *, pre: int = 30, post: int = 90, conf
 
 
 def with_phase_dummies(frame: pd.DataFrame) -> pd.DataFrame:
-    """Dokleja kolumny 0/1 dla kazdej fazy makro.
+    """Attach 0/1 columns for every macro phase.
 
-    Faza jest hipoteza dokladnie tak samo jak okno halvingowe, wiec musi
-    przejsc przez te sama korekte na wielokrotne testowanie. Trzymanie jej
-    poza skanem bylo by cichym uprzywilejowaniem: cztery dodatkowe testy,
-    ktorych nikt nie liczy.
+    A phase is a hypothesis exactly as much as a halving window is, so it has
+    to go through the same multiple-testing correction. Keeping it out of the
+    scan would be a quiet privilege: four extra tests nobody counts.
     """
     if "macro_phase" not in frame.columns:
         return frame
@@ -137,7 +136,7 @@ def with_phase_dummies(frame: pd.DataFrame) -> pd.DataFrame:
 
 
 def hypothesis_columns(frame: pd.DataFrame) -> list[str]:
-    """Wszystkie okna i fazy, ktore traktujemy jako osobne hipotezy."""
+    """Every window and phase we treat as a separate hypothesis."""
     return [
         c for c in frame.columns
         if c.startswith("halving_after_")
@@ -149,7 +148,7 @@ def hypothesis_columns(frame: pd.DataFrame) -> list[str]:
 def scan_hypotheses(
     data: LabData, *, target: str = "log_return", config=None
 ) -> pd.DataFrame:
-    """Skan wszystkich okien i faz + korekta na wielokrotne testowanie."""
+    """Scan every window and phase, then correct for multiple testing."""
     config = config or load_config()
     frame = with_phase_dummies(data.features)
     if frame.empty:
@@ -172,10 +171,10 @@ def scan_hypotheses(
 def out_of_sample_check(
     data: LabData, *, target: str = "log_return", config=None
 ) -> pd.DataFrame:
-    """Powtarza kazda hipoteze osobno na treningu i na tescie.
+    """Repeat each hypothesis separately on the training and the test set.
 
-    Efekt, ktory istnieje tylko w probie treningowej, jest dopasowaniem do
-    szumu - i tu to widac wprost, bez zadnej agregacji.
+    An effect that exists only in the training sample is a fit to noise - and
+    here that is visible directly, without any aggregation.
     """
     config = config or load_config()
     frame = with_phase_dummies(data.features)
@@ -215,19 +214,19 @@ def out_of_sample_check(
 def walk_forward_check(
     data: LabData, *, target: str = "log_return", config=None
 ) -> pd.DataFrame:
-    """Walidacja kroczaca: kilkanascie rozlacznych okien testowych.
+    """Walk-forward validation: a dozen or more disjoint test windows.
 
-    Podzial po cyklach daje JEDEN zbior testowy, wiec "nie powtorzylo sie"
-    jest tam pojedyncza obserwacja. Tutaj kazda hipoteza dostaje kilkanascie
-    niezaleznych okien i mozna policzyc, jak czesto znak efektu przezywa
-    przejscie z treningu na test.
+    Splitting by cycle gives ONE test set, so "it did not replicate" is a
+    single observation there. Here every hypothesis gets many independent
+    windows and we can count how often the sign of the effect survives the
+    move from training to test.
 
-    Statystyka: pod hipoteza zerowa znak w oknie testowym jest rzutem moneta,
-    wiec liczba zgodnych foldow ma rozklad dwumianowy z p=0.5. Do tego test t
-    na sredniej efektow out-of-sample - okna testowe sa rozlaczne (embargo),
-    wiec wolno je traktowac jak niezalezne obserwacje.
+    The statistic: under the null the sign in the test window is a coin flip,
+    so the number of agreeing folds is binomial with p=0.5. Plus a t-test on
+    the mean out-of-sample effect - the test windows are disjoint (embargo), so
+    treating them as independent observations is allowed.
 
-    Na koncu korekta na wielokrotne testowanie, bo hipotez jest kilkanascie.
+    Finally a multiple-testing correction, because there are many hypotheses.
     """
     config = config or load_config()
     frame = with_phase_dummies(data.features)
@@ -250,10 +249,10 @@ def walk_forward_check(
     for fold in folds:
         assert_no_overlap(fold, horizon_days=horizon - 1)
 
-    # Test t po foldach zaklada, ze okna testowe sa niezalezne. Przy kroku
-    # mniejszym niz dlugosc okna zachodza one na siebie i to zalozenie pada -
-    # p-value byloby zanizone. Sprawdzamy to na faktycznych indeksach,
-    # a nie na parametrach, i przy nakladaniu NIE raportujemy testu t.
+    # The t-test across folds assumes the test windows are independent. With a
+    # step shorter than the window they overlap and that assumption fails -
+    # the p-value would be understated. We check this on the ACTUAL indices,
+    # not on the parameters, and when they overlap we do NOT report the t-test.
     disjoint = True
     for earlier, later in zip(folds, folds[1:]):
         if len(earlier.test.intersection(later.test)) > 0:
@@ -291,9 +290,9 @@ def walk_forward_check(
     method = config["validation"]["fdr_method"]
     alpha = float(config["validation"]["alpha"])
 
-    # Obie statystyki sa hipotezami i obie musza przejsc korekte. Poprawianie
-    # tylko jednej i raportowanie surowej drugiej byloby wyborem tej
-    # wygodniejszej juz po zobaczeniu wynikow.
+    # Both statistics are hypotheses and both must be corrected. Correcting
+    # only one and reporting the other raw would mean picking the more
+    # convenient one after seeing the results.
     corrected = correct(table, method=method, alpha=alpha, p_column="sign_p_value")
     corrected = corrected.rename(
         columns={"p_adjusted": "sign_p_adjusted",
@@ -316,17 +315,17 @@ def walk_forward_check(
 
 
 def macro_phase_comparison(data: LabData, config=None) -> dict:
-    """Porownuje faze makro liczona z prawdziwego M2 i z proxy dolarowego.
+    """Compare the macro phase computed from real M2 against the dollar proxy.
 
-    Sens tego porownania: dopoki nie ma klucza FRED, os plynnosci jest
-    zastepowana odwroconym indeksem dolara. To rozsadne przyblizenie
-    warunkow finansowych, ale NIE jest to podaz pieniadza. Ta funkcja mowi,
-    jak bardzo obie wersje sie roznia - i czy wnioski od tego zaleza.
+    Why this matters: without a FRED key the liquidity axis is replaced by the
+    inverted dollar index. That is a reasonable proxy for financial
+    conditions, but it is NOT the money supply. This function says how far the
+    two versions differ - and whether conclusions depend on the choice.
     """
     config = config or load_config()
     frame = data.features
     if frame.empty or data.macro.empty:
-        return {"error": "brak danych makro"}
+        return {"error": "no macro data"}
 
     available = set(data.macro["series"].unique())
     index = frame.index
@@ -341,7 +340,7 @@ def macro_phase_comparison(data: LabData, config=None) -> dict:
         )["macro_phase"]
 
     if not variants:
-        return {"error": "brak serii plynnosciowej (ani m2, ani dxy)"}
+        return {"error": "no liquidity series (neither m2 nor dxy)"}
 
     returns = frame["log_return"]
     summary = {}
@@ -379,19 +378,19 @@ def control_comparison(
     post: int = 365,
     config=None,
 ) -> dict:
-    """Porownuje reakcje BTC z reakcja aktywow kontrolnych na te same daty.
+    """Compare BTC's reaction with the control assets' on the same dates.
 
-    Zwraca slownik: nazwa kontroli -> ControlComparison, plus event study
-    placebo dla kazdej kontroli. Brak kontroli w bazie nie jest bledem -
-    zwracamy pusty wynik z informacja, co pobrac.
+    Returns a dict: control name -> ControlComparison, plus a placebo event
+    study for each control. A missing control group is not an error - we
+    return an empty result explaining what to fetch.
     """
     config = config or load_config()
     if data.is_empty:
-        return {"error": "baza jest pusta"}
+        return {"error": "the database is empty"}
     if not data.has_controls:
         return {
-            "error": "brak grupy kontrolnej w bazie - uruchom "
-                     "`python -m cli ingest --what control`"
+            "error": "no control group in the database - run "
+                     "`run.py ingest --what control`"
         }
 
     dates = CONFIRMED_HALVINGS if event_dates is None else pd.DatetimeIndex(
@@ -419,7 +418,7 @@ def control_comparison(
 
 
 def run_strategies(data: LabData, config=None) -> tuple[pd.DataFrame, list]:
-    """Backtest kilku prostych strategii wzgledem kup-i-trzymaj."""
+    """Backtest a handful of simple strategies against buy-and-hold."""
     config = config or load_config()
     frame = data.features
     if frame.empty:
@@ -428,7 +427,7 @@ def run_strategies(data: LabData, config=None) -> tuple[pd.DataFrame, list]:
     close = frame["close"]
     settings = BacktestConfig.from_config(config)
     results = [
-        run_backtest(close, buy_and_hold(close.index), settings, name="kup i trzymaj"),
+        run_backtest(close, buy_and_hold(close.index), settings, name="buy and hold"),
         run_backtest(close, trend_following(close), settings, name="trend 50/200"),
     ]
     for days in config["features"]["halving_windows"]:
@@ -446,18 +445,18 @@ def run_strategies(data: LabData, config=None) -> tuple[pd.DataFrame, list]:
                 close,
                 macro_regime(frame["macro_phase"]),
                 settings,
-                name="makro: plynnosc rosnie, stopy spadaja",
+                name="macro: liquidity up, rates down",
             )
         )
     return compare(results), results
 
 
 def full_report(config=None) -> dict:
-    """Jeden przebieg: dane -> event study -> walidacja -> backtest."""
+    """One pass: data -> event study -> validation -> backtest."""
     config = config or load_config()
     data = load_lab_data(config)
     if data.is_empty:
-        return {"error": "baza jest pusta - uruchom najpierw `ingest`"}
+        return {"error": "the database is empty - run `ingest` first"}
 
     scan = scan_hypotheses(data, config=config)
     table, results = run_strategies(data, config=config)
@@ -467,7 +466,7 @@ def full_report(config=None) -> dict:
         "halving_study": halving_event_study(data, config=config),
         "category_studies": category_event_studies(data, config=config),
         "scan": scan,
-        "scan_summary": summarize(scan) if not scan.empty else "brak hipotez",
+        "scan_summary": summarize(scan) if not scan.empty else "no hypotheses",
         "out_of_sample": out_of_sample_check(data, config=config),
         "backtest_table": table,
         "backtest_results": results,

@@ -1,15 +1,15 @@
-"""Podzialy proby: po cyklach, kroczaco, z embargiem.
+"""Sample splits: by cycle, walk-forward, with embargo.
 
-Trzy pulapki, ktore ten modul zamyka:
+Three traps this module closes:
 
-1. Losowy podzial szeregu czasowego nie ma sensu - uczylby sie na
-   przyszlosci. Dlatego kazdy podzial jest chronologiczny.
-2. Cel `fwd_return_90d` w dniu t zawiera ceny z t+90. Jesli t jest ostatnim
-   dniem treningu, a t+1 pierwszym dniem testu, zbiory zachodza na siebie.
-   Stad EMBARGO: luka rowna horyzontowi celu, wycinana miedzy zbiorami.
-3. Podzial po cyklach halvingowych jest naturalny dla tego projektu, ale ma
-   swoja cene: cykli jest piec, wiec zbior testowy to jeden-dwa cykle.
-   Wynik "dziala na cyklu 4" to jedna obserwacja, nie dowod.
+1. A random split of a time series makes no sense - it would train on the
+   future. Every split here is chronological.
+2. The target `fwd_return_90d` on day t contains prices from t+90. If t is the
+   last training day and t+1 the first test day, the sets overlap. Hence the
+   EMBARGO: a gap equal to the target horizon, cut out between the sets.
+3. Splitting by halving cycle is natural for this project but has a price:
+   there are five cycles, so the test set is one or two of them. "It works on
+   cycle 4" is one observation, not proof. That is what walk-forward fixes.
 """
 from __future__ import annotations
 
@@ -58,7 +58,7 @@ def cycle_split(
     *,
     embargo_days: int = 0,
 ) -> Split:
-    """Podzial po numerach cykli halvingowych, z embargiem miedzy zbiorami."""
+    """Split by halving cycle number, with an embargo between the sets."""
     index = pd.DatetimeIndex(pd.to_datetime(index)).normalize().sort_values()
     cycles = cycle_of(index)
     train = index[cycles.isin(train_cycles).to_numpy()]
@@ -67,13 +67,13 @@ def cycle_split(
     embargo = pd.DatetimeIndex([])
     if embargo_days > 0 and len(train) and len(test):
         boundary = train.max()
-        cutoff = boundary + pd.Timedelta(days=embargo_days)
         embargo = train[train > boundary - pd.Timedelta(days=embargo_days)]
         train = train[train <= boundary - pd.Timedelta(days=embargo_days)]
+        # The embargo is cut from the training side; the test set starts past
+        # the original boundary, so no test day is lost.
         test = test[test > boundary]
-        _ = cutoff  # embargo wycinamy po stronie treningu, test zaczyna sie za granica
 
-    name = f"cykle {train_cycles} -> {test_cycles}"
+    name = f"cycles {train_cycles} -> {test_cycles}"
     return Split(name=name, train=train, test=test, embargo=embargo)
 
 
@@ -86,11 +86,14 @@ def walk_forward_splits(
     embargo_days: int = 90,
     expanding: bool = True,
 ) -> list[Split]:
-    """Kroczaca walidacja: ucz na przeszlosci, testuj na kolejnym oknie.
+    """Walk-forward validation: train on the past, test on the next window.
 
-    `expanding=True` powieksza okno treningowe z kazdym krokiem (uczciwy
-    odpowiednik tego, jak dziala sie w praktyce). `expanding=False` daje
-    okno przesuwne o stalej dlugosci.
+    `expanding=True` grows the training window at every step, which is the
+    honest analogue of how you would actually operate. `expanding=False` gives
+    a sliding window of fixed length.
+
+    Keep `step_days >= test_days` or consecutive test windows overlap, which
+    breaks the independence assumption of any test taken across folds.
     """
     index = pd.DatetimeIndex(pd.to_datetime(index)).normalize().sort_values()
     step = step_days or test_days
@@ -125,11 +128,11 @@ def walk_forward_splits(
 
 
 def window_effect(values: pd.Series, mask: pd.Series) -> float:
-    """Roznica srednich: w oknie minus poza oknem. Bez testu, sam efekt.
+    """Difference of means: inside the window minus outside. No test, just the effect.
 
-    Do walk-forward nie jest potrzebne p-value per fold - wnioskowanie idzie
-    z rozkladu efektow MIEDZY foldami, a nie z pojedynczego okna. Liczenie
-    permutacji dla kazdego folda osobno byloby drogie i nic by nie wnosilo.
+    Walk-forward does not need a per-fold p-value - inference comes from the
+    distribution of effects ACROSS folds, not from a single window. Running
+    permutations for every fold would be expensive and add nothing.
     """
     frame = pd.DataFrame({"value": values, "mask": mask}).dropna()
     if frame.empty:
@@ -142,16 +145,16 @@ def window_effect(values: pd.Series, mask: pd.Series) -> float:
 
 
 def sign_agreement_test(train_effects, test_effects) -> dict:
-    """Czy znak efektu utrzymuje sie z okna treningowego na testowe.
+    """Does the sign of the effect survive the move from training to test?
 
-    To jest sedno walk-forward. Pod hipoteza zerowa (brak zaleznosci) znak
-    w oknie testowym jest rzutem monetą, wiec liczba zgodnych foldow ma
-    rozklad dwumianowy z p=0.5. Test dwustronny, bo konsekwentne odwracanie
-    znaku tez jest informacja - i tez nie jest przypadkiem.
+    This is the heart of walk-forward. Under the null (no relationship) the
+    sign in the test window is a coin flip, so the number of agreeing folds is
+    binomial with p=0.5. Two-sided, because consistently flipping the sign is
+    also information - and also not chance.
 
-    Dodatkowo raportujemy sredni efekt out-of-sample z testem t po foldach.
-    Okna testowe sa rozlaczne (embargo), wiec traktowanie ich jako
-    niezaleznych obserwacji jest uzasadnione - w przeciwienstwie do dni.
+    We additionally report the mean out-of-sample effect with a t-test across
+    folds. Test windows are disjoint (embargo), so treating them as independent
+    observations is defensible - unlike treating days that way.
     """
     pairs = [
         (a, b)
@@ -188,17 +191,18 @@ def sign_agreement_test(train_effects, test_effects) -> dict:
 
 
 def assert_no_overlap(split: Split, *, horizon_days: int = 0) -> None:
-    """Pilnuje, ze zbiory sa rozlaczne, a luka pokrywa horyzont celu."""
+    """Check the sets are disjoint and the gap covers the target horizon."""
     overlap = split.train.intersection(split.test)
     if len(overlap):
-        raise AssertionError(f"{split.name}: zbiory zachodza na siebie ({len(overlap)} dni)")
+        raise AssertionError(f"{split.name}: sets overlap ({len(overlap)} days)")
     if len(split.train) == 0 or len(split.test) == 0:
         return
     gap = (split.test.min() - split.train.max()).days
     if gap <= horizon_days:
         raise AssertionError(
-            f"{split.name}: luka {gap} dni nie pokrywa horyzontu celu {horizon_days} dni - "
-            "ostatnie dni treningu zawieraja ceny ze zbioru testowego"
+            f"{split.name}: the gap of {gap} days does not cover the target horizon "
+            f"of {horizon_days} days - the last training days contain prices from "
+            "the test set"
         )
 
 
@@ -209,11 +213,11 @@ def split_frame(frame: pd.DataFrame, split: Split) -> tuple[pd.DataFrame, pd.Dat
 def replicate_finding(
     train_result: dict, test_result: dict, *, alpha: float = 0.05
 ) -> dict:
-    """Czy wynik z treningu potwierdzil sie na tescie?
+    """Did a finding from the training set hold up on the test set?
 
-    Wymagamy trzech rzeczy naraz: tego samego znaku efektu, istotnosci na
-    tescie i tego, zeby efekt nie skurczyl sie do ulamka. Sam znak to za malo -
-    przy dwoch mozliwych znakach trafia sie w polowie przypadkow.
+    We require three things at once: the same sign, significance out of sample,
+    and that the effect did not shrink to a fraction. Sign alone is far too
+    weak - with two possible signs it agrees half the time by chance.
     """
     train_effect = train_result.get("difference", np.nan)
     test_effect = test_result.get("difference", np.nan)

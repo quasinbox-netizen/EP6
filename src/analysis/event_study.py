@@ -1,25 +1,25 @@
-"""Event study - opis zachowania ceny wokol zdarzen, nie sygnal.
+"""Event study - a description of how price behaved around events, not a signal.
 
-Modul odpowiada na pytanie: "jak wygladal zwrot w oknie N dni po zdarzeniu
-na tle reszty proby" - i zawsze podaje przedzial ufnosci oraz liczbe
-zdarzen. Przy czterech halvingach zaden wynik nie ma prawa byc podany jako
-liczba bez przedzialu; cztery obserwacje to cztery obserwacje.
+This module answers one question: how did the return in the N days after an
+event compare with the rest of the sample - and it always reports a confidence
+interval and the number of events. With four halvings, no result may be quoted
+as a number without its interval; four observations are four observations.
 
-Trzy decyzje metodologiczne, ktore odrozniaja ten modul od naiwnej sredniej:
+Three methodological decisions that separate this from a naive average:
 
-1. Zwrot "nadzwyczajny" liczymy wzgledem okna estymacyjnego SPRZED zdarzenia
-   (domyslnie -250..-31 dni), a nie wzgledem sredniej z calej proby. Srednia
-   z calej proby zawiera to, co zdarzenie dopiero ma wyjasnic.
-2. Jednostka obserwacji jest ZDARZENIE, nie dzien. Zrodlem niepewnosci jest
-   to, ze mielismy 4 halvingi, a nie to, ze mielismy 120 dni. Wnioskowanie
-   opiera sie wiec na rozrzucie CAR MIEDZY zdarzeniami (rozklad t z n-1
-   stopniami swobody). Przy n=4 wartosc krytyczna wynosi 3.18, nie 1.96 -
-   i tak wlasnie ma byc. Bootstrap percentylowy raportujemy obok, ale przy
-   n<10 jest zbyt waski (sprawdzone w tests/test_phase3: dawal ~30%
-   falszywych odkryc zamiast 5%), wiec nie sluzy do wnioskowania.
-3. Test "okno vs reszta proby" uzywa permutacji przez cykliczne przesuniecie
-   maski. Zwykly test t na dziennych zwrotach zaklada niezaleznosc, ktorej
-   w cenach nie ma, i systematycznie zawyza istotnosc.
+1. The "abnormal" return is measured against an estimation window BEFORE the
+   event (default -250..-31 days), not against the full-sample mean. The
+   full-sample mean already contains whatever the event is supposed to explain.
+2. The unit of observation is the EVENT, not the day. The uncertainty comes
+   from having had 4 halvings, not from having had 120 days. Inference
+   therefore rests on the spread of CAR BETWEEN events (t distribution with
+   n-1 degrees of freedom). At n=4 the critical value is 3.18, not 1.96 - as
+   it should be. The percentile bootstrap is reported alongside, but at n<10 it
+   is far too narrow (measured in tests/test_phase3: it produced ~30% false
+   discoveries instead of 5%), so it is not used for inference.
+3. The "window vs rest of sample" test uses permutation by circular shift of
+   the mask. A plain t-test on daily returns assumes independence, which prices
+   do not have, and systematically overstates significance.
 """
 from __future__ import annotations
 
@@ -34,7 +34,7 @@ DEFAULT_ESTIMATION_WINDOW = (-250, -31)
 
 @dataclass
 class EventStudyResult:
-    """Wynik badania: tabela po offsetach + metadane."""
+    """The result: a table indexed by offset plus metadata."""
 
     table: pd.DataFrame
     n_events: int
@@ -47,7 +47,7 @@ class EventStudyResult:
     def summary(self) -> str:
         car = self.car_summary
         if not car:
-            return f"n={self.n_events}, brak podsumowania CAR"
+            return f"n={self.n_events}, no CAR summary"
         return (
             f"n={self.n_events} | CAR({car['offset']}d) = {car['car']:+.1%} "
             f"[{car['ci_low']:+.1%}, {car['ci_high']:+.1%}] "
@@ -72,10 +72,10 @@ def event_window_matrix(
     pre: int = 30,
     post: int = 90,
 ) -> tuple[pd.DataFrame, pd.DatetimeIndex]:
-    """Macierz zwrotow: wiersz = zdarzenie, kolumna = offset w dniach.
+    """Matrix of returns: one row per event, one column per day offset.
 
-    Zdarzenia bez pelnego okna sa pomijane i raportowane osobno - ciche
-    obcinanie okna zamienia badanie 4 zdarzen w badanie 3.5 zdarzenia.
+    Events without a complete window are skipped and reported separately -
+    silently truncating a window turns a study of 4 events into a study of 3.5.
     """
     returns = returns.sort_index()
     index = returns.index
@@ -101,7 +101,7 @@ def event_window_matrix(
 def _estimation_means(
     returns: pd.Series, event_dates: pd.DatetimeIndex, window: tuple[int, int]
 ) -> pd.Series:
-    """Sredni dzienny zwrot w oknie estymacyjnym przed kazdym zdarzeniem."""
+    """Mean daily return in the estimation window preceding each event."""
     index = returns.sort_index().index
     values = []
     for event in event_dates:
@@ -127,10 +127,10 @@ def event_study(
     seed: int = 20260901,
     price_column: str = "close",
 ) -> EventStudyResult:
-    """Srednia sciezka zwrotu wokol zdarzenia z przedzialem ufnosci.
+    """Mean return path around an event, with a confidence interval.
 
-    Zwraca tabele po offsetach: sredni zwrot dzienny, skumulowany (CAR),
-    przedzial ufnosci CAR z bootstrapu po zdarzeniach i liczba zdarzen.
+    Returns a table indexed by day offset: mean daily return, cumulative
+    (CAR), the CAR confidence interval, and the number of events.
     """
     returns = log_returns(prices, price_column)
     matrix, skipped = event_window_matrix(returns, event_dates, pre=pre, post=post)
@@ -156,12 +156,12 @@ def event_study(
         np.nanstd(values, axis=0, ddof=1) if n_events > 1 else np.zeros_like(mean_by_offset)
     )
 
-    # CAR liczymy tylko po stronie "po zdarzeniu" - offset 0 to dzien zdarzenia.
+    # CAR is computed on the "after" side only - offset 0 is the event day.
     post_mask = offsets >= 0
-    car_per_event = np.nancumsum(values[:, post_mask], axis=1)  # (zdarzenia x offsety)
+    car_per_event = np.nancumsum(values[:, post_mask], axis=1)  # (events x offsets)
     mean_car_post = car_per_event.mean(axis=0)
 
-    # Wnioskowanie po zdarzeniach: rozklad t z n-1 stopniami swobody.
+    # Inference across events: t distribution with n-1 degrees of freedom.
     if n_events > 1:
         sd_car_post = car_per_event.std(axis=0, ddof=1)
         se_car_post = sd_car_post / np.sqrt(n_events)
@@ -179,7 +179,7 @@ def event_study(
         ci_low_post = nan_like
         ci_high_post = nan_like
 
-    # Bootstrap po zdarzeniach - raportowany dla porownania, nie do decyzji.
+    # Bootstrap across events - reported for comparison, not for decisions.
     rng = np.random.default_rng(seed)
     boot_indices = rng.integers(0, n_events, size=(n_boot, n_events))
     boot_car = car_per_event[boot_indices].mean(axis=1)
@@ -238,12 +238,13 @@ def circular_shift_test(
     n_permutations: int = 5000,
     seed: int = 20260901,
 ) -> dict:
-    """Test "okno vs reszta proby" odporny na autokorelacje.
+    """"Window vs rest of sample" test, robust to autocorrelation.
 
-    Hipoteza zerowa: maska nie jest powiazana ze zwrotami. Losujemy jej
-    cykliczne przesuniecia - to zachowuje zarowno autokorelacje zwrotow,
-    jak i strukture samej maski (dlugosc okien, ich liczbe i grupowanie).
-    Zwykla permutacja dni zniszczylaby to drugie i zawyzyla istotnosc.
+    Null hypothesis: the mask is unrelated to returns. We draw circular shifts
+    of the mask, which preserves both the autocorrelation of the returns and
+    the structure of the mask itself (window length, count and clustering). A
+    plain permutation of days would destroy the latter and overstate
+    significance.
     """
     aligned = pd.DataFrame({"value": values, "mask": mask}).dropna()
     if aligned.empty or aligned["mask"].sum() == 0:
@@ -291,10 +292,10 @@ def window_scan(
     n_permutations: int = 2000,
     seed: int = 20260901,
 ) -> pd.DataFrame:
-    """Ten sam test dla wielu okien naraz - wejscie do korekty wielokrotnej.
+    """The same test across many windows - the input to multiple-testing correction.
 
-    UWAGA: kazdy dodatkowy wiersz w tej tabeli to kolejna testowana hipoteza.
-    Surowe p-value stad NIE nadaje sie do wnioskowania; przepusc je przez
+    NOTE: every extra row in this table is another hypothesis tested. The raw
+    p-values it produces are NOT suitable for inference; pass them through
     validation.multiple_testing.
     """
     rows = []

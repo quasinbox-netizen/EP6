@@ -3,8 +3,12 @@
   "configurations": [
     {
       "name": "btc-cycle-lab-dashboard",
-      "runtimeExecutable": ".venv/Scripts/python.exe",
-      "runtimeArgs": ["-m", "streamlit", "run", "dashboard/app.py", "--server.port", "8511", "--server.headless", "true", "--browser.gatherUsageStats", "false"],
+      "runtimeExecutable": "python",
+      "runtimeArgs": [
+        "run.py",
+        "dashboard",
+        "8511"
+      ],
       "port": 8511
     }
   ]

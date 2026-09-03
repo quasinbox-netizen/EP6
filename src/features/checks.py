@@ -1,13 +1,13 @@
-"""Wykrywanie look-ahead bias metoda punkt-w-czasie.
+"""Detecting look-ahead bias by the point-in-time method.
 
-Idea testu: dla wybranego dnia t budujemy cechy DWA razy - raz majac
-wylacznie dane opublikowane do dnia t, raz majac cala historie do dzis.
-Wiersz t musi wyjsc identycznie. Jesli sie rozni, to znaczy, ze jakas
-cecha w dniu t korzysta z informacji, ktora wtedy jeszcze nie istniala.
+The idea: for a chosen day t we build the features TWICE - once with only the
+data published up to t, once with the whole history. Row t must come out
+identical. If it differs, some feature on day t is using information that did
+not exist yet.
 
-To mocniejszy test niz porownanie "przycietej" ramki z pelna: wychwytuje
-takze cechy liczone na calej probie (mediany, z-score, normalizacje),
-ktore przy zwyklym przycinaniu wygladaja niewinnie.
+This is a stronger test than comparing a truncated frame against the full one:
+it also catches features computed over the whole sample (medians, z-scores,
+normalisations), which look innocent under plain truncation.
 """
 from __future__ import annotations
 
@@ -42,18 +42,18 @@ def pointwise_lookahead_report(
     *,
     columns: list[str] | None = None,
 ) -> pd.DataFrame:
-    """Porownuje najswiezszy wiersz z budowy punkt-w-czasie z wersja pelna.
+    """Compare the newest point-in-time row against the full-history version.
 
-    `build_fn(as_of)` ma zwrocic ramke cech indeksowana data; `as_of=None`
-    oznacza pelna historie. Dla dnia t bierzemy OSTATNI wiersz, jaki dalo sie
-    wtedy policzyc (bar dnia t zamyka sie dopiero o polnocy, wiec zwykle jest
-    to t-1) i porownujemy go z tym samym dniem policzonym z pelna historia.
+    `build_fn(as_of)` must return a feature frame indexed by date; `as_of=None`
+    means the whole history. For day t we take the LAST row that could have
+    been computed then (the bar for t only closes at midnight, so usually t-1)
+    and compare it with the same day computed from the full history.
 
-    Zwraca ramke rozbieznosci - pusta ramka to wynik pozytywny.
+    Returns a frame of discrepancies - an empty frame is a pass.
     """
     full = build_fn(None)
     if full.empty:
-        raise ValueError("pelna budowa cech zwrocila pusta ramke")
+        raise ValueError("the full feature build returned an empty frame")
     checked = columns or [c for c in full.columns if not c.startswith("fwd_return_")]
 
     findings = []
@@ -63,9 +63,9 @@ def pointwise_lookahead_report(
             findings.append(
                 {
                     "date": day,
-                    "column": "<caly wiersz>",
-                    "full_value": "obecny" if day in full.index else "brak",
-                    "point_in_time_value": "pusta ramka",
+                    "column": "<whole row>",
+                    "full_value": "present" if day in full.index else "absent",
+                    "point_in_time_value": "empty frame",
                 }
             )
             continue
@@ -74,9 +74,9 @@ def pointwise_lookahead_report(
             findings.append(
                 {
                     "date": target,
-                    "column": "<caly wiersz>",
-                    "full_value": "brak",
-                    "point_in_time_value": "obecny",
+                    "column": "<whole row>",
+                    "full_value": "absent",
+                    "point_in_time_value": "present",
                 }
             )
             continue
@@ -87,7 +87,7 @@ def pointwise_lookahead_report(
                         "date": target,
                         "column": column,
                         "full_value": full.loc[target, column],
-                        "point_in_time_value": "<brak kolumny>",
+                        "point_in_time_value": "<column missing>",
                     }
                 )
                 continue
@@ -106,22 +106,22 @@ def pointwise_lookahead_report(
 
 
 def assert_no_lookahead(build_fn, test_dates, *, columns: list[str] | None = None) -> None:
-    """Wersja dla testow: podnosi AssertionError z lista winnych kolumn."""
+    """Test-facing version: raises AssertionError listing the guilty columns."""
     report = pointwise_lookahead_report(build_fn, test_dates, columns=columns)
     if not report.empty:
         culprits = report["column"].value_counts().to_dict()
         raise AssertionError(
-            f"look-ahead bias w {len(report)} komorkach; kolumny: {culprits}"
+            f"look-ahead bias in {len(report)} cells; columns: {culprits}"
         )
 
 
 def targets_are_forward_only(frame: pd.DataFrame, horizon: int) -> bool:
-    """Sanity check celu: ostatnie `horizon` dni musi byc puste.
+    """Sanity check on the target: the last `horizon` days must be empty.
 
-    Jesli fwd_return_Nd ma wartosc na ostatnim dniu proby, to znaczy, ze cel
-    zostal policzony wstecz albo przesuniety w zla strone.
+    If fwd_return_Nd has a value on the last day of the sample, the target was
+    computed backwards or shifted the wrong way.
     """
     column = f"fwd_return_{horizon}d"
     if column not in frame.columns:
-        raise KeyError(f"brak kolumny {column}")
+        raise KeyError(f"no column {column}")
     return bool(frame[column].tail(horizon).isna().all())

@@ -1,13 +1,13 @@
-"""Zlozenie wszystkich cech w jedna ramke dzienna.
+"""Assembling every feature into one daily frame.
 
-Dwie zasady, ktore przenikaja caly modul:
+Two rules run through this module:
 
-1. Ramka cech nie zawiera zwrotow przyszlych. Cele (`fwd_ret_*`) dokleja
-   osobna funkcja, zeby przypadkowe `df.corr()` nie zmieszalo predyktorow
-   z tym, co przewidujemy.
-2. Builder przyjmuje `as_of` i odtwarza stan wiedzy z dowolnego dnia -
-   dzieki temu test look-ahead moze porownac wersje punkt-w-czasie
-   z wersja pelna (features/checks.py).
+1. The feature frame contains no forward returns. Targets (`fwd_return_*`) are
+   attached by a separate function, so that an accidental `df.corr()` cannot
+   mix predictors with the thing being predicted.
+2. The builder takes `as_of` and reconstructs the state of knowledge on any
+   given day - which is what lets the look-ahead test compare a point-in-time
+   version against the full one (features/checks.py).
 """
 from __future__ import annotations
 
@@ -27,14 +27,14 @@ DEFAULT_HORIZONS = [7, 30, 90, 180]
 
 @dataclass
 class FeatureInputs:
-    """Surowe wejscia; kazde z kolumna `available_from`."""
+    """Raw inputs; each one carries an `available_from` column."""
 
     prices: pd.DataFrame
     macro: pd.DataFrame
     events: pd.DataFrame
 
     def as_of(self, day: str | pd.Timestamp | None) -> "FeatureInputs":
-        """Kopia zawierajaca wylacznie dane opublikowane do dnia `day` wlacznie."""
+        """A copy containing only data published up to and including `day`."""
         if day is None:
             return self
         cutoff = pd.Timestamp(day).normalize()
@@ -49,7 +49,7 @@ class FeatureInputs:
 
 
 def price_features(prices: pd.DataFrame) -> pd.DataFrame:
-    """Cechy z samej ceny. Kazde okno patrzy wylacznie wstecz."""
+    """Features derived from price alone. Every window looks strictly backwards."""
     df = prices.copy()
     df["date"] = pd.to_datetime(df["date"]).dt.normalize()
     df = df.drop_duplicates(subset="date", keep="last").sort_values("date").set_index("date")
@@ -83,7 +83,7 @@ def build_features(
     halving_window_list: list[int] | None = None,
     strict_halving: bool = False,
 ) -> pd.DataFrame:
-    """Buduje ramke cech dzienna dla stanu wiedzy z dnia `as_of`."""
+    """Build the daily feature frame for the state of knowledge on `as_of`."""
     event_windows = event_windows or DEFAULT_EVENT_WINDOWS
     halving_window_list = halving_window_list or DEFAULT_HALVING_WINDOWS
 
@@ -105,7 +105,7 @@ def build_features(
 def add_forward_returns(
     frame: pd.DataFrame, horizons: list[int] | None = None, price_column: str = "close"
 ) -> pd.DataFrame:
-    """Dokleja cele: zwrot za H dni do przodu. Ostatnie H dni to z definicji NaN."""
+    """Attach targets: the return H days ahead. The last H days are NaN by definition."""
     horizons = horizons or DEFAULT_HORIZONS
     out = frame.copy()
     close = out[price_column]
@@ -115,7 +115,7 @@ def add_forward_returns(
 
 
 def feature_columns(frame: pd.DataFrame) -> list[str]:
-    """Kolumny predyktorow - wszystko poza celami i surowa cena."""
+    """Predictor columns - everything except targets and the raw price."""
     excluded = {"close"}
     return [
         c for c in frame.columns
