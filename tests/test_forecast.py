@@ -99,9 +99,10 @@ def test_forward_looking_columns_are_never_used():
 def test_sparse_columns_are_dropped_not_imputed(noise_frame):
     """An all-NaN column must not wipe out the training set.
 
-    This is not hypothetical: `days_since_event_cycle_extreme` is entirely NaN
-    because no event of that category exists, and a plain dropna across every
-    candidate column leaves zero rows.
+    This is not hypothetical. Any category whose first event falls after the
+    start of the price history leaves `days_since_event_<category>` all-NaN over
+    an early training window, and a plain dropna across every candidate column
+    then leaves zero rows.
     """
     frame = noise_frame.copy()
     frame["never_observed"] = np.nan

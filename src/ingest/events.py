@@ -7,7 +7,8 @@ an event that was publicly known at the moment it happened.
 Columns:
     name           - identifier (unique together with the date),
     date           - the day of the event (UTC),
-    category       - halving | regulation | macro | market_structure | credit_event,
+    category       - halving | regulation | macro | market_structure |
+                     credit_event | protocol_upgrade,
     description    - one sentence of context,
     available_from - when the market learned about it (defaults to date),
     source         - link or citation; FILL THIS IN before drawing conclusions.
@@ -17,6 +18,10 @@ biased - we remember the ones that were followed by something. Treat event
 study results on a hand-made list as hypotheses, not proof, which is why
 analysis/event_study.py always reports a confidence interval and the number of
 events.
+
+The protocol_upgrade category is the exception and the control. See the note
+above VALID_CATEGORIES, and read that category's result before any other: it is
+the closest thing here to a measurement of the method's own false-positive rate.
 """
 from __future__ import annotations
 
@@ -34,7 +39,19 @@ VALID_CATEGORIES = {
     "macro",
     "market_structure",
     "credit_event",
-    "cycle_extreme",
+    # Consensus rule changes enforced on mainnet. This category is complete by
+    # construction - the protocol enumerates its members, we do not - and every
+    # activation height was locked in weeks ahead, so the date carried no news.
+    # Complete plus pre-announced makes it the placebo group: an effect found
+    # here is a property of the method, because there was nothing to react to.
+    "protocol_upgrade",
+    # "cycle_extreme" was here and has been removed. A cycle top or bottom is
+    # identified from the price itself, and always in hindsight. An event study
+    # around price-defined dates finds a rise before the top and a fall after
+    # it with certainty, because that is what selected the date - the result is
+    # the definition read back. It was never populated, which is the only
+    # reason it did no damage; three hypotheses were being generated and
+    # skipped for it every run.
 }
 
 

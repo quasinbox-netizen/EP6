@@ -107,7 +107,7 @@ class RidgeLogistic:
         observed on less than `min_coverage` of those rows is dropped rather
         than imputed. This is not tidiness, it is necessary - the
         `days_since_event_*` columns are NaN before the first event of their
-        category (and `cycle_extreme` has no events at all), so a plain dropna
+        category (an early-cycle category can have none at all), so a plain dropna
         across every candidate column leaves zero rows.
 
         Dropping beats imputing here because there is no honest fill value:

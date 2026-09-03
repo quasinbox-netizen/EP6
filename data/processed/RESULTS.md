@@ -55,11 +55,13 @@ correction below.
 
 ## Validation
 
-**23 hypotheses** (halving windows × event categories × macro phases):
+**26 hypotheses** (halving windows × event categories × macro phases):
 
-* significant raw: **0** — chance alone would give ~1.2,
+* significant raw: **0** — chance alone would give ~1.3,
 * after Benjamini-Hochberg correction: **0**,
-* skipped for lack of data: 3 (the `cycle_extreme` category is still empty),
+* skipped for lack of data: **0** - the `cycle_extreme` category was removed
+  (a cycle top is identified from the price itself, so an event study around
+  one recovers its own selection rule) and `protocol_upgrade` replaced it,
 * replicating out of sample (cycles 0–2 → 3–4): **1**, and it needs unpacking.
 
 `event_credit_event_7d` — the week after a credit event — passes the
@@ -72,8 +74,8 @@ anything, for two reasons that the table now shows explicitly:
    another; there was nothing to reappear. The `significant_in_train` column
    exists so this cannot hide.
 2. **It does not survive multiple testing.** Across the full sample its raw
-   p = 0.094 becomes **q = 0.76** after correction — nowhere near significant
-   among 23 hypotheses.
+   p = 0.095 becomes **q = 0.75** after correction — nowhere near significant
+   among 26 hypotheses.
 
 The replication rule was deliberately left as it is rather than tightened to
 require training significance. Changing a criterion after seeing which
@@ -129,6 +131,56 @@ M2 and +105.9% computed from the proxy. Same label, opposite conclusion.
 | macro (M2 up, rates down) | +257% | 8.8% | 0.46 | −57.4% | 10% |
 
 ---
+
+## The placebo group
+
+Every result below rests on one question: how often does this method report an
+effect where there is none? The event registry now answers it with data rather
+than assertion.
+
+`protocol_upgrade` holds the five consensus rule changes enforced on Bitcoin
+mainnet inside the price window - BIP66, BIP65, CSV, SegWit, Taproot. The
+category is chosen to be uninformative in two independent ways:
+
+* **Complete.** The protocol enumerates its members. Nobody selected these
+  five, so they cannot have been selected for having moved the price.
+* **Pre-announced.** Every activation height was locked in weeks ahead. Nobody
+  learned anything on the day.
+
+Nothing happened on those dates, in the only sense that matters to a market. So
+whatever the analysis reports around them is a measurement of the analysis.
+
+Here is what it reports.
+
+| where | placebo result | rank among all hypotheses |
+| --- | --- | --- |
+| event study, 365d | CAR −20.4%, p = 0.76 | weakest of six categories |
+| hypothesis scan, 30d | p = 0.209 | **5th of 26** |
+| walk-forward, 30d | p = 0.032 | **strongest raw p-value in the table** |
+| forecast model | coefficient −0.032 | **3rd largest of all features** |
+
+The last two rows are the useful ones.
+
+In walk-forward, the placebo produces the smallest raw p-value of any
+hypothesis tested - smaller than every halving window, every regulatory event,
+every macro phase. Run without correction, this pipeline would have announced
+that Bitcoin reacts to software upgrades whose dates were public months in
+advance. After Benjamini-Hochberg the same number is q = 0.33 and the finding
+evaporates, which is the entire argument for correcting, produced here by the
+data instead of by a simulation.
+
+In the forecast model, the placebo feature receives the third-largest
+coefficient of any predictor, ahead of `halving_after_365d`. A penalised model
+fitted on 26 candidate signals will happily assign weight to a column that
+cannot carry information. That is what overfitting looks like from the inside,
+and it is why the verdict is read from out-of-sample scores and never from the
+coefficient table.
+
+**Calibration for reading everything else in this document:** a raw p-value
+between 0.03 and 0.25 is routinely produced here by a variable known to be
+empty. The halving's 90-day and 180-day windows (p = 0.64 and p = 0.41) are
+*less* distinguishable from noise than the placebo is. Nothing in this project
+should be believed on the strength of an uncorrected p-value.
 
 ## A note on the event registry
 

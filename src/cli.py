@@ -256,7 +256,7 @@ def cmd_study(args) -> int:
     print("\n--- event categories ---")
     rows = []
     for category, study in category_event_studies(data, post=args.post, config=config).items():
-        rows.append({"kategoria": category, "n": study.n_events, **study.car_summary})
+        rows.append({"category": category, "n": study.n_events, **study.car_summary})
     if rows:
         table = pd.DataFrame(rows)
         print(table.to_string(index=False))
@@ -430,7 +430,7 @@ def cmd_control(args) -> int:
         return 1
 
     dates = None
-    label = "halvingi"
+    label = "halvings"
     if args.category:
         if data.events.empty:
             print("no event registry")

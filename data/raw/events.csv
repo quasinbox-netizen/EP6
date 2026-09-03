@@ -14,6 +14,20 @@
 # "boring" event - one that looked alarming at the time and turned out to be
 # nothing. Without those the event study measures our memory, not the market.
 #
+# The protocol_upgrade rows are the one category here free of that bias, and
+# they are the reason the category exists. They are:
+#
+#   - COMPLETE. Every consensus rule change enforced on Bitcoin mainnet inside
+#     the price window is listed. Nothing was picked; the protocol enumerates
+#     them. Adding a sixth would require Bitcoin to change, not us to remember.
+#   - SCHEDULED. Each activation height was locked in weeks ahead, so the date
+#     carried no news. Nobody learned anything on the day.
+#
+# That makes them a placebo group. A real market reaction to information cannot
+# show up where there was no information, so any "significant" effect found
+# around these dates is measuring the method, not the market. Read their row in
+# the event study first, before reading any other row.
+#
 # Dates are the UTC day on which the information became public. Where an
 # announcement landed after the close, available_from is the following day.
 name,date,category,description,available_from,source
@@ -38,3 +52,8 @@ svb_usdc_depeg,2023-03-10,credit_event,"California regulators close Silicon Vall
 spot_etf_launch,2024-01-11,market_structure,US spot bitcoin ETPs begin trading; the SEC approved the listings on 10 January,2024-01-11,https://www.sec.gov/newsroom/speeches-statements/gensler-statement-spot-bitcoin-011023
 halving_2024,2024-04-20,halving,Fourth halving: block subsidy cut from 6.25 to 3.125 BTC at block 840000,2024-04-20,https://mempool.space/block/840000
 fed_first_cut_2024,2024-09-18,macro,"First rate cut after the tightening cycle: 50bp, the first reduction since 2020",2024-09-18,https://www.federalreserve.gov/newsevents/pressreleases/monetary20240918a.htm
+bip66_der,2015-07-04,protocol_upgrade,BIP66 strict DER signatures enforced at block 363731,2015-07-04,https://mempool.space/block/363731
+bip65_cltv,2015-12-14,protocol_upgrade,BIP65 CHECKLOCKTIMEVERIFY enforced at block 388381,2015-12-14,https://mempool.space/block/388381
+bip68_csv,2016-07-04,protocol_upgrade,BIP68/112/113 relative locktime and CHECKSEQUENCEVERIFY enforced at block 419328,2016-07-04,https://mempool.space/block/419328
+segwit_activation,2017-08-24,protocol_upgrade,BIP141 Segregated Witness enforced at block 481824,2017-08-24,https://mempool.space/block/481824
+taproot_activation,2021-11-14,protocol_upgrade,BIP341/342 Taproot enforced at block 709632,2021-11-14,https://mempool.space/block/709632

@@ -5,7 +5,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from ingest.events import load_events_csv
+from ingest.events import VALID_CATEGORIES, load_events_csv
 from ingest.macro import load_manual_csv
 from ingest.prices import store_prices
 from ingest.quality import check_macro, check_prices, compare_sources
@@ -176,7 +176,7 @@ def test_non_ascii_event_description_survives_the_round_trip(tmp_path, db_path):
     path.write_text(
         "name,date,category,description,available_from,source\n"
         "dash_event,2020-03-12,macro,Crash — risk assets,2020-03-12,\n"
-        "umlaut_event,2021-05-19,regulation,München łódź,2021-05-19,\n",
+        "umlaut_event,2021-05-19,regulation,München łódź,2021-05-19,\n",  # non-english-ok: deliberate UTF-8 fixture
         encoding="utf-8",
     )
 
@@ -187,7 +187,7 @@ def test_non_ascii_event_description_survives_the_round_trip(tmp_path, db_path):
     with connect(db_path) as conn:
         assert store_events(conn, events) == 2
         stored = read_events(conn)
-    assert "łódź" in stored.loc[1, "description"]
+    assert "łódź" in stored.loc[1, "description"]  # non-english-ok: deliberate UTF-8 fixture
 
 
 def test_storing_events_replaces_rather_than_merges(db_path, tmp_path):
@@ -241,3 +241,50 @@ def test_removing_an_event_from_the_file_removes_it_from_the_database(db_path, t
         stored = read_events(conn)
 
     assert list(stored["name"]) == ["keep"]
+
+
+def test_protocol_upgrades_are_complete_and_sourced_on_chain():
+    """The placebo group is only a placebo while it stays complete.
+
+    Its value comes from nobody having chosen its members: the protocol
+    enumerates every consensus change, so the category cannot be tuned by
+    adding the upgrades that "worked". This test pins the five that activated
+    inside the price window, by activation height. A sixth is legitimate only
+    when Bitcoin ships a sixth - and then the block explorer link proves it.
+
+    Dropping one would be worse than adding a wrong one. A shortened placebo
+    group quietly stops being complete, and nothing else in the suite notices.
+    """
+    from config import load_config
+
+    events = load_events_csv(load_config().root / "data" / "raw" / "events.csv")
+    upgrades = events[events["category"] == "protocol_upgrade"]
+
+    expected = {
+        "bip66_der": ("2015-07-04", "363731"),
+        "bip65_cltv": ("2015-12-14", "388381"),
+        "bip68_csv": ("2016-07-04", "419328"),
+        "segwit_activation": ("2017-08-24", "481824"),
+        "taproot_activation": ("2021-11-14", "709632"),
+    }
+    assert set(upgrades["name"]) == set(expected)
+
+    for name, (date, height) in expected.items():
+        row = upgrades[upgrades["name"] == name].iloc[0]
+        assert str(row["date"].date()) == date, f"{name}: activation date moved"
+        # The height is the claim; the explorer link is what makes it checkable.
+        assert height in str(row["source"]), f"{name}: source does not cite block {height}"
+
+    # Pre-announced to the block, so the market learned nothing on the day.
+    assert (upgrades["available_from"] == upgrades["date"]).all()
+
+
+def test_cycle_extreme_is_not_a_valid_category():
+    """Price-defined events are circular and must stay rejected.
+
+    A cycle top is chosen because the price rose into it and fell after. An
+    event study on such dates recovers that shape with certainty - it reads the
+    selection rule back as a finding. The guard is that the category simply
+    cannot be spelled.
+    """
+    assert "cycle_extreme" not in VALID_CATEGORIES

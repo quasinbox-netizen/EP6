@@ -418,7 +418,7 @@ def control_comparison(
     data: LabData,
     *,
     event_dates=None,
-    label: str = "halvingi",
+    label: str = "halvings",
     post: int = 365,
     config=None,
 ) -> dict:

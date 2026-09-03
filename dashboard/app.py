@@ -265,7 +265,7 @@ def main() -> None:
         studies = cached_category_studies(min(study_post, 180))
         if studies:
             rows = [
-                {"kategoria": name, "n": result.n_events, **result.car_summary}
+                {"category": name, "n": result.n_events, **result.car_summary}
                 for name, result in studies.items()
             ]
             st.dataframe(pd.DataFrame(rows), width="stretch", hide_index=True)
