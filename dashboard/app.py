@@ -215,7 +215,7 @@ def main() -> None:
 
     with tab_price:
         st.plotly_chart(
-            price_chart(data, halving_window_days, show_events), use_container_width=True
+            price_chart(data, halving_window_days, show_events), width="stretch"
         )
         columns = st.columns(4)
         columns[0].metric("Days in sample", f"{len(data.features):,}")
@@ -225,13 +225,13 @@ def main() -> None:
         with st.expander("Event registry"):
             st.dataframe(
                 data.events.loc[:, ["date", "category", "name", "description"]],
-                use_container_width=True, hide_index=True,
+                width="stretch", hide_index=True,
             )
 
     with tab_study:
         study = cached_halving_study(study_post)
         st.plotly_chart(
-            car_chart(study, f"Halvings (n={study.n_events})"), use_container_width=True
+            car_chart(study, f"Halvings (n={study.n_events})"), width="stretch"
         )
         st.info(study.summary())
         if study.n_events < 10:
@@ -248,11 +248,11 @@ def main() -> None:
                 {"kategoria": name, "n": result.n_events, **result.car_summary}
                 for name, result in studies.items()
             ]
-            st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
+            st.dataframe(pd.DataFrame(rows), width="stretch", hide_index=True)
             choice = st.selectbox("Chart for category", sorted(studies))
             st.plotly_chart(
                 car_chart(studies[choice], f"{choice} (n={studies[choice].n_events})"),
-                use_container_width=True,
+                width="stretch",
             )
         st.caption(
             "The p-values in this table are RAW. Use the Validation tab for inference."
@@ -273,7 +273,7 @@ def main() -> None:
                 if comparison.table.empty:
                     st.info("no shared events with a complete window")
                     continue
-                st.dataframe(comparison.table, use_container_width=True)
+                st.dataframe(comparison.table, width="stretch")
                 verdict = comparison.verdict()
                 if "NOT common" in verdict:
                     st.success(verdict)
@@ -288,7 +288,7 @@ def main() -> None:
                         f"p = {placebo.car_summary['p_value']:.3f}"
                     )
                 with st.expander(f"CAR of individual events ({name})"):
-                    st.dataframe(comparison.per_event, use_container_width=True)
+                    st.dataframe(comparison.per_event, width="stretch")
 
     with tab_validation:
         scan = cached_scan()
@@ -302,7 +302,7 @@ def main() -> None:
                     :, ["hypothesis", "n_in", "mean_in", "mean_out", "difference",
                         "p_value", "p_adjusted", "significant_adjusted"]
                 ],
-                use_container_width=True, hide_index=True,
+                width="stretch", hide_index=True,
             )
         out_of_sample = cached_out_of_sample()
         if not out_of_sample.empty:
@@ -312,7 +312,7 @@ def main() -> None:
                     :, ["hypothesis", "train_effect", "test_effect", "same_sign",
                         "significant_out_of_sample", "effect_retained", "replicated"]
                 ],
-                use_container_width=True, hide_index=True,
+                width="stretch", hide_index=True,
             )
             survivors = out_of_sample[out_of_sample["replicated"]]["hypothesis"].tolist()
             if survivors:
@@ -328,13 +328,13 @@ def main() -> None:
         if table.empty:
             st.info("No backtest results.")
         else:
-            st.plotly_chart(equity_chart(curves), use_container_width=True)
+            st.plotly_chart(equity_chart(curves), width="stretch")
             st.dataframe(
                 table.loc[
                     :, ["total_return", "cagr", "sharpe", "sortino", "max_drawdown",
                         "calmar", "win_rate", "time_in_market", "turnover_annual", "total_cost"]
                 ],
-                use_container_width=True,
+                width="stretch",
             )
             baseline = table.loc["buy and hold"]
             better = [
