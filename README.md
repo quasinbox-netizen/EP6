@@ -1,5 +1,7 @@
 # btc-cycle-lab
 
+[![tests](https://github.com/quasinbox-netizen/EP6/actions/workflows/tests.yml/badge.svg)](https://github.com/quasinbox-netizen/EP6/actions/workflows/tests.yml)
+
 A local research lab for testing whether the Bitcoin halving cycle and macro
 events explain anything in the price of BTC.
 
@@ -24,13 +26,13 @@ You need Python 3.11 or newer. Everything else happens automatically — the
 launcher creates a virtual environment and installs dependencies on first run.
 Nothing is installed system-wide.
 
-**Windows** — the supported platform, tested on every push:
+**Windows**
 
 ```bat
 .\btc.cmd ingest --what all
 ```
 
-**macOS and Linux** — should work, but not yet verified:
+**macOS and Linux**
 
 ```bash
 ./btc ingest --what all
@@ -44,21 +46,23 @@ python run.py ingest --what all
 
 The wrappers are one-line shims around `run.py`; use whichever is convenient.
 
-### Platform support, stated honestly
+### Platform support
 
-| platform | status |
-|---|---|
-| Windows 10/11 | **supported** — CI runs the suite on every push, Python 3.11 and 3.13 |
-| macOS, Linux | **untested** — the code has no platform-specific logic and `run.py` handles the venv layout, but nobody has run it there yet |
+| platform | Python | verified |
+|---|---|---|
+| Windows 10/11 | 3.11, 3.13 | every push |
+| Linux (Ubuntu) | 3.11, 3.13 | every push |
+| macOS | 3.11, 3.13 | weekly, and on demand |
 
-That second row is a statement about evidence, not about quality. The Python
-code contains nothing Windows-specific and the launcher already handles the
-`Scripts/` versus `bin/` difference, so it very likely works. It has simply not
-been run, and this project does not claim results it has not measured — that
-rule applies to its own README as much as to Bitcoin.
+All six combinations run the full offline suite through `run.py`, so each one
+exercises the real installation path — interpreter discovery, virtual
+environment creation, dependency install — not just the tests. The two POSIX
+jobs additionally assert that `./btc` still has its execute bit and runs.
 
-If you run it on macOS or Linux, an issue saying whether it worked is a genuinely
-useful contribution.
+macOS is on a schedule rather than on every push because GitHub bills those
+runners at ten times the Linux rate; a full matrix on every push would consume
+the free monthly allowance in about thirty pushes. Trigger it manually from the
+Actions tab after changing anything in the launcher.
 The examples below use `run.py` because it is identical everywhere.
 
 Then run any of these:
