@@ -20,7 +20,16 @@ data/processed/**
 !data/processed/backtest_comparison.csv
 !data/processed/walk_forward.csv
 !data/processed/walk_forward_folds.csv
+!data/processed/forecast_folds.csv
+!data/processed/forecast_pooled.csv
+!data/processed/forecast_calibration.csv
 .pytest_cache/
 .streamlit/secrets.toml
 *.log
 .pytest-tmp/
+
+# Agent tooling, not project code. The Streamlit skill under .claude/skills is
+# third-party content with its own licence, and both entries are symlinks that
+# would be dangling for anyone who clones this.
+.agents/
+.claude/skills/

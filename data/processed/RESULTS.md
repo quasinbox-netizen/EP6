@@ -111,6 +111,34 @@ M2 and +105.9% computed from the proxy. Same label, opposite conclusion.
 
 ---
 
+## Directional forecast (30-day horizon, 13 folds)
+
+Probability that the forward 30-day return is positive, scored on 155
+non-overlapping rows pooled across the walk-forward folds.
+
+| predictor | Brier | log loss | accuracy | AUC | base rate |
+|---|---|---|---|---|---|
+| model | 0.2805 | 1.2817 | 54.8% | 0.474 | 59.4% |
+| always_up | 0.2471 | 0.6876 | 59.4% | — | 59.4% |
+| coin_flip | 0.2500 | 0.6931 | 40.7% | 0.500 | 59.4% |
+| momentum | 0.2476 | 0.6893 | 59.4% | 0.465 | 59.4% |
+
+**Verdict: NO EDGE.** The model loses to every baseline on the Brier score
+(−12.2% vs coin flip, −13.5% vs always-up, −13.3% vs momentum), and its AUC of
+0.474 means its ranking is, if anything, marginally worse than random.
+
+The penalty was selected per fold on an inner split of that fold's training
+window, so this is not the result of a badly tuned model: with a fixed weak
+penalty the Brier score was 0.39, far worse still.
+
+Calibration in the middle buckets is reasonable (gap −0.03 and +0.06 where 85%
+of the predictions fall), so the model is not nonsense — it simply has no
+information about the future beyond the base rate.
+
+The most recent prediction at the time of this snapshot was 54.6% against a
+training base rate of 56.6%, i.e. 2 points *below* "the asset usually goes up".
+Given the verdict above, that number is decoration.
+
 ## Conclusion
 
 The only strategy with a better Sharpe than buy-and-hold at meaningful exposure

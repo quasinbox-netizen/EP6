@@ -17,6 +17,7 @@ from backtest.strategies import buy_and_hold, halving_window, macro_regime, tren
 from config import load_config
 from features.build import FeatureInputs, add_forward_returns, build_features
 from features.macro_phase import macro_phase
+from forecast.walk import latest_prediction, run_walk_forward
 from features.halving import CONFIRMED_HALVINGS
 from ingest.prices import load_stitched
 from storage import connect, read_events, read_macro, read_prices
@@ -312,6 +313,49 @@ def walk_forward_check(
     corrected.attrs["test_windows_disjoint"] = disjoint
     corrected.attrs["folds"] = pd.DataFrame([f.describe() for f in folds])
     return corrected
+
+
+def forecast_report(data: LabData, config=None) -> dict:
+    """Directional forecast, evaluated walk-forward against the baselines.
+
+    Returns the walk-forward run plus the most recent prediction. The two must
+    be read together: if the run says there is no edge, the latest probability
+    is decoration, and the CLI says so out loud.
+    """
+    config = config or load_config()
+    frame = with_phase_dummies(data.features)
+    if frame.empty:
+        return {"error": "the database is empty - run `ingest` first"}
+
+    settings = config.get("forecast", {})
+    horizon = int(settings.get("horizon_days", 30))
+    if f"fwd_return_{horizon}d" not in frame.columns:
+        return {
+            "error": f"no fwd_return_{horizon}d column - the horizon in config.yaml "
+                     "must be one of the horizons load_lab_data builds"
+        }
+
+    walk = config["validation"].get("walk_forward", {})
+    splits = walk_forward_splits(
+        frame.index,
+        train_days=int(walk.get("train_days", 730)),
+        test_days=int(walk.get("test_days", 365)),
+        step_days=int(walk["step_days"]) if walk.get("step_days") else None,
+        embargo_days=int(walk.get("embargo_days", 90)),
+        expanding=bool(walk.get("expanding", True)),
+    )
+    if not splits:
+        return {"error": "not enough data for walk-forward validation"}
+
+    run = run_walk_forward(frame, splits, horizon=horizon)
+    if run.n_folds == 0:
+        return {"error": "no fold could be fitted"}
+
+    return {
+        "horizon": horizon,
+        "run": run,
+        "latest": latest_prediction(frame, horizon=horizon),
+    }
 
 
 def macro_phase_comparison(data: LabData, config=None) -> dict:

@@ -57,6 +57,7 @@ Then run any of these:
 | `run.py macro` | liquidity axis: real M2 vs the dollar proxy |
 | `run.py validate` | hypothesis scan with correction + out-of-sample replication |
 | `run.py walkforward` | walk-forward validation across 13 disjoint windows |
+| `run.py forecast` | directional forecast, scored against three baselines |
 | `run.py backtest` | strategies vs buy-and-hold |
 | `run.py all` | everything in sequence |
 | `run.py dashboard` | browser dashboard on port 8511 |
@@ -171,6 +172,42 @@ a **planted leak** (normalising by the median of the whole sample) to prove the
 detector works.
 
 ---
+
+## Forecasting: what the tool will and will not do
+
+It does **not** forecast a price level. At 4% daily volatility the confidence
+interval around a 30-day price is wider than the forecast, so the number would
+carry no information.
+
+It does estimate the **probability that the 30-day forward return is positive**,
+and then spends most of its effort deciding whether that estimate is worth
+anything. The model is a ridge-penalised logistic regression on the same
+point-in-time features as everything else; the penalty is chosen on an inner
+chronological split of each training window, never on the test window.
+
+Three baselines have to be beaten before the model means anything:
+
+| baseline | the objection it answers |
+|---|---|
+| `always_up` | "the asset just goes up" — uses the training-window base rate |
+| `coin_flip` | a constant 0.5, the reference point for the Brier score |
+| `momentum` | "last month continues" — the cheapest real predictor |
+
+`always_up` is the one that matters. Bitcoin rose in **59%** of the 30-day
+windows in this sample, so a model reporting 58% accuracy has demonstrated
+nothing — and that is how most "BTC prediction models" are presented, against
+an implied 50% nobody actually competes with.
+
+Two further details the report insists on:
+
+* **Overlapping labels.** A 30-day return on consecutive days shares 29 days of
+  the future. 4644 daily predictions are not 4644 observations, so the headline
+  metrics are computed on 155 non-overlapping rows. Both numbers are printed.
+* **Discrimination is not calibration.** AUC says whether the ranking works;
+  the Brier score also punishes being confidently wrong. A model can rank well
+  and still lose on Brier — which is exactly what happens when the base rate
+  swings between windows, as it does here (0.27 to 0.72 across test windows in
+  the synthetic power test).
 
 ## Control group: the placebo test
 
@@ -307,7 +344,7 @@ src/
 ├── pipeline.py  assembles everything - used by both the CLI and the dashboard
 └── cli.py
 dashboard/       Streamlit - presentation only, no logic (a test enforces this)
-tests/           145 offline tests + network tests, one file per phase
+tests/           176 offline tests + network tests, one file per phase
 ```
 
 The dashboard must not compute statistics. If a number appears on screen it

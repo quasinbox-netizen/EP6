@@ -96,6 +96,15 @@ backtest:
   # Trading days per year - Bitcoin trades all 365.
   periods_per_year: 365
 
+forecast:
+  # Horizon of the directional forecast, in calendar days. Longer means less
+  # noise but fewer independent observations; 30 is the compromise.
+  horizon_days: 30
+  # Strength of the L2 penalty on the model coefficients. The features are
+  # collinear on purpose (several return windows overlap), so some penalty is
+  # required for the fit to be well posed at all.
+  ridge_alpha: 1.0
+
 validation:
   # Split by halving cycle: training cycles vs test cycles.
   train_cycles: [0, 1, 2]

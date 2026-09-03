@@ -52,6 +52,7 @@ from ingest.quality import check_macro, check_prices, compare_sources  # noqa: E
 from pipeline import (  # noqa: E402
     category_event_studies,
     control_comparison,
+    forecast_report,
     halving_event_study,
     load_lab_data,
     macro_phase_comparison,
@@ -457,6 +458,87 @@ def cmd_control(args) -> int:
     return 0
 
 
+def cmd_forecast(args) -> int:
+    """Directional forecast and, more importantly, whether it beats the baselines."""
+    config = load_config()
+    data = load_lab_data(config)
+    if data.is_empty:
+        print("the database is empty - run `ingest` first")
+        return 1
+
+    report = forecast_report(data, config=config)
+    if "error" in report:
+        print(report["error"])
+        return 1
+
+    run = report["run"]
+    horizon = report["horizon"]
+    print(f"--- directional forecast, {horizon}-day horizon, {run.n_folds} folds ---")
+    print(
+        run.folds.loc[:, ["fold", "n_train", "alpha", "n", "brier", "accuracy",
+                          "auc", "base_rate"]]
+        .to_string(index=False, float_format=lambda v: f"{v:,.3f}")
+    )
+
+    print("\n--- pooled, non-overlapping rows only ---")
+    print(
+        run.pooled.loc[:, ["n", "brier", "log_loss", "accuracy", "auc",
+                           "mean_probability", "base_rate"]]
+        .to_string(float_format=lambda v: f"{v:,.4f}")
+    )
+    print(
+        f"\n(every row, including overlapping windows: "
+        f"n={int(run.pooled_all_rows.loc['model', 'n'])} - the number above is "
+        "the honest one, because a 30-day label on consecutive days repeats "
+        "almost all of itself)"
+    )
+
+    print("\n--- calibration: predicted vs actual ---")
+    if run.calibration.empty:
+        print("not enough data")
+    else:
+        print(run.calibration.to_string(float_format=lambda v: f"{v:,.3f}"))
+
+    print("\n" + "=" * 70)
+    print("VERDICT: " + run.summary())
+    print("=" * 70)
+
+    latest = report["latest"]
+    if "error" not in latest:
+        print(
+            f"\nMost recent prediction ({latest['as_of'].date()}): "
+            f"{latest['probability_up']:.1%} chance the next {horizon} days are up."
+        )
+        print(
+            f"Training base rate: {latest['train_base_rate']:.1%}. "
+            f"Difference: {latest['edge_over_base_rate']:+.1%} points."
+        )
+        if "NO EDGE" in run.summary():
+            print(
+                "\nRead that number as decoration. The walk-forward evaluation "
+                "above says this model has no edge out of sample, so the "
+                "probability is not evidence about the future - it is what a "
+                "model with no demonstrated skill happens to output today."
+            )
+
+    print("\n--- strongest coefficients (standardised, last fold) ---")
+    if run.weights.empty:
+        print("no model")
+    else:
+        print(run.weights.head(8).to_string(float_format=lambda v: f"{v:+.4f}"))
+        print(
+            "Direction and rough size only. With collinear predictors and a "
+            "penalty individual coefficients are not identified - and none of "
+            "it matters if the verdict above is NO EDGE."
+        )
+
+    _save(run.folds, config, "forecast_folds.csv")
+    _save(run.pooled, config, "forecast_pooled.csv")
+    if not run.calibration.empty:
+        _save(run.calibration, config, "forecast_calibration.csv")
+    return 0
+
+
 def cmd_backtest(args) -> int:
     config = load_config()
     data = load_lab_data(config)
@@ -483,7 +565,7 @@ def cmd_backtest(args) -> int:
 
 def cmd_all(args) -> int:
     for command in (cmd_quality, cmd_features, cmd_macro, cmd_study, cmd_control,
-                    cmd_validate, cmd_walkforward, cmd_backtest):
+                    cmd_validate, cmd_walkforward, cmd_backtest, cmd_forecast):
         print("\n" + "=" * 78)
         code = command(args)
         if code != 0:
@@ -531,6 +613,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="use events from this category instead of halvings (e.g. credit_event)",
     )
     control.set_defaults(func=cmd_control)
+
+    forecast = subparsers.add_parser(
+        "forecast", help="directional forecast vs baselines - does it beat them?"
+    )
+    forecast.set_defaults(func=cmd_forecast)
 
     macro = subparsers.add_parser("macro", help="liquidity axis: M2 vs proxy, FRED key status")
     macro.add_argument(
