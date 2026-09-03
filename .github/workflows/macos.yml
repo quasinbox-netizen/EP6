@@ -1,0 +1,43 @@
+name: macos
+
+# macOS on a schedule rather than on every push: GitHub bills these runners at
+# ten times the Linux rate, so a full matrix on every push would consume the
+# free monthly allowance in roughly thirty pushes. Once a week catches platform
+# drift, and workflow_dispatch covers "I changed the launcher, check it now".
+
+on:
+  schedule:
+    - cron: "30 6 * * 1"   # Mondays, 06:30 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  macos:
+    name: macos / py${{ matrix.python-version }}
+    runs-on: macos-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.13"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+          cache-dependency-path: requirements.txt
+
+      - name: Show the environment
+        run: python run.py doctor
+
+      - name: Check the POSIX launcher is executable and runs
+        run: |
+          test -x ./btc || { echo "btc lost its execute bit"; exit 1; }
+          ./btc doctor > /dev/null
+
+      - name: Run the offline test suite
+        run: python run.py test offline
