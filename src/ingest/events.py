@@ -68,9 +68,23 @@ def load_events_csv(path: str | Path) -> pd.DataFrame:
 
 
 def store_events(conn: sqlite3.Connection, df: pd.DataFrame) -> int:
+    """Replace the stored registry with the contents of the file.
+
+    Events are REPLACED, not merged, which is the opposite of how prices are
+    handled - and the difference matters. Prices are append-only history from
+    an API, so upserting is right. This registry is a hand-maintained file that
+    is the whole truth about which events exist.
+
+    Merging silently corrupts it. The primary key is (name, date), so
+    correcting a date leaves the old row behind: fixing mtgox_halt from
+    2014-02-25 to 2014-02-24 produced two mtgox_halt events, and the event
+    study then averaged over both. Deleting a row from the file would likewise
+    never remove it from the database.
+    """
     if df.empty:
         log_ingest(conn, "events", "manual", 0, status="empty")
         return 0
+    conn.execute("DELETE FROM events")
     rows = upsert_events(conn, df)
     log_ingest(
         conn,

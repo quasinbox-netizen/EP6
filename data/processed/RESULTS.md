@@ -45,10 +45,10 @@ powerless.
 | category | n | CAR(365d) | raw p |
 |---|---|---|---|
 | regulation | 3 | −194.4% | 0.081 |
-| market_structure | 3 | −304.7% | 0.197 |
+| market_structure | 3 | −301.3% | 0.197 |
 | macro | 4 | +106.1% | 0.287 |
 | halving | 4 | +125.2% | 0.296 |
-| credit_event | 6 | −81.8% | 0.494 |
+| credit_event | 7 | −131.4% | 0.261 |
 
 These numbers must not be read as results — they are the input to the
 correction below.
@@ -59,8 +59,27 @@ correction below.
 
 * significant raw: **0** — chance alone would give ~1.2,
 * after Benjamini-Hochberg correction: **0**,
-* replicating out of sample (cycles 0–2 → 3–4): **0**,
-* skipped for lack of data: 3 (the `cycle_extreme` category is still empty).
+* skipped for lack of data: 3 (the `cycle_extreme` category is still empty),
+* replicating out of sample (cycles 0–2 → 3–4): **1**, and it needs unpacking.
+
+`event_credit_event_7d` — the week after a credit event — passes the
+replication rule: same sign in both windows, significant in the test window
+(p = 0.031), effect larger rather than smaller. It is still not evidence of
+anything, for two reasons that the table now shows explicitly:
+
+1. **It was never established in training.** The training-window effect had
+   p = 0.42. Replication means an effect found in one sample reappearing in
+   another; there was nothing to reappear. The `significant_in_train` column
+   exists so this cannot hide.
+2. **It does not survive multiple testing.** Across the full sample its raw
+   p = 0.094 becomes **q = 0.76** after correction — nowhere near significant
+   among 23 hypotheses.
+
+The replication rule was deliberately left as it is rather than tightened to
+require training significance. Changing a criterion after seeing which
+hypothesis it would exclude is the same error this project exists to catch,
+merely pointed in the flattering direction. The fact is surfaced as a column
+instead, and the reader can weigh it.
 
 ## Walk-forward validation (13 disjoint windows, 2013-11 → 2026-09)
 
@@ -110,6 +129,24 @@ M2 and +105.9% computed from the proxy. Same label, opposite conclusion.
 | macro (M2 up, rates down) | +257% | 8.8% | 0.46 | −57.4% | 10% |
 
 ---
+
+## A note on the event registry
+
+Every date in `data/raw/events.csv` was checked against a source before this
+snapshot, and two were wrong:
+
+* `mtgox_halt` was 2014-02-25; trading was actually suspended on **2014-02-24**,
+* `cme_futures` was 2017-12-17; CME's own release announces an **18 December**
+  launch (the book opened 17 Dec at 23:00 UTC, inside the 18 December daily bar
+  this project uses).
+
+One event was added: Mt. Gox halting **withdrawals** on 2014-02-07, which moved
+the price more than the shutdown three weeks later and was simply missing.
+
+That is a 10% error rate on the dates in a file whose numbers feed every event
+study here — which is the argument for the `source` column existing at all.
+Correcting them changed the credit-event results; the halving results did not
+move, because no halving date was wrong.
 
 ## Directional forecast (30-day horizon, 13 folds)
 

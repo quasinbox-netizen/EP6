@@ -223,6 +223,7 @@ def replicate_finding(
     test_effect = test_result.get("difference", np.nan)
     same_sign = bool(np.sign(train_effect) == np.sign(test_effect)) and np.isfinite(test_effect)
     significant = bool(test_result.get("p_value", 1.0) < alpha)
+    significant_in_train = bool(train_result.get("p_value", 1.0) < alpha)
     retained = (
         float(abs(test_effect) / abs(train_effect)) if train_effect not in (0, np.nan) else np.nan
     )
@@ -230,6 +231,14 @@ def replicate_finding(
         "train_effect": train_effect,
         "test_effect": test_effect,
         "same_sign": same_sign,
+        # Reported but NOT part of the `replicated` rule. Strictly, replicating
+        # something that was never established in training is not replication -
+        # but the rule is left as it is rather than tightened after seeing which
+        # hypothesis it would exclude. Changing a criterion because you dislike
+        # the result it produced is the same error this project exists to avoid,
+        # just pointed the other way. So the fact is surfaced as a column and
+        # the reader can weigh it.
+        "significant_in_train": significant_in_train,
         "significant_out_of_sample": significant,
         "effect_retained": retained,
         "replicated": bool(same_sign and significant and np.isfinite(retained) and retained > 0.5),

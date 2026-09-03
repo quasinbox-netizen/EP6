@@ -1,30 +1,40 @@
 # Registry of historical events. Version-controlled and maintained by hand.
 #
-# BEFORE YOU DRAW CONCLUSIONS: fill in the `source` column and verify the dates.
-# The list below is starting material, not a verified source of truth.
-# Dates refer to the UTC day on which the information became public.
+# Every date below was checked against a source before being committed, and the
+# source column names it. Two dates were corrected during that check:
+#   - mtgox_halt was 2014-02-25, corrected to 2014-02-24 (trading was suspended
+#     that day and the site went blank hours later),
+#   - cme_futures was 2017-12-17, corrected to 2017-12-18 (CME's own release
+#     announces a 18 December launch; the book opened 17 Dec 23:00 UTC, which
+#     is inside the 18 December daily bar this project uses).
 #
-# A list assembled after the fact is subject to selection bias - we remember the
-# events the market reacted to. Add the boring ones too: the ones that looked
-# alarming at the time and came to nothing.
+# READ THIS BEFORE DRAWING CONCLUSIONS. A list assembled after the fact is
+# biased by construction: we remember the events that were followed by a large
+# move. The most useful contribution to this file is not another crash, it is a
+# "boring" event - one that looked alarming at the time and turned out to be
+# nothing. Without those the event study measures our memory, not the market.
+#
+# Dates are the UTC day on which the information became public. Where an
+# announcement landed after the close, available_from is the following day.
 name,date,category,description,available_from,source
-halving_2012,2012-11-28,halving,First block reward halving: 50 to 25 BTC,2012-11-28,
-halving_2016,2016-07-09,halving,Halving from 25 to 12.5 BTC,2016-07-09,
-halving_2020,2020-05-11,halving,Halving from 12.5 to 6.25 BTC,2020-05-11,
-halving_2024,2024-04-20,halving,Halving from 6.25 to 3.125 BTC,2024-04-20,
-mtgox_halt,2014-02-25,credit_event,Mt. Gox halts trading and its site goes dark,2014-02-25,
-mtgox_bankruptcy,2014-02-28,credit_event,Mt. Gox files for bankruptcy in Japan,2014-02-28,
-china_ico_ban,2017-09-04,regulation,China bans ICOs,2017-09-04,
-cboe_futures,2017-12-10,market_structure,BTC futures launch on CBOE,2017-12-10,
-cme_futures,2017-12-17,market_structure,BTC futures launch on CME,2017-12-17,
-covid_crash,2020-03-12,macro,Risk assets collapse at the start of the pandemic,2020-03-12,
-fed_zero_qe,2020-03-15,macro,The Fed cuts rates to zero and starts asset purchases,2020-03-15,
-china_mining_ban,2021-05-21,regulation,China announces a crackdown on mining and trading,2021-05-21,
-pboc_illegal,2021-09-24,regulation,The PBoC declares cryptocurrency transactions illegal,2021-09-24,
-fed_first_hike_2022,2022-03-16,macro,First rate hike of the tightening cycle,2022-03-16,
-terra_collapse,2022-05-09,credit_event,UST/LUNA loses its peg and collapses,2022-05-09,
-celsius_halt,2022-06-12,credit_event,Celsius halts withdrawals,2022-06-12,
-ftx_collapse,2022-11-08,credit_event,FTX halts withdrawals - bankruptcy on 11 November,2022-11-08,
-svb_usdc_depeg,2023-03-10,credit_event,SVB fails and USDC briefly loses its peg,2023-03-10,
-spot_etf_launch,2024-01-11,market_structure,US spot BTC ETFs begin trading,2024-01-11,
-fed_first_cut_2024,2024-09-18,macro,First rate cut after the tightening cycle,2024-09-18,
+halving_2012,2012-11-28,halving,First halving: block subsidy cut from 50 to 25 BTC at block 210000,2012-11-28,https://mempool.space/block/210000
+mtgox_withdrawals_halted,2014-02-07,credit_event,Mt. Gox suspends all customer withdrawals citing a transaction malleability bug,2014-02-07,https://en.bitcoin.it/wiki/Collapse_of_Mt._Gox
+mtgox_halt,2014-02-24,credit_event,Mt. Gox suspends trading; the site goes blank hours later,2014-02-24,https://en.bitcoin.it/wiki/Collapse_of_Mt._Gox
+mtgox_bankruptcy,2014-02-28,credit_event,Mt. Gox files for bankruptcy protection in Tokyo,2014-02-28,https://www.npr.org/sections/thetwo-way/2014/02/28/283863219/mtgox-files-for-bankruptcy-nearly-500m-of-bitcoins-lost
+halving_2016,2016-07-09,halving,Second halving: block subsidy cut from 25 to 12.5 BTC at block 420000,2016-07-09,https://mempool.space/block/420000
+china_ico_ban,2017-09-04,regulation,"PBOC and six other regulators ban fundraising through initial coin offerings",2017-09-04,https://www.loc.gov/item/global-legal-monitor/2017-10-19/china-regulators-ban-companies-from-raising-money-through-virtual-currencies/
+cboe_futures,2017-12-10,market_structure,Cboe opens the first regulated US bitcoin futures market (ticker XBT),2017-12-10,https://www.prnewswire.com/news-releases/cboe-bitcoin-futures-open-for-trading-663276183.html
+cme_futures,2017-12-18,market_structure,CME lists bitcoin futures; the book opened 17 Dec at 23:00 UTC for an 18 Dec trade date,2017-12-18,https://www.cmegroup.com/media-room/press-releases/2017/12/01/cme_group_self-certifiesbitcoinfuturestolaunchdec18.html
+covid_crash,2020-03-12,macro,"Black Thursday: risk assets collapse as the pandemic is declared; BTC falls about 50% intraday",2020-03-12,https://en.wikipedia.org/wiki/2020_stock_market_crash
+fed_zero_qe,2020-03-15,macro,Fed cuts to a 0-0.25% target range and launches 700bn USD of asset purchases,2020-03-15,https://www.federalreserve.gov/newsevents/pressreleases/monetary20200315a.htm
+halving_2020,2020-05-11,halving,Third halving: block subsidy cut from 12.5 to 6.25 BTC at block 630000,2020-05-11,https://mempool.space/block/630000
+china_mining_ban,2021-05-21,regulation,State Council financial committee calls for a crackdown on bitcoin mining and trading,2021-05-21,https://www.coindesk.com/markets/2021/05/21/bitcoin-falls-as-china-calls-for-crackdown-on-crypto-mining-trading
+pboc_illegal,2021-09-24,regulation,PBOC and nine other agencies declare all cryptocurrency transactions illegal,2021-09-24,https://www.france24.com/en/asia-pacific/20210924-china-s-central-bank-declares-all-cryptocurrency-transactions-illegal
+fed_first_hike_2022,2022-03-16,macro,"First rate rise of the tightening cycle: 25bp, the first increase since 2018",2022-03-16,https://www.federalreserve.gov/newsevents/pressreleases/monetary20220316a.htm
+terra_collapse,2022-05-09,credit_event,UST loses its dollar peg; the Terra ecosystem collapses over the following days,2022-05-09,https://jumpcrypto.com/writing/the-depegging-of-ust/
+celsius_halt,2022-06-12,credit_event,"Celsius pauses all withdrawals, swaps and transfers citing extreme market conditions",2022-06-12,https://x.com/CelsiusNetwork/status/1536169010877739009
+ftx_collapse,2022-11-08,credit_event,FTX halts all crypto withdrawals; bankruptcy follows on 11 November,2022-11-08,https://www.coindesk.com/business/2022/11/08/ftx-exchange-halts-all-crypto-withdrawals
+svb_usdc_depeg,2023-03-10,credit_event,"California regulators close Silicon Valley Bank; Circle discloses reserves held there and USDC loses its peg over the weekend",2023-03-10,https://www.fdic.gov/news/press-releases/2023/pr23019.html
+spot_etf_launch,2024-01-11,market_structure,US spot bitcoin ETPs begin trading; the SEC approved the listings on 10 January,2024-01-11,https://www.sec.gov/newsroom/speeches-statements/gensler-statement-spot-bitcoin-011023
+halving_2024,2024-04-20,halving,Fourth halving: block subsidy cut from 6.25 to 3.125 BTC at block 840000,2024-04-20,https://mempool.space/block/840000
+fed_first_cut_2024,2024-09-18,macro,"First rate cut after the tightening cycle: 50bp, the first reduction since 2020",2024-09-18,https://www.federalreserve.gov/newsevents/pressreleases/monetary20240918a.htm

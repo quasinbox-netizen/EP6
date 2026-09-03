@@ -330,7 +330,8 @@ def main() -> None:
             st.dataframe(
                 out_of_sample.loc[
                     :, ["hypothesis", "train_effect", "test_effect", "same_sign",
-                        "significant_out_of_sample", "effect_retained", "replicated"]
+                        "significant_in_train", "significant_out_of_sample",
+                        "effect_retained", "replicated"]
                 ],
                 width="stretch", hide_index=True,
             )

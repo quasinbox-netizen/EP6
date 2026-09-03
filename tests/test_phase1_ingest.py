@@ -188,3 +188,56 @@ def test_non_ascii_event_description_survives_the_round_trip(tmp_path, db_path):
         assert store_events(conn, events) == 2
         stored = read_events(conn)
     assert "łódź" in stored.loc[1, "description"]
+
+
+def test_storing_events_replaces_rather_than_merges(db_path, tmp_path):
+    """Correcting a date must not leave the old event behind.
+
+    The primary key is (name, date), so a merge would keep both rows: fixing
+    mtgox_halt from 2014-02-25 to 2014-02-24 produced two mtgox_halt events in
+    the database, and the event study happily averaged over both. The registry
+    is a hand-maintained file that states the whole truth about which events
+    exist, so storing it replaces what was there.
+    """
+    from ingest.events import load_events_csv, store_events
+    from storage import connect, read_events
+
+    header = "name,date,category,description,available_from,source\n"
+    first = tmp_path / "first.csv"
+    first.write_text(header + "some_event,2014-02-25,credit_event,typo,2014-02-25,url\n",
+                     encoding="utf-8")
+    corrected = tmp_path / "corrected.csv"
+    corrected.write_text(header + "some_event,2014-02-24,credit_event,fixed,2014-02-24,url\n",
+                         encoding="utf-8")
+
+    with connect(db_path) as conn:
+        store_events(conn, load_events_csv(first))
+        store_events(conn, load_events_csv(corrected))
+        stored = read_events(conn)
+
+    assert len(stored) == 1, "the row with the wrong date survived"
+    assert stored.loc[0, "date"] == pd.Timestamp("2014-02-24")
+    assert stored.loc[0, "description"] == "fixed"
+
+
+def test_removing_an_event_from_the_file_removes_it_from_the_database(db_path, tmp_path):
+    from ingest.events import load_events_csv, store_events
+    from storage import connect, read_events
+
+    header = "name,date,category,description,available_from,source\n"
+    two = tmp_path / "two.csv"
+    two.write_text(
+        header
+        + "keep,2020-01-01,macro,stays,2020-01-01,url\n"
+        + "drop,2020-02-01,macro,goes away,2020-02-01,url\n",
+        encoding="utf-8",
+    )
+    one = tmp_path / "one.csv"
+    one.write_text(header + "keep,2020-01-01,macro,stays,2020-01-01,url\n", encoding="utf-8")
+
+    with connect(db_path) as conn:
+        store_events(conn, load_events_csv(two))
+        store_events(conn, load_events_csv(one))
+        stored = read_events(conn)
+
+    assert list(stored["name"]) == ["keep"]

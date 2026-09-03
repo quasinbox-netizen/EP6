@@ -295,7 +295,8 @@ def cmd_validate(args) -> int:
         print(
             out_of_sample.loc[
                 :, ["hypothesis", "train_effect", "test_effect", "same_sign",
-                    "significant_out_of_sample", "effect_retained", "replicated"]
+                    "significant_in_train", "significant_out_of_sample",
+                    "effect_retained", "replicated"]
             ].to_string(index=False)
         )
         survivors = out_of_sample[out_of_sample["replicated"]]["hypothesis"].tolist()
