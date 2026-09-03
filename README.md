@@ -52,17 +52,17 @@ The wrappers are one-line shims around `run.py`; use whichever is convenient.
 |---|---|---|
 | Windows 10/11 | 3.11, 3.13 | every push |
 | Linux (Ubuntu) | 3.11, 3.13 | every push |
-| macOS | 3.11, 3.13 | weekly, and on demand |
+| macOS | 3.11, 3.13 | every push |
 
 All six combinations run the full offline suite through `run.py`, so each one
 exercises the real installation path — interpreter discovery, virtual
 environment creation, dependency install — not just the tests. The two POSIX
 jobs additionally assert that `./btc` still has its execute bit and runs.
 
-macOS is on a schedule rather than on every push because GitHub bills those
-runners at ten times the Linux rate; a full matrix on every push would consume
-the free monthly allowance in about thirty pushes. Trigger it manually from the
-Actions tab after changing anything in the launcher.
+Six jobs on every push. Actions minutes are free on public repositories, so
+there is no reason to hold macOS back to a schedule - and one workflow covering
+everything cannot drift out of step with a second one testing the same thing
+differently.
 The examples below use `run.py` because it is identical everywhere.
 
 Then run any of these:

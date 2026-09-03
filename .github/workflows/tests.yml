@@ -1,8 +1,10 @@
 name: tests
 
-# Linux and Windows on every push. macOS lives in its own workflow because
-# GitHub bills macOS runners at ten times the rate of Linux, which would burn
-# the free monthly allowance in about thirty pushes.
+# All three platforms on every push. Actions minutes are free on public
+# repositories, so the earlier split - macOS on a weekly schedule because
+# GitHub bills those runners at ten times the Linux rate - no longer buys
+# anything, and one workflow that tests everything cannot drift out of step
+# with a second one that tests the same thing differently.
 #
 # The job runs run.py rather than pytest directly, so every run exercises the
 # same installation path a user goes through: interpreter discovery, virtual
@@ -33,7 +35,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest]
+        os: [ubuntu-latest, windows-latest, macos-latest]
         # 3.11 is the declared minimum, 3.13 is what the project was built on.
         # The versions in between rarely add anything.
         python-version: ["3.11", "3.13"]
