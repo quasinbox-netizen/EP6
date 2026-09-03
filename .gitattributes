@@ -1,0 +1,15 @@
+# Normalise line endings so the repo is identical on Windows, macOS and Linux.
+# Without this, a Windows contributor commits CRLF and every file looks changed
+# to everyone else.
+* text=auto eol=lf
+
+# Windows batch files must keep CRLF or cmd.exe can mis-parse them.
+*.cmd text eol=crlf
+
+# The POSIX launcher must keep LF or the shebang breaks on Linux and macOS.
+btc text eol=lf
+
+# Binary, never diffed or normalised.
+*.sqlite binary
+*.png binary
+*.jpg binary

@@ -27,6 +27,7 @@ from features.halving import CONFIRMED_HALVINGS  # noqa: E402
 from pipeline import (  # noqa: E402
     category_event_studies,
     control_comparison,
+    forecast_report,
     halving_event_study,
     load_lab_data,
     out_of_sample_check,
@@ -64,6 +65,11 @@ def cached_category_studies(post: int):
 @st.cache_data(show_spinner="Comparing against the control group...")
 def cached_control(post: int):
     return control_comparison(cached_data(), post=post)
+
+
+@st.cache_data(show_spinner="Fitting and scoring the forecast...")
+def cached_forecast():
+    return forecast_report(cached_data())
 
 
 @st.cache_data(show_spinner="Scanning hypotheses...")
@@ -220,8 +226,11 @@ def main() -> None:
             f"{config['backtest']['slippage_bps']} bps slippage"
         )
 
-    tab_price, tab_study, tab_control, tab_validation, tab_backtest = st.tabs(
-        ["Price and cycles", "Event study", "Control group", "Validation", "Backtest"]
+    (
+        tab_price, tab_study, tab_control, tab_validation, tab_backtest, tab_forecast
+    ) = st.tabs(
+        ["Price and cycles", "Event study", "Control group", "Validation",
+         "Backtest", "Forecast"]
     )
 
     with tab_price:
@@ -356,6 +365,93 @@ def main() -> None:
                 "Always compared against buy-and-hold. Better Sharpe: "
                 + (", ".join(better) if better else "no strategy")
             )
+
+    with tab_forecast:
+        st.caption(
+            "Probability that the forward return is positive - not a price "
+            "forecast. The number that matters is whether it beats the "
+            "baselines, especially `always_up`: Bitcoin rose in most historical "
+            "windows, so the reference point is that base rate, not 50%."
+        )
+        # Streamlit renders every tab body on every run, so an unguarded call
+        # here would make the whole page wait for 13 model fits before showing
+        # anything - even for someone who never opens this tab. Hence the
+        # explicit gate; after the first run the result is cached.
+        if not st.session_state.get("forecast_requested"):
+            st.info(
+                "Fitting the model across 13 walk-forward folds takes about a "
+                "minute. It is not run until you ask for it, so the rest of the "
+                "dashboard stays fast."
+            )
+            if st.button("Run the forecast", icon=":material/play_arrow:"):
+                st.session_state["forecast_requested"] = True
+                st.rerun()
+            report = None
+        else:
+            report = cached_forecast()
+
+        if report is None:
+            pass
+        elif "error" in report:
+            st.warning(report["error"])
+        else:
+            run = report["run"]
+            verdict_text = run.summary()
+            if "NO EDGE" in verdict_text:
+                st.error(verdict_text)
+            else:
+                st.success(verdict_text)
+
+            st.subheader("Pooled, non-overlapping rows")
+            st.dataframe(
+                run.pooled.loc[
+                    :, ["n", "brier", "log_loss", "accuracy", "auc",
+                        "mean_probability", "base_rate"]
+                ],
+                width="stretch",
+            )
+            st.caption(
+                f"Scored on {int(run.pooled.loc['model', 'n'])} non-overlapping "
+                f"rows out of {int(run.pooled_all_rows.loc['model', 'n'])} daily "
+                f"predictions. A {report['horizon']}-day label on consecutive "
+                "days repeats almost all of itself, so the smaller number is "
+                "the honest one."
+            )
+
+            latest = report["latest"]
+            if "error" not in latest:
+                left, right = st.columns(2)
+                left.metric(
+                    f"Next {report['horizon']} days up",
+                    f"{latest['probability_up']:.1%}",
+                    delta=f"{latest['edge_over_base_rate']:+.1%} vs base rate",
+                )
+                right.metric("Training base rate", f"{latest['train_base_rate']:.1%}")
+                if "NO EDGE" in verdict_text:
+                    st.warning(
+                        "Read that probability as decoration. The evaluation "
+                        "above says the model has no edge out of sample, so it "
+                        "is not evidence about the future."
+                    )
+
+            with st.expander("Per fold"):
+                st.dataframe(
+                    run.folds.loc[
+                        :, ["fold", "n_train", "alpha", "n", "brier", "accuracy",
+                            "auc", "base_rate"]
+                    ],
+                    width="stretch",
+                    hide_index=True,
+                )
+            with st.expander("Calibration: predicted vs actual"):
+                if run.calibration.empty:
+                    st.info("Not enough data.")
+                else:
+                    st.dataframe(run.calibration, width="stretch")
+                    st.caption(
+                        "A well calibrated model has `mean_predicted` close to "
+                        "`share_positive` in every row."
+                    )
 
 
 if __name__ == "__main__":
