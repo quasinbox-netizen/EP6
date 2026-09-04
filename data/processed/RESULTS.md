@@ -1,6 +1,7 @@
-# Results snapshot — 2026-09-01
+# Results snapshot — 2026-09-04
 
-Generated with `python run.py all --post 365`.
+Generated with `python run.py all --post 365`, plus `python run.py speccurve`,
+which `all` leaves out because its 200 permutations take about ten minutes.
 To reproduce: `python run.py ingest --what all`, then `python run.py all`.
 
 Sample: **5494 days**, 2011-08-18 → 2026-09-01. Stitched series — Bitstamp for
@@ -132,6 +133,84 @@ M2 and +105.9% computed from the proxy. Same label, opposite conclusion.
 
 ---
 
+## The specification curve
+
+Everything above holds four analytical decisions fixed: the estimation window
+(-250..-31), abnormal rather than raw returns, log rather than simple returns,
+and the price series stitched across three exchanges. All 26 hypotheses inherit
+all four. If one is wrong they are wrong together, and no other check here
+would notice.
+
+So the halving study was re-run under every combination of them - 160
+specifications, varying also the horizon and which exchange history to trust.
+
+**The curve.** Median CAR across specifications **+5.2%**; 75% of them positive;
+**2 of 160** significant at 5% uncorrected.
+
+**Inference.** The count of significant specifications is not a test. These are
+re-analyses of the same four halvings, so they move together and the count is
+nowhere near binomial. Inference comes from shifting the four dates as a block
+to a random place in the price history and rebuilding the entire curve, 200
+times. The shift is circular, and because the halvings span 4161 days of a
+5496-day index, 81% of the draws wrap - keeping the gaps between
+events circularly rather than on the calendar.
+
+| | observed | under the null |
+| --- | --- | --- |
+| median \|CAR\| exceeded | — | in **70.6%** of draws |
+| significant specifications | **2** | **15.1** on average, 43 at the 95th percentile |
+
+**VERDICT: NOT ROBUST.** Random placement of the same four dates reproduces this
+curve, and in fact produces *seven times more* significant specifications than
+the real halvings do. The result does not depend on the specification, because
+there is no result to depend on it.
+
+### Which choices actually move the answer
+
+This is the part worth keeping. Median CAR, grouped by one decision at a time:
+
+| decision | value | median CAR |
+| --- | --- | --- |
+| horizon | 30 days | −0.9% |
+| | 365 days | **+104.3%** |
+| baseline | abnormal (subtract pre-event window) | +3.1% |
+| | raw (subtract nothing) | **+24.5%** |
+| estimation window | −90..−11 (ends near the event) | +0.3% |
+| | −250..−31 (project default) | +10.1% |
+| price series | Coinbase (3 of 4 halvings) | +0.5% |
+| | Bitstamp (4 of 4) | +9.5% |
+| return type | log | +5.3% |
+| | simple | +4.7% |
+
+Three things fall out of this table.
+
+1. **The apparent halving effect is drift.** Subtracting a pre-event baseline
+   removes seven eighths of it (+24.5% → +3.1%), and moving that baseline
+   closer to the event removes almost all of what is left (+10.1% → +0.3%).
+   What looks like a response to the halving is the market's own trend, already
+   under way before the event and simply continued after it.
+2. **It is a function of how long you wait, not of what happened.** The measured
+   effect grows monotonically with the horizon, from −0.9% at 30 days to +104%
+   at 365. An event response does not behave like that; holding a rising asset
+   for longer does.
+3. **Log versus simple returns is the choice that does not matter** - a
+   difference of 0.6 points - while which exchange's history you trust changes
+   the answer twentyfold. The debates worth having are not the ones about
+   notation.
+
+### The two significant specifications
+
+Both are the same configuration:
+
+    binance/30d/log/raw/none    n=2   CAR +11.9%   p=0.033
+    binance/30d/simple/raw/none n=2   CAR +13.4%   p=0.036
+
+Binance's history begins in August 2017, so it covers **two** of the four
+halvings, and `raw` means no baseline was subtracted at all. The only
+specifications that find anything are the ones using the least data and the
+weakest correction. That is what a false positive looks like when you can see
+where it came from.
+
 ## The placebo group
 
 Every result below rests on one question: how often does this method report an
@@ -235,6 +314,23 @@ The only strategy with a better Sharpe than buy-and-hold at meaningful exposure
 and is indistinguishable from the NASDAQ**. Four cycles are four observations,
 and "be in the market for a year after the halving" largely overlaps with "be
 in the market during a bull run".
+
+Four independent checks now say the same thing, and each closes a different
+escape route:
+
+| check | the objection it answers | result |
+| --- | --- | --- |
+| control group | "everything rose, so what?" | difference vs NASDAQ p = 0.30 |
+| placebo category | "your method finds effects everywhere" | it does: raw p = 0.03 where nothing happened |
+| walk-forward | "it worked in the past" | 0 of 26 stable out of sample |
+| specification curve | "you picked the wrong window" | 160 windows, none of it survives |
+
+The specification curve also says what the apparent effect actually is. Stop
+subtracting a pre-event baseline and it grows eightfold; move the baseline
+closer to the event and it nearly vanishes; extend the horizon and it grows
+without limit. Those are the signatures of drift, not of a response to an
+event. The halving is not moving the price in this data - the market's own
+trend is, and the halving happens to sit inside it.
 
 That is a result, not a failure. The project was built to tell a pattern from
 noise, and it did.

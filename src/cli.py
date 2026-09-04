@@ -48,6 +48,13 @@ from ingest.prices import (  # noqa: E402
     stitch_sources,
     store_prices,
 )
+from analysis.specification import (  # noqa: E402
+    build_grid,
+    curve_statistics,
+    permutation_test,
+    run_curve,
+    verdict,
+)
 from ingest.quality import check_macro, check_prices, compare_sources  # noqa: E402
 from pipeline import (  # noqa: E402
     category_event_studies,
@@ -421,6 +428,103 @@ def cmd_walkforward(args) -> int:
     return 0
 
 
+def cmd_speccurve(args) -> int:
+    """Vary the analytical choices instead of the hypothesis.
+
+    Answers the one objection a null result always attracts: "you picked the
+    wrong window."
+    """
+    config = load_config()
+    data = load_lab_data(config)
+    if data.is_empty:
+        print("the database is empty - run `ingest` first")
+        return 1
+    if data.events.empty:
+        print("no event registry - run `ingest` first")
+        return 1
+
+    halvings = pd.DatetimeIndex(
+        pd.to_datetime(data.events[data.events["category"] == "halving"]["date"])
+    ).normalize()
+    if len(halvings) < 2:
+        print(f"only {len(halvings)} halving(s) in the registry - nothing to vary")
+        return 1
+
+    symbol = config["price"]["symbol"]
+    priority = config["price"].get("stitch_priority", config["price"]["sources"])
+    frames = {"stitched": data.prices}
+    with connect(config.db_path) as conn:
+        for source in priority:
+            frame = read_prices(conn, symbol, source=source)
+            if not frame.empty:
+                frames[source] = frame
+
+    grid = build_grid(sorted(frames))
+    print(f"--- specification curve: {len(grid)} specifications ---")
+    print(
+        "Varying the analytical choices the hypothesis scan holds fixed: "
+        "price series, horizon, return type, abnormal or raw, estimation window."
+    )
+    for name, frame in sorted(frames.items()):
+        dates = pd.to_datetime(frame["date"])
+        covered = int(((halvings >= dates.min()) & (halvings <= dates.max())).sum())
+        print(f"  {name:<10} {len(frame):>5} days from {dates.min().date()} "
+              f"| covers {covered}/{len(halvings)} halvings")
+
+    curve = run_curve(frames, halvings, grid=grid)
+    stats = curve_statistics(curve)
+    _save(curve, config, "specification_curve.csv")
+
+    print(f"\nmedian CAR across specifications : {stats['median_car']:+.1%}")
+    print(f"specifications with a positive CAR: {stats['share_positive']:.0%}")
+    print(f"significant at 5% (uncorrected)   : {stats['n_significant']}/{stats['n_specs']} "
+          f"({stats['share_significant']:.1%})")
+    print(f"events actually used              : {stats['n_events_min']}-{stats['n_events_max']} "
+          "(the shorter exchange histories cover fewer halvings)")
+
+    print("\n--- most and least favourable specifications ---")
+    columns = ["label", "n_events", "car", "ci_low", "ci_high", "p_value"]
+    print(curve.tail(3)[columns].to_string(index=False))
+    print("   ...")
+    print(curve.head(3)[columns].to_string(index=False))
+
+    print(
+        f"\nRunning {args.permutations} permutations of the curve. The count "
+        "above is NOT a test: these specifications re-analyse the same events\n"
+        "and move together, so their share significant is not binomial. "
+        "Inference has to be made on the whole curve."
+    )
+    permutation = permutation_test(
+        frames, halvings, stats, n_permutations=args.permutations, grid=grid
+    )
+    if permutation.get("n_permutations"):
+        print("\nunder the null (the same 4 dates, circularly shifted as a block):")
+        print(f"  {permutation['share_wrapped']:.0%} of draws wrapped past the end of "
+              "the history, so they keep the gaps\n  between events circularly rather "
+              "than on the calendar")
+        print(f"  |median CAR| exceeded the observed one in "
+              f"{permutation['median_p_value']:.1%} of draws")
+        print(f"  significant specifications: {permutation['null_significant_mean']:.1f} on "
+              f"average, {permutation['null_significant_p95']:.0f} at the 95th percentile "
+              f"(observed: {stats['n_significant']})")
+        _save(pd.DataFrame([{**stats, **permutation}]), config, "specification_summary.csv")
+        # A short run overwrites the saved summary with the same filename as a
+        # full one. That is how a `--permutations 5` smoke test silently
+        # replaced a committed 200-draw result during development. The count
+        # travels in the file and onto the dashboard, and this says so out
+        # loud, so a low number cannot be mistaken for the real thing later.
+        if args.permutations < 100:
+            print(
+                f"\nWARNING: {args.permutations} permutations is a smoke test, not "
+                "a result, and it has\njust overwritten specification_summary.csv. "
+                "Re-run with the default 200 before\nquoting or committing these "
+                "numbers."
+            )
+
+    print(f"\nVERDICT: {verdict(stats, permutation)}")
+    return 0
+
+
 def cmd_control(args) -> int:
     """Placebo test: does the control group react to halvings the way BTC does?"""
     config = load_config()
@@ -592,6 +696,18 @@ def cmd_all(args) -> int:
         code = command(args)
         if code != 0:
             return code
+    # speccurve is deliberately left out. Its 200 permutations are 32,000 event
+    # studies - about ten minutes, four times everything above put together -
+    # and running it on every `all` would train people to skip `all`. Running
+    # it with fewer permutations instead would be worse: two commands would
+    # then report different p-values for the same question.
+    print("\n" + "=" * 78)
+    print(
+        "Not run: `speccurve`, the specification curve. It re-runs the halving "
+        "study under\n160 combinations of the analytical choices the scan above "
+        "holds fixed, and tests\nthe whole curve against random placement of "
+        "the same dates. About ten minutes."
+    )
     return 0
 
 
@@ -647,6 +763,18 @@ def build_parser() -> argparse.ArgumentParser:
         help="check whether FRED_API_KEY works (queries the API)",
     )
     macro.set_defaults(func=cmd_macro)
+
+    speccurve = subparsers.add_parser(
+        "speccurve",
+        help="specification curve: vary the analytical choices, not the hypothesis",
+    )
+    speccurve.add_argument(
+        "--permutations",
+        type=int,
+        default=200,
+        help="null draws for the curve-level test (200 takes about 10 minutes)",
+    )
+    speccurve.set_defaults(func=cmd_speccurve)
 
     backtest = subparsers.add_parser("backtest", help="strategies vs buy-and-hold")
     backtest.set_defaults(func=cmd_backtest)

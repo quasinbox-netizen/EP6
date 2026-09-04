@@ -23,6 +23,8 @@ data/processed/**
 !data/processed/forecast_folds.csv
 !data/processed/forecast_pooled.csv
 !data/processed/forecast_calibration.csv
+!data/processed/specification_curve.csv
+!data/processed/specification_summary.csv
 .pytest_cache/
 .streamlit/secrets.toml
 *.log

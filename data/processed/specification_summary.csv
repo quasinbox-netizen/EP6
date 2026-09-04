@@ -1,0 +1,2 @@
+n_specs,median_car,n_significant,share_significant,share_positive,n_events_min,n_events_max,n_permutations,n_wrapped,share_wrapped,median_p_value,significant_count_p_value,null_median_car_p50,null_median_car_p95,null_significant_mean,null_significant_p95
+160,0.0518233890945454,2,0.0125,0.75,2,4,200,162,0.81,0.7064676616915423,0.9054726368159204,0.004787993754898245,0.47901583068947423,15.055,43.04999999999998

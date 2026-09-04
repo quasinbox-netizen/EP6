@@ -72,6 +72,79 @@ def cached_forecast():
     return forecast_report(cached_data())
 
 
+@st.cache_data(show_spinner="Reading the specification curve...")
+def load_specification_results(_config):
+    """Read what `run.py speccurve` saved. Never compute it here.
+
+    One curve is 160 event studies and the permutation test is 201 of those -
+    about ten minutes. Streamlit renders every tab body on every run, so
+    computing it here would freeze the whole dashboard for anyone who never
+    opens this tab.
+    """
+    directory = Path(_config["paths"]["processed"])
+    if not directory.is_absolute():
+        directory = _config.root / directory
+
+    def read(name):
+        path = directory / name
+        return pd.read_csv(path) if path.exists() else pd.DataFrame()
+
+    return read("specification_curve.csv"), read("specification_summary.csv")
+
+
+def specification_chart(curve: pd.DataFrame) -> go.Figure:
+    """Specifications sorted by effect, with their intervals.
+
+    The convention of the specification curve: order by estimate, not by name.
+    What matters is the shape of the whole distribution and where zero sits in
+    it - a reader should be able to see at a glance whether the answer depends
+    on which analytical choices were made.
+    """
+    usable = curve[curve["car"].notna()].sort_values("car").reset_index(drop=True)
+    position = list(range(len(usable)))
+    significant = usable["significant"].astype(bool)
+
+    figure = go.Figure()
+    figure.add_trace(go.Scatter(
+        x=position + position[::-1],
+        y=list(usable["ci_high"]) + list(usable["ci_low"])[::-1],
+        fill="toself", fillcolor="rgba(120,140,180,0.18)",
+        line={"width": 0}, hoverinfo="skip", name="95% confidence interval",
+    ))
+    figure.add_trace(go.Scatter(
+        x=position, y=usable["car"], mode="markers",
+        marker={
+            "size": 6,
+            "color": ["#d1495b" if s else "#4a6fa5" for s in significant],
+        },
+        text=usable["label"],
+        customdata=usable[["n_events", "p_value"]],
+        hovertemplate=(
+            "%{text}<br>CAR %{y:+.1%}<br>"
+            "events %{customdata[0]}<br>p=%{customdata[1]:.3f}<extra></extra>"
+        ),
+        name="CAR at the horizon",
+    ))
+    figure.add_hline(y=0, line_dash="dash", line_color="gray")
+    # Scale to the estimates, not to the intervals. Two-event specifications
+    # carry intervals of +-1000%, and letting those set the range flattens
+    # every estimate into a line at zero. The intervals are still drawn and
+    # still run off the top and bottom of the chart, which is the honest
+    # picture: the band is genuinely that wide, and the caption says so rather
+    # than the axis quietly hiding it.
+    span = max(abs(usable["car"].min()), abs(usable["car"].max()))
+    figure.update_yaxes(range=[-1.4 * span, 1.4 * span])
+    figure.update_layout(
+        xaxis_title="specifications, ordered by effect size",
+        yaxis_title="cumulative abnormal return",
+        yaxis_tickformat=".0%",
+        height=460,
+        margin={"l": 60, "r": 20, "t": 30, "b": 50},
+        legend={"orientation": "h", "y": 1.08},
+    )
+    return figure
+
+
 @st.cache_data(show_spinner="Scanning hypotheses...")
 def cached_scan():
     return scan_hypotheses(cached_data())
@@ -227,10 +300,11 @@ def main() -> None:
         )
 
     (
-        tab_price, tab_study, tab_control, tab_validation, tab_backtest, tab_forecast
+        tab_price, tab_study, tab_control, tab_validation, tab_specs,
+        tab_backtest, tab_forecast
     ) = st.tabs(
         ["Price and cycles", "Event study", "Control group", "Validation",
-         "Backtest", "Forecast"]
+         "Specification curve", "Backtest", "Forecast"]
     )
 
     with tab_price:
@@ -342,6 +416,76 @@ def main() -> None:
                 st.warning(
                     "No hypothesis replicated outside the training sample. That is "
                     "the most common and most instructive result in this project."
+                )
+
+    with tab_specs:
+        st.subheader("Vary the analytical choices, not the hypothesis")
+        st.caption(
+            "Every hypothesis in the Validation tab inherits the same four "
+            "decisions: estimation window, abnormal or raw returns, log or "
+            "simple returns, and which exchange history to trust. If one of "
+            "them is wrong, all of those results are wrong together. This "
+            "re-runs the halving study under every combination."
+        )
+        curve, summary = load_specification_results(config)
+        if curve.empty:
+            st.info(
+                "No saved curve. Run `run.py speccurve` - the 200 permutations "
+                "take about ten minutes, which is too slow to compute here."
+            )
+        else:
+            st.plotly_chart(specification_chart(curve), width="stretch")
+            st.caption(
+                "Red marks a specification significant at 5% before any "
+                "correction. The vertical axis is scaled to the estimates, so "
+                "the widest confidence bands run off the chart - a "
+                "specification built on two halvings genuinely has an interval "
+                "of roughly plus or minus 1000%, and the full numbers are in "
+                "the table below."
+            )
+            columns = st.columns(4)
+            usable = curve[curve["car"].notna()]
+            columns[0].metric("Specifications", len(usable))
+            columns[1].metric("Median CAR", f"{usable['car'].median():+.1%}")
+            columns[2].metric(
+                "Significant (raw)",
+                f"{int(usable['significant'].sum())}/{len(usable)}",
+            )
+            columns[3].metric("Positive CAR", f"{(usable['car'] > 0).mean():.0%}")
+
+            if not summary.empty:
+                row = summary.iloc[0]
+                st.warning(
+                    "The count of significant specifications is NOT a test. "
+                    "These are re-analyses of the same four halvings, so they "
+                    "move together and their share is not binomial. Inference "
+                    "comes from shifting the four dates as a block to a random "
+                    "place in the price history and rebuilding the whole curve."
+                )
+                st.info(
+                    f"Under that null, random placement produced "
+                    f"**{row['null_significant_mean']:.1f}** significant "
+                    f"specifications on average "
+                    f"(95th percentile {row['null_significant_p95']:.0f}), "
+                    f"against **{int(row['n_significant'])}** observed. "
+                    f"Curve-level p = {row['median_p_value']:.3f} on the median "
+                    f"effect and {row['significant_count_p_value']:.3f} on the count."
+                )
+                # The permutation count belongs on screen, not just in the file.
+                # A smoke test writes the same filename as a full run, so
+                # without this a 5-draw result would look identical to a
+                # 200-draw one.
+                st.caption(
+                    f"From {int(row['n_permutations'])} permutations, "
+                    f"{row['share_wrapped']:.0%} of which wrapped past the end of "
+                    "the history. Below about 100 draws these numbers are a "
+                    "smoke test, not a result."
+                )
+            with st.expander("Every specification"):
+                st.dataframe(
+                    curve.loc[:, ["label", "n_events", "car", "ci_low", "ci_high",
+                                  "p_value", "significant"]],
+                    width="stretch", hide_index=True,
                 )
 
     with tab_backtest:

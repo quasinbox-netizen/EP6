@@ -77,6 +77,7 @@ Then run any of these:
 | `run.py macro` | liquidity axis: real M2 vs the dollar proxy |
 | `run.py validate` | hypothesis scan with correction + out-of-sample replication |
 | `run.py walkforward` | walk-forward validation across 13 disjoint windows |
+| `run.py speccurve` | specification curve: 160 ways of asking the same question (~10 min) |
 | `run.py forecast` | directional forecast, scored against three baselines |
 | `run.py backtest` | strategies vs buy-and-hold |
 | `run.py all` | everything in sequence |

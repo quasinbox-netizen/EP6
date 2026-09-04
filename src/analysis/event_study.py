@@ -55,14 +55,43 @@ class EventStudyResult:
         )
 
 
-def log_returns(prices: pd.DataFrame, price_column: str = "close") -> pd.Series:
+def log_returns(
+    prices: pd.DataFrame,
+    price_column: str = "close",
+    *,
+    return_type: str = "log",
+) -> pd.Series:
+    """Daily returns. Log by default; `return_type="simple"` gives arithmetic.
+
+    The choice is usually invisible and usually harmless - over a day the two
+    differ in the third decimal. It stops being harmless once returns are
+    summed: cumulating log returns is exact, cumulating simple ones is not, and
+    across a 365-day window on an asset this volatile the gap is large. Both
+    are defensible and published work uses both, which is precisely why the
+    specification curve varies it instead of this module choosing for you.
+    """
     frame = prices.copy()
     if "date" in frame.columns:
         frame["date"] = pd.to_datetime(frame["date"]).dt.normalize()
         frame = frame.drop_duplicates(subset="date", keep="last").set_index("date")
-    series = np.log(frame[price_column].astype(float)).diff()
-    series.name = "log_return"
-    return series.sort_index()
+    values = frame[price_column].astype(float)
+    if return_type == "log":
+        series = np.log(values).diff()
+    elif return_type == "simple":
+        series = values.pct_change()
+    else:
+        raise ValueError(f"unknown return_type {return_type!r}; use 'log' or 'simple'")
+    series.name = f"{return_type}_return"
+    series = series.sort_index()
+    # The first day has no return - diff() and pct_change() both leave NaN
+    # there. Keeping it is not harmless: an event window that reaches the start
+    # of the series then contains a NaN, and the CAR is built with nancumsum,
+    # which silently treats it as a zero return rather than as missing. Only
+    # LEADING NaNs are dropped. An internal gap must stay, because the window
+    # matrix is positional and dropping a middle row would quietly slide the
+    # window across the gap instead of reporting it.
+    first_valid = series.first_valid_index()
+    return series if first_valid is None else series.loc[first_valid:]
 
 
 def event_window_matrix(
@@ -126,13 +155,22 @@ def event_study(
     n_boot: int = 5000,
     seed: int = 20260901,
     price_column: str = "close",
+    return_type: str = "log",
+    returns: pd.Series | None = None,
 ) -> EventStudyResult:
     """Mean return path around an event, with a confidence interval.
 
     Returns a table indexed by day offset: mean daily return, cumulative
     (CAR), the CAR confidence interval, and the number of events.
     """
-    returns = log_returns(prices, price_column)
+    # `returns` lets a caller supply the series it already computed. The
+    # specification curve calls this function tens of thousands of times over
+    # eight distinct return series, and recomputing them each time was 45% of
+    # the runtime. When it is given, `prices`, `price_column` and `return_type`
+    # are unused - the caller owns that choice and must label the result with
+    # the choice it actually made.
+    if returns is None:
+        returns = log_returns(prices, price_column, return_type=return_type)
     matrix, skipped = event_window_matrix(returns, event_dates, pre=pre, post=post)
     if matrix.empty:
         return EventStudyResult(
@@ -147,6 +185,29 @@ def event_study(
     values = matrix.to_numpy(dtype=float)
     if abnormal:
         baseline = _estimation_means(returns, matrix.index, estimation_window)
+        # An event whose estimation window reaches back past the start of the
+        # series has no baseline. Subtracting NaN makes that event's whole row
+        # NaN, and the row would then survive into the results as a FLAT ZERO
+        # event: nancumsum treats missing as no-change, so the CAR is pulled
+        # toward zero and the spread across events is computed against a
+        # fabricated observation. The event is therefore dropped, exactly as an
+        # event with an incomplete window is - a study of 3 events reported as
+        # 3, never as 4 with one silently blank.
+        usable = np.isfinite(baseline.to_numpy())
+        if not usable.all():
+            skipped = skipped.append(matrix.index[~usable])
+            matrix = matrix.loc[usable]
+            values = values[usable]
+            baseline = baseline[usable]
+            if matrix.empty:
+                return EventStudyResult(
+                    table=pd.DataFrame(),
+                    n_events=0,
+                    used_events=pd.DatetimeIndex([]),
+                    skipped_events=skipped.sort_values(),
+                    abnormal=abnormal,
+                    estimation_window=estimation_window,
+                )
         values = values - baseline.to_numpy()[:, None]
 
     offsets = matrix.columns.to_numpy()
@@ -180,11 +241,19 @@ def event_study(
         ci_high_post = nan_like
 
     # Bootstrap across events - reported for comparison, not for decisions.
-    rng = np.random.default_rng(seed)
-    boot_indices = rng.integers(0, n_events, size=(n_boot, n_events))
-    boot_car = car_per_event[boot_indices].mean(axis=1)
-    boot_low_post = np.percentile(boot_car, 2.5, axis=0)
-    boot_high_post = np.percentile(boot_car, 97.5, axis=0)
+    # n_boot=0 skips it. The specification curve runs this function ~48,000
+    # times under permutation, and 5,000 resamples of 4 events per run is the
+    # whole cost of that job while contributing nothing: the curve reads the
+    # t-interval, never the bootstrap one.
+    if n_boot > 0:
+        rng = np.random.default_rng(seed)
+        boot_indices = rng.integers(0, n_events, size=(n_boot, n_events))
+        boot_car = car_per_event[boot_indices].mean(axis=1)
+        boot_low_post = np.percentile(boot_car, 2.5, axis=0)
+        boot_high_post = np.percentile(boot_car, 97.5, axis=0)
+    else:
+        boot_low_post = np.full(mean_car_post.shape, np.nan)
+        boot_high_post = np.full(mean_car_post.shape, np.nan)
 
     def _expand(post_values: np.ndarray) -> np.ndarray:
         full = np.full(mean_by_offset.shape, np.nan)
