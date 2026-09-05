@@ -159,6 +159,82 @@ def run(python: Path, arguments: list[str]) -> int:
     ).returncode
 
 
+def port_is_taken(port: int) -> bool:
+    """Is anything listening on this port already?"""
+    import socket
+
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
+        probe.settimeout(0.4)
+        return probe.connect_ex(("127.0.0.1", port)) == 0
+
+
+def looks_like_our_dashboard(port: int) -> bool:
+    """Distinguish "already running" from "something else has the port".
+
+    Asks Streamlit's own health endpoint, which answers "ok". The first attempt
+    fetched the root page and looked for the app's title, which fails: what
+    Streamlit serves there is a static shell, and the title is set by the app
+    later, in the browser. So a running dashboard was reported as "something
+    that is not this dashboard" - a wrong diagnosis is worse than none, because
+    it sends the reader looking in the wrong place.
+
+    Anything unexpected counts as not ours. That is the safe direction: the
+    cost is telling someone to pick another port when they need not have.
+    """
+    import urllib.error
+    import urllib.request
+
+    try:
+        with urllib.request.urlopen(
+            f"http://127.0.0.1:{port}/_stcore/health", timeout=1.5
+        ) as response:
+            return response.status == 200 and response.read(32).strip() == b"ok"
+    except (urllib.error.URLError, OSError, ValueError):
+        return False
+
+
+def start_dashboard(python: Path, port: str) -> int:
+    """Start the dashboard, or explain clearly why it cannot start.
+
+    The port is checked BEFORE anything optimistic is printed. The first
+    version announced "Dashboard starting on http://localhost:8511", then
+    handed over to Streamlit, which discovered the port was busy and exited -
+    so the last thing on screen was a promise that the dashboard was coming.
+    Double-clicked, that reads as "it does not launch", which is exactly how it
+    was reported. A leftover dashboard from an earlier session is the ordinary
+    way to reach this state, not an exotic one.
+    """
+    try:
+        port_number = int(port)
+    except ValueError:
+        print(f"[error] '{port}' is not a port number.")
+        return 1
+
+    if port_is_taken(port_number):
+        if looks_like_our_dashboard(port_number):
+            print(
+                f"The dashboard is already running on http://localhost:{port_number}\n"
+                "Open that address in a browser - there is nothing to start.\n\n"
+                "To restart it instead, close the window running it (Ctrl+C), or "
+                f"start a\nsecond one on another port:\n\n"
+                f"    python run.py dashboard {port_number + 1}"
+            )
+            return 0
+        print(
+            f"[error] Port {port_number} is in use by something that is not this "
+            "dashboard.\n        Start it on a different port:\n\n"
+            f"            python run.py dashboard {port_number + 1}"
+        )
+        return 1
+
+    print(f"Dashboard starting on http://localhost:{port_number}")
+    print("Press Ctrl+C in this window to stop.\n")
+    return run(python, [
+        "-m", "streamlit", "run", str(ROOT / "dashboard" / "app.py"),
+        "--server.port", str(port_number), "--browser.gatherUsageStats", "false",
+    ])
+
+
 def doctor(python: Path) -> int:
     """Print what the environment looks like - first thing to ask for in a bug report."""
     import platform
@@ -196,13 +272,7 @@ def main(argv: list[str]) -> int:
     command, rest = argv[0], argv[1:]
 
     if command == "dashboard":
-        port = rest[0] if rest else "8511"
-        print(f"Dashboard starting on http://localhost:{port}")
-        print("Press Ctrl+C in this window to stop.\n")
-        return run(python, [
-            "-m", "streamlit", "run", str(ROOT / "dashboard" / "app.py"),
-            "--server.port", port, "--browser.gatherUsageStats", "false",
-        ])
+        return start_dashboard(python, rest[0] if rest else "8511")
 
     if command == "test":
         if rest and rest[0] == "offline":

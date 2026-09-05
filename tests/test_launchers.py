@@ -86,3 +86,71 @@ def test_no_arguments_does_not_fall_through_to_the_usage_dump():
     text = (ROOT / "btc.cmd").read_text(encoding="utf-8", errors="replace")
     assert re.search(r'if\s+"%~1"==""', text), "no branch for the no-argument case"
     assert "dashboard" in text, "the menu should point somewhere useful"
+
+
+# --- starting the dashboard ------------------------------------------------
+
+
+def _run_py():
+    """run.py loaded as a module, without executing its main()."""
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location("_run_under_test", ROOT / "run.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_a_busy_port_is_detected_before_anything_optimistic_is_printed():
+    """The reported bug: "it still does not launch".
+
+    A leftover dashboard from an earlier session held the port. run.py printed
+    "Dashboard starting on http://localhost:8511", handed over to Streamlit,
+    and Streamlit exited because the port was taken - so the last thing on
+    screen was a promise that the dashboard was coming. Double-clicked, that is
+    indistinguishable from nothing happening.
+
+    The check must happen before the message, and it must not need Streamlit
+    to be installed to be tested.
+    """
+    import socket
+
+    module = _run_py()
+    with socket.socket() as holder:
+        holder.bind(("127.0.0.1", 0))
+        holder.listen(1)
+        port = holder.getsockname()[1]
+        assert module.port_is_taken(port)
+        # Nothing is answering Streamlit's health endpoint on it.
+        assert not module.looks_like_our_dashboard(port)
+
+    # Once released the port reads as free again.
+    assert not module.port_is_taken(port)
+
+
+def test_a_free_port_is_not_reported_as_busy():
+    import socket
+
+    module = _run_py()
+    with socket.socket() as probe:
+        probe.bind(("127.0.0.1", 0))
+        port = probe.getsockname()[1]
+    assert not module.port_is_taken(port)
+
+
+def test_dashboard_health_check_uses_the_endpoint_not_the_page():
+    """Scraping the served HTML for the app title does not work.
+
+    Streamlit serves a static shell; the title is set by the app afterwards, in
+    the browser. The first attempt looked for "BTC Cycle Lab" in the page and
+    therefore reported a running dashboard as "something that is not this
+    dashboard" - a confident wrong diagnosis, which is worse than none because
+    it sends the reader off in the wrong direction.
+    """
+    source = (ROOT / "run.py").read_text(encoding="utf-8")
+    assert "_stcore/health" in source, "the health endpoint is the reliable check"
+
+
+def test_a_bad_port_argument_is_refused_not_passed_through():
+    module = _run_py()
+    assert module.start_dashboard(None, "not-a-port") == 1
