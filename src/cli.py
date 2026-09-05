@@ -61,6 +61,7 @@ from backtest.edge import edge_test, fragility  # noqa: E402
 from backtest.engine import BacktestConfig, compare, run_backtest  # noqa: E402
 from backtest.sizing import (  # noqa: E402
     DEFAULT_REFIT_EVERY as SIZING_REFIT_EVERY,
+    TRADING_DAYS,
     apply_rebalance_band,
     conditional_volatility,
     realised_volatility,
@@ -612,7 +613,13 @@ def cmd_sizing(args) -> int:
 
     runs = [run_backtest(window, pd.Series(1.0, index=window.index),
                          backtest_config, name="buy and hold")]
-    for band in (0.0, 0.10, 0.30):
+    # The band actually used for today's number is always one of the compared
+    # rows. Without this, `--band 0.10` printed today's size from a 10% band
+    # while the cost of it was quoted from the 30% row - a small inconsistency
+    # that would quietly misdescribe the trade being made.
+    bands = sorted({0.0, 0.10, 0.30, round(float(args.band), 4)})
+    chosen_label = f"vol target, band {args.band:.0%}"
+    for band in bands:
         label = f"vol target, band {band:.0%}"
         runs.append(run_backtest(window, apply_rebalance_band(target, band),
                                  backtest_config, name=label))
@@ -646,6 +653,50 @@ def cmd_sizing(args) -> int:
         "not raise the\nSharpe ratio: returns fall about as much as risk does. "
         "This is a risk-control\ntool, not a way to earn more, and a backtest "
         "that claimed otherwise would be\nselling something."
+    )
+
+    # The number the command is actually reached for. Everything above is
+    # history; without this the tool makes a reader compute today's answer by
+    # hand from a CSV, which is where mistakes live.
+    banded = apply_rebalance_band(target, args.band)
+    today = float(banded.iloc[-1])
+    as_of = banded.index[-1]
+    price = float(window.loc[as_of])
+    forecast = float(volatility.loc[as_of]) * np.sqrt(TRADING_DAYS)
+    typical = float((volatility * np.sqrt(TRADING_DAYS)).median())
+    changes = banded[banded.diff().fillna(0) != 0]
+
+    print(f"\n--- what that means for today ---")
+    print(f"{symbol} at {price:,.0f} on {as_of.date()}")
+    print(
+        f"forecast volatility {forecast:.0%} a year against a historical median "
+        f"of {typical:.0%}\n-> the market is "
+        f"{'calmer' if forecast < typical else 'more violent'} than usual"
+    )
+    print(f"\n  unconstrained target      {float(target.loc[as_of]):.2f}")
+    print(f"  after the {args.band:.0%} band          {today:.2f}   <- the size to hold")
+    print(f"  on 10,000 of capital      {today * 10_000:,.0f} in {symbol}, the rest in cash")
+    if len(changes):
+        print(f"  last changed              {changes.index[-1].date()}")
+    _save(
+        pd.DataFrame([{
+            "as_of": as_of.date(), "price": price,
+            "forecast_annual_volatility": forecast, "median_annual_volatility": typical,
+            "target_position": float(target.loc[as_of]), "band": args.band,
+            "position": today,
+        }]),
+        config, "sizing_today.csv",
+    )
+
+    print(
+        "\nThis is NOT a reason to buy. It answers a conditional question - IF a "
+        "position\nin this asset is held, this size targets "
+        f"{args.target:.0%} annualised volatility at\ntoday's forecast. Which way "
+        "the price goes is not something this project can\ntell you, and nothing "
+        "above claims otherwise.\n\n"
+        f"The cost is in the CAGR column: {table.loc[chosen_label, 'cagr']:.0%} "
+        f"against {table.loc['buy and hold', 'cagr']:.0%} for simply\nholding. A "
+        "smoother ride is bought with return, not granted."
     )
     return 0
 
@@ -1051,6 +1102,10 @@ def build_parser() -> argparse.ArgumentParser:
     sizing.add_argument(
         "--target", type=float, default=0.60,
         help="target annualised volatility (default 0.60 - BTC's own median)",
+    )
+    sizing.add_argument(
+        "--band", type=float, default=0.30,
+        help="rebalance band: hold until the target drifts this far (default 0.30)",
     )
     sizing.add_argument(
         "--refresh", action="store_true",

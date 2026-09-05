@@ -33,6 +33,7 @@ data/processed/**
 # The sizing comparison, but not the 4035-day volatility series behind it:
 # `sizing --refresh` rebuilds that in a few minutes.
 !data/processed/sizing_comparison.csv
+!data/processed/sizing_today.csv
 .pytest_cache/
 .streamlit/secrets.toml
 *.log
