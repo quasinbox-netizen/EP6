@@ -55,8 +55,8 @@ jobs:
       - name: Check the POSIX launcher is executable and runs
         if: runner.os != 'Windows'
         run: |
-          test -x ./btc || { echo "btc lost its execute bit"; exit 1; }
-          ./btc doctor > /dev/null
+          test -x ./btc.sh || { echo "btc.sh lost its execute bit"; exit 1; }
+          ./btc.sh doctor > /dev/null
 
       - name: Run the offline test suite
         run: python run.py test offline

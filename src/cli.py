@@ -11,7 +11,7 @@ Use the cross-platform launcher, which prepares the environment for you:
     python run.py backtest
     python run.py all
 
-On Windows `btc.cmd` and on macOS/Linux `./btc` are thin wrappers around it.
+On Windows `btc.cmd` and on macOS/Linux `./btc.sh` are thin wrappers around it.
 
 Calling this module directly works too - it appends `src` to the import path
 itself, so PYTHONPATH is not needed:

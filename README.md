@@ -35,7 +35,7 @@ Nothing is installed system-wide.
 **macOS and Linux**
 
 ```bash
-./btc ingest --what all
+./btc.sh ingest --what all
 ```
 
 **Any platform, no wrapper:**
@@ -45,6 +45,11 @@ python run.py ingest --what all
 ```
 
 The wrappers are one-line shims around `run.py`; use whichever is convenient.
+
+**Without a terminal at all (Windows):** double-click **`dashboard.cmd`** in the
+folder. It sets everything up on first run and opens the dashboard in a browser.
+Double-clicking `btc.cmd` shows the list of commands instead, since a launcher
+with no command has nothing to launch.
 
 ### Platform support
 
@@ -57,7 +62,7 @@ The wrappers are one-line shims around `run.py`; use whichever is convenient.
 All six combinations run the full offline suite through `run.py`, so each one
 exercises the real installation path — interpreter discovery, virtual
 environment creation, dependency install — not just the tests. The two POSIX
-jobs additionally assert that `./btc` still has its execute bit and runs.
+jobs additionally assert that `./btc.sh` still has its execute bit and runs.
 
 Six jobs on every push. Actions minutes are free on public repositories, so
 there is no reason to hold macOS back to a schedule - and one workflow covering
@@ -107,8 +112,14 @@ sudo apt install python3 python3-venv python3-pip
 **macOS.** The system Python is usually old enough to matter; `brew install
 python@3.13` or the installer from python.org both work.
 
-**If `./btc` is not executable** (the bit does not survive a zip download),
-either `chmod +x btc` once or just use `python3 run.py`.
+**If `./btc.sh` is not executable** (the bit does not survive a zip download),
+either `chmod +x btc.sh` once or just use `python3 run.py`.
+
+The POSIX wrapper is `btc.sh` rather than plain `btc` for the sake of Windows:
+Explorer hides known extensions by default, so an extensionless `btc` and
+`btc.cmd` appear in the folder as two identical entries called "btc", with the
+unrunnable one sorting first. Anyone double-clicking picks the wrong file and
+sees nothing happen.
 
 ### Portability
 
@@ -355,7 +366,7 @@ largely overlaps with "be in the market during a bull run".
 
 ```
 run.py           cross-platform launcher and installer
-btc / btc.cmd    thin wrappers around it
+btc.cmd / btc.sh thin wrappers around it
 src/
 ├── ingest/      fetching (4 exchanges, FRED, Yahoo, manual CSV) + quality checks
 ├── features/    halving distance, macro phase, event flags + look-ahead detector
