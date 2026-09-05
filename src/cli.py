@@ -48,6 +48,8 @@ from ingest.prices import (  # noqa: E402
     stitch_sources,
     store_prices,
 )
+import numpy as np  # noqa: E402
+
 from analysis.specification import (  # noqa: E402
     build_grid,
     curve_statistics,
@@ -55,6 +57,14 @@ from analysis.specification import (  # noqa: E402
     run_curve,
     verdict,
 )
+from forecast.coverage import (  # noqa: E402
+    DEFAULT_REFIT_EVERY as COVERAGE_REFIT_EVERY,
+    DEFAULT_WINDOW as COVERAGE_WINDOW,
+    coverage_report,
+    rolling_intervals,
+)
+from forecast.coverage import verdict as coverage_verdict  # noqa: E402
+from forecast.volatility import fit_garch, price_interval  # noqa: E402
 from ingest.quality import check_macro, check_prices, compare_sources  # noqa: E402
 from pipeline import (  # noqa: E402
     category_event_studies,
@@ -428,6 +438,104 @@ def cmd_walkforward(args) -> int:
     return 0
 
 
+def cmd_range(args) -> int:
+    """How far the price is likely to move - never which way.
+
+    The rest of this project established that direction is not predictable
+    here. Nothing in it says the SIZE of the move is unpredictable, and it is
+    not: volatility clusters. This produces an interval and, before quoting it,
+    checks that the interval has historically contained the outcome as often as
+    it promises. A miscalibrated interval is worse than none, because it looks
+    like knowledge.
+    """
+    config = load_config()
+    symbol = config["price"]["symbol"]
+    priority = config["price"].get("stitch_priority", config["price"]["sources"])
+    with connect(config.db_path) as conn:
+        prices = load_stitched(conn, symbol, priority)
+    if prices.empty:
+        print("no prices in the database - run `ingest` first")
+        return 1
+
+    series = prices.copy()
+    series["date"] = pd.to_datetime(series["date"]).dt.normalize()
+    series = series.drop_duplicates(subset="date", keep="last").set_index("date")["close"]
+    series = series.astype(float).sort_index()
+    returns = np.log(series).diff().dropna()
+
+    coverage_path = _processed_dir(config) / f"range_coverage_{args.days}d.csv"
+
+    if args.calibrate:
+        print(f"--- calibrating the {args.days}-day interval ---")
+        print(
+            f"Walking forward over {len(returns):,} days, refitting GARCH every "
+            f"{COVERAGE_REFIT_EVERY} days on a\ntrailing {COVERAGE_WINDOW}-day window. "
+            "This takes several minutes and is the\nonly thing that entitles the "
+            "forecast below to be quoted."
+        )
+        walk = rolling_intervals(
+            series, args.days, window=COVERAGE_WINDOW, refit_every=COVERAGE_REFIT_EVERY
+        )
+        walk.to_csv(coverage_path)
+        print(f"-> {coverage_path}")
+    elif coverage_path.exists():
+        walk = pd.read_csv(coverage_path, index_col=0, parse_dates=True)
+    else:
+        print(
+            f"No calibration for a {args.days}-day horizon. An interval that has "
+            "never been\nchecked is not a forecast, it is a decoration. Run:\n\n"
+            f"    python run.py range --days {args.days} --calibrate\n"
+        )
+        return 1
+
+    result = coverage_report(walk, args.days)
+    print(f"\n--- coverage, {args.days}-day horizon ---")
+    print(result.table.to_string(index=False))
+    print(
+        f"\n{result.n_checks:,} overlapping checks thinned to {result.n_independent} "
+        "non-overlapping windows.\nConsecutive windows share all but one day, so "
+        "counting them all would claim a\nprecision the data does not have."
+    )
+    _save(result.table, config, f"range_calibration_{args.days}d.csv")
+    print(f"\n{coverage_verdict(result)}")
+
+    if not result.calibrated:
+        print(
+            "\nNo interval is quoted. The model failed its own test, and a number "
+            "printed\nhere would be worse than silence."
+        )
+        return 1
+
+    fit = fit_garch(returns.tail(COVERAGE_WINDOW))
+    print(f"\n--- forecast ---\n{fit.summary()}")
+    if not fit.converged:
+        print("WARNING: the fit did not converge; treat the interval as indicative.")
+
+    last_price = float(series.iloc[-1])
+    last_date = series.index[-1].date()
+    # The same drift the calibration was scored with. Quoting an interval built
+    # differently from the one that passed the test would make the test
+    # meaningless.
+    frame = price_interval(fit, last_price, args.days, drift=fit.mean_return)
+    print(
+        f"\n{symbol} at {last_price:,.0f} on {last_date}. "
+        f"Where it may be {args.days} days later:\n"
+    )
+    for _, row in frame.iterrows():
+        print(
+            f"  {row['level']:>4.0%}  {row['low']:>12,.0f} - {row['high']:>12,.0f} USD"
+            f"   ({row['low_pct']:+6.1%} / {row['high_pct']:+6.1%})"
+        )
+    _save(frame, config, f"range_forecast_{args.days}d.csv")
+
+    print(
+        "\nThe interval is centred on today's price, not on the historical trend: "
+        "fitting\nthat trend would encode the one thing this project showed it "
+        "cannot predict.\nThis says nothing about direction. It says how far."
+    )
+    return 0
+
+
 def cmd_speccurve(args) -> int:
     """Vary the analytical choices instead of the hypothesis.
 
@@ -708,6 +816,12 @@ def cmd_all(args) -> int:
         "holds fixed, and tests\nthe whole curve against random placement of "
         "the same dates. About ten minutes."
     )
+    print(
+        "\nAlso not run: `range --calibrate`, which walks the volatility model "
+        "through the\nwhole history to check its intervals keep their promise. "
+        "Everything above asks\nwhich way the price goes; that one asks how far, "
+        "and it is the question with an\nanswer. Several minutes."
+    )
     return 0
 
 
@@ -763,6 +877,20 @@ def build_parser() -> argparse.ArgumentParser:
         help="check whether FRED_API_KEY works (queries the API)",
     )
     macro.set_defaults(func=cmd_macro)
+
+    range_parser = subparsers.add_parser(
+        "range",
+        help="how far the price may move (calibrated interval, not a direction)",
+    )
+    range_parser.add_argument(
+        "--days", type=int, default=10, help="forecast horizon in days (default 10)"
+    )
+    range_parser.add_argument(
+        "--calibrate",
+        action="store_true",
+        help="rebuild the coverage backtest for this horizon (several minutes)",
+    )
+    range_parser.set_defaults(func=cmd_range)
 
     speccurve = subparsers.add_parser(
         "speccurve",

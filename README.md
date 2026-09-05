@@ -86,6 +86,7 @@ Then run any of these:
 | `run.py walkforward` | walk-forward validation across 13 disjoint windows |
 | `run.py speccurve` | specification curve: 160 ways of asking the same question (~10 min) |
 | `run.py forecast` | directional forecast, scored against three baselines |
+| `run.py range --days 10` | how far the price may move, as a calibrated interval |
 | `run.py backtest` | strategies vs buy-and-hold |
 | `run.py all` | everything in sequence |
 | `run.py dashboard` | browser dashboard on port 8511 |
@@ -354,6 +355,16 @@ level p = 0.706. The curve also names what the apparent effect is: removing the
 pre-event baseline grows it eightfold, moving that baseline closer to the event
 nearly erases it, and it scales with the horizon without limit. Those are the
 signatures of drift.
+
+**What is predictable: the range, not the direction.** Everything above says
+direction is not forecastable here. None of it says the *size* of the next move
+is not, and it is: volatility clusters. `run.py range --days 10` fits
+GARCH(1,1) with Student-t innovations, simulates the horizon forward and quotes
+an interval — and refuses to quote one until the interval has passed a coverage
+backtest, testing on non-overlapping windows whether a 90% interval really
+contained the outcome 90% of the time. The interval is centred on today's
+price, never on the historical trend: fitting that trend would encode the one
+thing this project showed it cannot predict.
 
 **Walk-forward.** 13 disjoint windows: **0** significant after correction, on
 both the sign test and the out-of-sample effect. The strongest case is
