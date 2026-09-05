@@ -44,6 +44,12 @@ Nothing else is needed. Python 3.11 or newer.
    the "Time contract" section of the README. The look-ahead detector in
    `features/checks.py` must stay green.
 4. Comments explain *why*, not *what*. The code says what it does.
+5. If the change alters what a published number means — a new hypothesis in the
+   scan, a different estimation window, a corrected event date — say so in
+   [CHANGELOG.md](CHANGELOG.md) under **Changed**, with the effect on existing
+   results. Adding one hypothesis moves every corrected p-value in the scan, so
+   a reader comparing an old figure with a new one has to be able to find out
+   why. That is a breaking change here even though no interface moved.
 
 ## Style
 

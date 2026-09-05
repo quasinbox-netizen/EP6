@@ -12,8 +12,10 @@ hypotheses tested — and every backtest is compared against buy-and-hold.
 
 **Its own headline finding is negative.** On data from 2011 to 2026 the
 apparent halving effect does not survive correction for multiple testing, does
-not replicate out of sample, and cannot be distinguished from what the NASDAQ
-did over the same windows. See [Results](#results).
+not replicate out of sample, cannot be distinguished from what the NASDAQ did
+over the same windows, and survives none of 160 ways of specifying the
+question. What remains once a pre-event baseline is subtracted is drift. See
+[Results](#results).
 
 > **This is not investment advice.** Read [DISCLAIMER.md](DISCLAIMER.md) before
 > using any number from this tool to decide what to do with money.
@@ -306,7 +308,7 @@ effect with a lag — zero lag means trading at a price that has not settled yet
 
 ## Results
 
-On 5494 days, 2011-08-18 → 2026-09-01. The full snapshot lives in
+On 5496 days, 2011-08-18 → 2026-09-03. The full snapshot lives in
 [data/processed/RESULTS.md](data/processed/RESULTS.md).
 
 **Event study, halvings.** CAR after 365 days = **+125.2%**, confidence
@@ -327,9 +329,31 @@ the other direction: run on the NASDAQ, the method does *not* find a halving
 effect there (+17.0%, p = 0.307) — so the absence of a result for BTC is not
 the method being powerless.
 
-**Validation.** 23 hypotheses (halving windows × event categories × macro
-phases): **0** significant raw, **0** after Benjamini-Hochberg correction, **0**
-replicating out of sample. Chance alone would have given ~1.2.
+**Validation.** 26 hypotheses (halving windows × event categories × macro
+phases): **0** significant raw, **0** after Benjamini-Hochberg correction.
+Chance alone would have given ~1.3. One hypothesis passes the out-of-sample
+replication rule, `event_credit_event_7d`, and it is reported with the two
+facts that sink it: it was not significant in the training window (p = 0.42),
+so there was nothing to replicate, and its corrected q = 0.75.
+
+**Placebo group.** The `protocol_upgrade` category holds the five consensus
+changes enforced on Bitcoin mainnet inside the price window — complete by
+construction and pre-announced, so nothing could have been learned on those
+dates. In walk-forward it produces the **lowest raw p-value in the table**
+(0.032), and in the forecast model the third-largest coefficient. Uncorrected,
+this pipeline would announce that Bitcoin reacts to software upgrades whose
+dates were public months in advance. Read it as calibration: a raw p between
+0.03 and 0.25 is routinely produced here by a variable known to be empty.
+
+**Specification curve.** 160 combinations of price series, horizon, return
+type, abnormal-or-raw and estimation window. Median CAR **+5.2%**, **2 of 160**
+significant uncorrected. Shifting the same four dates to a random place in the
+history and rebuilding the whole curve, 200 times, produces **15.1** significant
+specifications on average — *seven times more than the real halvings*. Curve
+level p = 0.706. The curve also names what the apparent effect is: removing the
+pre-event baseline grows it eightfold, moving that baseline closer to the event
+nearly erases it, and it scales with the horizon without limit. Those are the
+signatures of drift.
 
 **Walk-forward.** 13 disjoint windows: **0** significant after correction, on
 both the sign test and the out-of-sample effect. The strongest case is
@@ -419,3 +443,4 @@ comes from `pipeline.py`, so the terminal and the browser can never disagree.
 | [DATA_SOURCES.md](DATA_SOURCES.md) | attribution and redistribution restrictions |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | how to contribute, and the house rule |
 | [SECURITY.md](SECURITY.md) | reporting vulnerabilities |
+| [CHANGELOG.md](CHANGELOG.md) | what changed, and which changes moved the numbers |
