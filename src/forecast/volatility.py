@@ -219,6 +219,44 @@ def fit_garch(returns: pd.Series | np.ndarray) -> GarchFit:
     )
 
 
+RESIDUAL_BURN_IN = 250
+
+
+def extend_residual_pool(fit: GarchFit, history) -> GarchFit:
+    """Re-estimate the shock distribution on a longer past than the parameters.
+
+    The two things GARCH needs are not equally hungry for data. The variance
+    DYNAMICS - how fast a shock decays - are identified by a few years and are
+    better estimated on a recent window, because volatility regimes change. The
+    shock DISTRIBUTION is a different matter: its interesting part is the tail,
+    the tail is by definition rare, and four years of daily data contains only
+    a handful of the days that decide where a 95% interval belongs.
+
+    So the parameters stay fitted on the trailing window and the residual pool
+    is recomputed over everything available, using those parameters. Nothing
+    from beyond the forecast origin enters - `history` is past data, just more
+    of it.
+
+    Standardisation is what makes eras comparable: dividing each return by the
+    model's own sigma for that day removes the level of volatility and leaves
+    the shape. A violent day in 2013 and a violent day in 2024 look alike after
+    that, which is the assumption this rests on and the reason it can fail - if
+    the SHAPE of the shocks changed, not just their size, the old days are the
+    wrong evidence.
+
+    The first `RESIDUAL_BURN_IN` residuals are dropped: the recursion is seeded
+    with a sample variance rather than the true state, so the earliest ones are
+    artefacts of that seed.
+    """
+    values = np.asarray(pd.Series(history).dropna(), dtype=float) * SCALE
+    if values.size <= RESIDUAL_BURN_IN + 50:
+        return fit
+    values = values - fit.mean_return * SCALE
+    path = _variance_path(values, fit.omega, fit.alpha, fit.beta)
+    pool = (values / np.sqrt(path))[RESIDUAL_BURN_IN:]
+    return dataclasses.replace(fit, residuals=pool)
+
+
 def update_state(fit: GarchFit, new_returns) -> GarchFit:
     """Roll the variance recursion forward without refitting the parameters.
 

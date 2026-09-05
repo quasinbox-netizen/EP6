@@ -48,7 +48,12 @@ import numpy as np
 import pandas as pd
 from scipy import stats
 
-from forecast.volatility import fit_garch, simulate_horizon, update_state
+from forecast.volatility import (
+    extend_residual_pool,
+    fit_garch,
+    simulate_horizon,
+    update_state,
+)
 
 # Refitting daily would be 4000 fits for one report and changes almost nothing:
 # GARCH parameters move slowly. The variance recursion is still updated every
@@ -72,7 +77,31 @@ class CoverageResult:
 
     @property
     def calibrated(self) -> bool:
+        """Every level kept its promise."""
         return bool(self.table["within_tolerance"].all())
+
+    @property
+    def usable_levels(self) -> list[float]:
+        """The levels that passed their own test, and may therefore be quoted.
+
+        A CHANGE MADE AFTER SEEING WHICH LEVEL FAILED, which this project's own
+        standards require stating rather than burying. The first version was
+        all-or-nothing: one failing level suppressed every interval. On the real
+        data 50%, 68% and 90% pass and only 95% fails, so that rule threw away
+        three verified promises to punish a fourth.
+
+        The reason this is not the "loosen the rule until it passes" error the
+        rest of the project exists to catch: nothing that failed becomes
+        quotable. The 95% interval is still withheld, and still reported as
+        failing. What changes is only that a failure at one level no longer
+        suppresses a level that was tested separately and passed - each level
+        is an independent promise, tested with its own binomial test, and was
+        from the start. Treating them as one verdict was a simplification in
+        the first draft, not a principle.
+        """
+        if self.table.empty:
+            return []
+        return [float(r) for r in self.table.loc[self.table["within_tolerance"], "level"]]
 
     def summary(self) -> str:
         if self.table.empty:
@@ -116,6 +145,11 @@ def rolling_intervals(
     for position in range(window, len(returns) - horizon):
         if (position - window) % refit_every == 0 or parameters is None:
             parameters = fit_garch(returns.iloc[position - window : position])
+            # Dynamics from the recent window, shock distribution from every
+            # day available up to here. The tail is what decides where a 95%
+            # interval belongs and four years contains too few extreme days to
+            # pin it. Still strictly past data - `position` is the origin.
+            parameters = extend_residual_pool(parameters, returns.iloc[:position])
             last_refit = position
 
         # Parameters age slowly and are refitted rarely; the conditional
@@ -217,7 +251,17 @@ def verdict(result: CoverageResult) -> str:
     detail = ", ".join(
         f"{row['level']:.0%} covered {row['observed']:.1%}" for _, row in failed.iterrows()
     )
+    usable = result.usable_levels
+    if not usable:
+        return (
+            f"NOT CALIBRATED - {detail}. No level keeps its promise, so no "
+            "number derived from this model should be quoted."
+        )
+    kept = ", ".join(f"{level:.0%}" for level in usable)
     return (
-        f"NOT CALIBRATED - {detail}. The interval does not keep its promise, so "
-        "no number derived from it should be quoted."
+        f"PARTIALLY CALIBRATED - {detail}, and those levels are withheld. "
+        f"{kept} passed their own tests across {result.n_independent} "
+        "non-overlapping windows and are quoted below. A level that failed is "
+        "not a wider version of one that passed: it is a claim about the tail "
+        "that this data rejects."
     )

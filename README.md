@@ -359,12 +359,32 @@ signatures of drift.
 **What is predictable: the range, not the direction.** Everything above says
 direction is not forecastable here. None of it says the *size* of the next move
 is not, and it is: volatility clusters. `run.py range --days 10` fits
-GARCH(1,1) with Student-t innovations, simulates the horizon forward and quotes
-an interval — and refuses to quote one until the interval has passed a coverage
-backtest, testing on non-overlapping windows whether a 90% interval really
-contained the outcome 90% of the time. The interval is centred on today's
-price, never on the historical trend: fitting that trend would encode the one
-thing this project showed it cannot predict.
+GARCH(1,1) on a trailing window, resamples its own standardised residuals to
+simulate the horizon forward, and quotes an interval — but only after that
+interval has passed a coverage backtest on non-overlapping windows.
+
+Across **403 independent 10-day windows**:
+
+| level | covered | verdict |
+|---|---|---|
+| 50% | 49.1% | passes (p = 0.77) |
+| 68% | 64.8% | passes (p = 0.17) |
+| 90% | 87.6% | passes (p = 0.11) |
+| 95% | 91.8% | **fails** (p = 0.006) — withheld |
+
+So the command quotes 50%, 68% and 90%, and refuses to give a 95% number at
+all. The far tail is the hardest thing to get right and this model does not
+have it; saying so is the point of the gate.
+
+Three modelling choices were forced by measured failures rather than picked in
+advance, and two of them reverse an argument that sounded good. Centring the
+interval on today's price — no drift, on the grounds that fitting a trend
+encodes the unpredictable — failed: 41 outcomes finished above the interval
+against 19 below. Zero drift is not neutral, it is the claim that the expected
+move is exactly zero. Reusing a fit between refits froze the conditional
+variance for up to a month, which is harmless in a calm stretch and exactly
+wrong in the week a crash starts. And Student-t shocks were not enough, so the
+simulation resamples the residuals instead of assuming a shape.
 
 **Walk-forward.** 13 disjoint windows: **0** significant after correction, on
 both the sign test and the out-of-sample effect. The strongest case is

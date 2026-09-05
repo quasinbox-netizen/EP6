@@ -499,9 +499,10 @@ def cmd_range(args) -> int:
     _save(result.table, config, f"range_calibration_{args.days}d.csv")
     print(f"\n{coverage_verdict(result)}")
 
-    if not result.calibrated:
+    usable = result.usable_levels
+    if not usable:
         print(
-            "\nNo interval is quoted. The model failed its own test, and a number "
+            "\nNo interval is quoted. No level kept its promise, and a number "
             "printed\nhere would be worse than silence."
         )
         return 1
@@ -516,7 +517,12 @@ def cmd_range(args) -> int:
     # The same drift the calibration was scored with. Quoting an interval built
     # differently from the one that passed the test would make the test
     # meaningless.
-    frame = price_interval(fit, last_price, args.days, drift=fit.mean_return)
+    # Only the levels that passed their own coverage test. A level that failed
+    # is not a wider version of one that passed - it is a separate claim about
+    # the tail, and this data rejects it.
+    frame = price_interval(
+        fit, last_price, args.days, levels=tuple(usable), drift=fit.mean_return
+    )
     print(
         f"\n{symbol} at {last_price:,.0f} on {last_date}. "
         f"Where it may be {args.days} days later:\n"
@@ -526,12 +532,27 @@ def cmd_range(args) -> int:
             f"  {row['level']:>4.0%}  {row['low']:>12,.0f} - {row['high']:>12,.0f} USD"
             f"   ({row['low_pct']:+6.1%} / {row['high_pct']:+6.1%})"
         )
+    withheld = [
+        float(r) for r in result.table.loc[~result.table["within_tolerance"], "level"]
+    ]
+    if withheld:
+        print(
+            "\n  withheld: "
+            + ", ".join(f"{level:.0%}" for level in withheld)
+            + " - failed its coverage test, so no number is given for it"
+        )
     _save(frame, config, f"range_forecast_{args.days}d.csv")
 
     print(
-        "\nThe interval is centred on today's price, not on the historical trend: "
-        "fitting\nthat trend would encode the one thing this project showed it "
-        "cannot predict.\nThis says nothing about direction. It says how far."
+        f"\nThe interval leans by the mean return of the trailing "
+        f"{COVERAGE_WINDOW}-day window\n({fit.mean_return * args.days:+.1%} over "
+        f"{args.days} days). Centring it on today's price instead was tried "
+        "first and\nfailed coverage, missing upward 41 times against 19 - zero "
+        "drift is the claim\nthat the expected move is exactly zero, which is "
+        "as directional as any other.\n\n"
+        "This still says nothing about which way the price goes. It says how far,\n"
+        "and the lean is small next to the width: the drift moves the centre by a\n"
+        "fraction of the interval it sits in."
     )
     return 0
 

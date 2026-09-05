@@ -25,6 +25,11 @@ data/processed/**
 !data/processed/forecast_calibration.csv
 !data/processed/specification_curve.csv
 !data/processed/specification_summary.csv
+# The coverage verdict and the quoted interval, but NOT the 870 KB walk they
+# were computed from: `range --calibrate` regenerates that in a few minutes,
+# and the two small files are what a reader actually needs to see.
+!data/processed/range_calibration_*.csv
+!data/processed/range_forecast_*.csv
 .pytest_cache/
 .streamlit/secrets.toml
 *.log

@@ -371,3 +371,115 @@ def test_fitted_drift_is_the_window_mean_and_not_zero():
     centred = np.median(simulate_horizon(fit, 10, n_paths=20000, drift=0.0))
     drifted = np.median(simulate_horizon(fit, 10, n_paths=20000, drift=fit.mean_return))
     assert drifted > centred
+
+
+def test_extended_residual_pool_is_larger_and_still_only_past_data():
+    """Dynamics from the recent window, shock shape from all of history.
+
+    The tail decides where a 95% interval belongs and it is by definition rare,
+    so four years holds too few extreme days to pin it. The parameters stay on
+    the recent window because volatility regimes change; only the residual pool
+    is widened, and only over data that already happened.
+    """
+    from forecast.volatility import RESIDUAL_BURN_IN, extend_residual_pool
+
+    returns = garch_series(n=4000, seed=41)
+    fit = fit_garch(returns.tail(1000))
+    wider = extend_residual_pool(fit, returns)
+
+    assert wider.residuals.size > fit.residuals.size
+    assert wider.residuals.size == len(returns) - RESIDUAL_BURN_IN
+    # Parameters untouched - this changes the shock distribution, nothing else.
+    for name in ("omega", "alpha", "beta", "df", "mean_return"):
+        assert getattr(wider, name) == getattr(fit, name), name
+
+
+def test_extending_is_a_no_op_when_there_is_no_extra_history():
+    """Too short a history must leave the fit alone rather than truncate it.
+
+    Dropping a burn-in from a series barely longer than the burn-in would leave
+    a pool of a handful of residuals, and resampling from that would be worse
+    than the parametric version it replaced.
+    """
+    from forecast.volatility import extend_residual_pool
+
+    returns = garch_series(n=800, seed=42)
+    fit = fit_garch(returns)
+    assert extend_residual_pool(fit, returns.iloc[:200]).residuals is fit.residuals
+
+
+def test_residual_pool_is_rescaled_to_unit_variance_before_use():
+    """sigma has to keep meaning the conditional standard deviation.
+
+    A pool whose own variance is not 1 would silently rescale every interval -
+    and the extended pool's variance is NOT 1, because parameters fitted on a
+    recent window under-predict the variance of older, wilder years.
+    """
+    from forecast.volatility import extend_residual_pool
+
+    # A regime shift is required for the pool's variance to deviate at all. On
+    # a stationary synthetic series it comes out at 1.00 and the test proves
+    # nothing - which is how the first version of it failed. Real data has the
+    # shift: parameters fitted on the recent window gave a pool variance of
+    # 1.082 over the full history, because the older years were wilder than
+    # those parameters expect.
+    calm = garch_series(n=2000, omega=0.02, seed=43)
+    wild = garch_series(n=2000, omega=0.60, seed=44)
+    returns = pd.concat([wild, calm], ignore_index=True)
+
+    fit = extend_residual_pool(fit_garch(returns.tail(1200)), returns)
+    assert not np.isclose(fit.residuals.std(), 1.0, atol=0.02), (
+        f"pool sd {fit.residuals.std():.3f} - this test is meaningless if the "
+        "pool is already unit variance"
+    )
+    # One step, no GARCH dynamics in the way: the spread must match sigma.
+    draws = simulate_horizon(fit, 1, n_paths=60000)
+    expected = np.sqrt(
+        fit.omega + fit.alpha * fit.last_shock**2 + fit.beta * fit.last_variance
+    ) / SCALE
+    assert np.std(draws) == pytest.approx(expected, rel=0.05)
+
+
+def test_only_the_levels_that_passed_are_quotable():
+    """Per-level gating: a failing level must not suppress a passing one.
+
+    This rule was changed AFTER seeing that 95% was the only failure, which is
+    worth stating rather than burying. What makes it not the "loosen the rule
+    until it passes" error: nothing that failed becomes quotable. Each level is
+    an independent promise with its own binomial test and always was; treating
+    them as one verdict was a first-draft simplification.
+    """
+    n = 400
+    rng = np.random.default_rng(51)
+    realised = rng.normal(0, 0.10, n)
+    frame = pd.DataFrame({"realised": realised})
+
+    # 0.50 honest, 0.90 far too narrow.
+    honest = 0.10 * 0.6745
+    frame["low_0.5"], frame["high_0.5"] = -honest, honest
+    frame["hit_0.5"] = frame["realised"].abs() <= honest
+    narrow = 0.10 * 0.5
+    frame["low_0.9"], frame["high_0.9"] = -narrow, narrow
+    frame["hit_0.9"] = frame["realised"].abs() <= narrow
+
+    result = coverage_report(frame, horizon=1, levels=(0.5, 0.9))
+    assert not result.calibrated
+    assert result.usable_levels == [0.5], result.table.to_string()
+    text = verdict(result)
+    assert "PARTIALLY CALIBRATED" in text
+    assert "90%" in text, "the failing level must be named"
+
+
+def test_nothing_is_quotable_when_every_level_fails():
+    n = 400
+    rng = np.random.default_rng(52)
+    frame = pd.DataFrame({"realised": rng.normal(0, 0.10, n)})
+    for level in (0.5, 0.9):
+        narrow = 0.001
+        frame[f"low_{level}"], frame[f"high_{level}"] = -narrow, narrow
+        frame[f"hit_{level}"] = frame["realised"].abs() <= narrow
+
+    result = coverage_report(frame, horizon=1, levels=(0.5, 0.9))
+    assert result.usable_levels == []
+    assert "NOT CALIBRATED" in verdict(result)
+    assert "PARTIALLY" not in verdict(result)
