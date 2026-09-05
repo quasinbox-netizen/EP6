@@ -87,6 +87,7 @@ Then run any of these:
 | `run.py speccurve` | specification curve: 160 ways of asking the same question (~10 min) |
 | `run.py forecast` | directional forecast, scored against three baselines |
 | `run.py range --days 10` | how far the price may move, as a calibrated interval |
+| `run.py sizing` | how much to hold, from the volatility forecast |
 | `run.py backtest` | strategies vs buy-and-hold |
 | `run.py all` | everything in sequence |
 | `run.py dashboard` | browser dashboard on port 8511 |
@@ -355,6 +356,37 @@ level p = 0.706. The curve also names what the apparent effect is: removing the
 pre-event baseline grows it eightfold, moving that baseline closer to the event
 nearly erases it, and it scales with the horizon without limit. Those are the
 signatures of drift.
+
+**Position sizing, the one place the volatility model pays off.** Since
+volatility is forecastable and direction is not, `run.py sizing` holds
+`target volatility / forecast volatility` - a large position in a quiet market,
+a small one in a violent market, so the RISK stays constant rather than the
+quantity held. It contains no view about where the price is going.
+
+| | Sharpe | max drawdown | volatility | turnover/yr | costs |
+|---|---|---|---|---|---|
+| buy and hold | **1.136** | −83.2% | 66.7% | 0.09 | 0.3% |
+| vol target, no band | 1.095 | −72.3% | 52.6% | 8.87 | 24.5% |
+| vol target, 30% band | 1.131 | **−66.4%** | **46.9%** | 1.14 | 3.2% |
+| vol target, EWMA 10% band | 1.153 | −72.6% | 53.0% | 2.18 | 6.0% |
+
+The forecast carries real information: the correlation between the position
+held and the *next* day's absolute move is **−0.255** — a smaller position
+before a bigger move, computed strictly causally. Volatility falls from 67% to
+47% and the worst drawdown from −83% to −66%.
+
+It does **not** raise the Sharpe ratio. Returns fall about as much as risk
+does, and the permutation test on the best variant gives p = 0.40. **This is a
+risk-control tool, not a way to earn more.** A −66% drawdown is survivable
+where −83% often is not, which is worth something to anyone actually holding
+the position — but it is not extra money, and a backtest claiming otherwise
+would be selling something.
+
+Two details worth keeping. Without a rebalance band the rule retrades 8.9 times
+a year and pays **24.5% of capital** in costs, destroying the benefit it exists
+to provide. And the expensive model loses: an exponentially weighted standard
+deviation sizes positions at least as well as the GARCH fit that takes six
+minutes to compute.
 
 **What is predictable: the range, not the direction.** Everything above says
 direction is not forecastable here. None of it says the *size* of the next move

@@ -58,6 +58,14 @@ from analysis.specification import (  # noqa: E402
     verdict,
 )
 from backtest.edge import edge_test, fragility  # noqa: E402
+from backtest.engine import BacktestConfig, compare, run_backtest  # noqa: E402
+from backtest.sizing import (  # noqa: E402
+    DEFAULT_REFIT_EVERY as SIZING_REFIT_EVERY,
+    apply_rebalance_band,
+    conditional_volatility,
+    realised_volatility,
+    volatility_target_position,
+)
 from forecast.coverage import (  # noqa: E402
     DEFAULT_REFIT_EVERY as COVERAGE_REFIT_EVERY,
     DEFAULT_WINDOW as COVERAGE_WINDOW,
@@ -558,6 +566,90 @@ def cmd_range(args) -> int:
     return 0
 
 
+def cmd_sizing(args) -> int:
+    """How much to hold, from the volatility forecast - never which way.
+
+    The only component of this project with demonstrated predictive power is
+    the volatility model, and this is what it is good for: sizing. It contains
+    no view about direction, which is what lets it exist here at all.
+    """
+    config = load_config()
+    symbol = config["price"]["symbol"]
+    priority = config["price"].get("stitch_priority", config["price"]["sources"])
+    with connect(config.db_path) as conn:
+        prices = load_stitched(conn, symbol, priority)
+    if prices.empty:
+        print("no prices in the database - run `ingest` first")
+        return 1
+
+    series = prices.copy()
+    series["date"] = pd.to_datetime(series["date"]).dt.normalize()
+    series = series.drop_duplicates(subset="date", keep="last").set_index("date")["close"]
+    close = series.astype(float).sort_index()
+    returns = np.log(close).diff().dropna()
+
+    cache = _processed_dir(config) / "conditional_volatility.csv"
+    if args.refresh or not cache.exists():
+        print(
+            "Building the volatility forecast: a GARCH refit every "
+            f"{SIZING_REFIT_EVERY} days over\n{len(returns):,} days, with the "
+            "variance rolled forward daily in between. A few minutes."
+        )
+        volatility = conditional_volatility(returns)
+        volatility.to_csv(cache)
+        print(f"-> {cache}")
+    else:
+        volatility = pd.read_csv(cache, index_col=0, parse_dates=True).iloc[:, 0]
+        print(f"Using the cached forecast ({cache.name}); --refresh rebuilds it.")
+
+    window = close.loc[volatility.index[0] :]
+    aligned = np.log(window).diff().fillna(0.0)
+    backtest_config = BacktestConfig()
+
+    target = volatility_target_position(
+        volatility, target_annual_volatility=args.target
+    ).reindex(window.index).fillna(0.0)
+
+    runs = [run_backtest(window, pd.Series(1.0, index=window.index),
+                         backtest_config, name="buy and hold")]
+    for band in (0.0, 0.10, 0.30):
+        label = f"vol target, band {band:.0%}"
+        runs.append(run_backtest(window, apply_rebalance_band(target, band),
+                                 backtest_config, name=label))
+    cheap = volatility_target_position(
+        realised_volatility(returns), target_annual_volatility=args.target
+    ).reindex(window.index).fillna(0.0)
+    runs.append(run_backtest(window, apply_rebalance_band(cheap, 0.10),
+                             backtest_config, name="vol target, EWMA band 10%"))
+
+    print(f"\n--- position sizing, target {args.target:.0%} annualised ---")
+    print(f"{window.index[0].date()} to {window.index[-1].date()}, "
+          f"{len(window):,} days\n")
+    table = compare(runs)[
+        ["sharpe", "max_drawdown", "volatility", "turnover_annual", "total_cost", "cagr"]
+    ]
+    print(table.to_string(float_format=lambda v: f"{v:,.3f}"))
+    _save(table, config, "sizing_comparison.csv")
+
+    best = max(runs[1:], key=lambda r: r.metrics["sharpe"])
+    edge = edge_test(best.positions, aligned,
+                     cost_rate=backtest_config.cost_rate, n_permutations=2000)
+    correlation = best.positions.shift(1).corr(aligned.abs())
+
+    print(f"\nDoes the sizing carry information? Correlation between the position "
+          f"held\nand the NEXT day's absolute move: {correlation:+.3f}. Negative "
+          "means a smaller\nposition before a bigger move, which is the claim.")
+    print(f"\nDoes it earn a risk-adjusted edge? {best.name}: {edge.summary()}")
+    print(
+        "\nRead those two lines together. The forecast has real content and the "
+        "sizing\ndoes what it says - volatility and drawdown both fall. It does "
+        "not raise the\nSharpe ratio: returns fall about as much as risk does. "
+        "This is a risk-control\ntool, not a way to earn more, and a backtest "
+        "that claimed otherwise would be\nselling something."
+    )
+    return 0
+
+
 def cmd_speccurve(args) -> int:
     """Vary the analytical choices instead of the hypothesis.
 
@@ -951,6 +1043,20 @@ def build_parser() -> argparse.ArgumentParser:
         help="check whether FRED_API_KEY works (queries the API)",
     )
     macro.set_defaults(func=cmd_macro)
+
+    sizing = subparsers.add_parser(
+        "sizing",
+        help="how much to hold, from the volatility forecast (not which way)",
+    )
+    sizing.add_argument(
+        "--target", type=float, default=0.60,
+        help="target annualised volatility (default 0.60 - BTC's own median)",
+    )
+    sizing.add_argument(
+        "--refresh", action="store_true",
+        help="rebuild the volatility forecast (several minutes)",
+    )
+    sizing.set_defaults(func=cmd_sizing)
 
     range_parser = subparsers.add_parser(
         "range",
