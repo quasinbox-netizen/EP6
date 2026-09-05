@@ -57,6 +57,7 @@ from analysis.specification import (  # noqa: E402
     run_curve,
     verdict,
 )
+from backtest.edge import edge_test, fragility  # noqa: E402
 from forecast.coverage import (  # noqa: E402
     DEFAULT_REFIT_EVERY as COVERAGE_REFIT_EVERY,
     DEFAULT_WINDOW as COVERAGE_WINDOW,
@@ -79,7 +80,7 @@ from pipeline import (  # noqa: E402
     walk_forward_check,
 )
 from storage import connect, read_macro, read_prices, table_summary  # noqa: E402
-from validation.multiple_testing import summarize  # noqa: E402
+from validation.multiple_testing import benjamini_hochberg, summarize  # noqa: E402
 
 pd.set_option("display.width", 160)
 pd.set_option("display.max_columns", 40)
@@ -815,6 +816,58 @@ def cmd_backtest(args) -> int:
     better = table[table["sharpe"] > baseline["sharpe"]].index.tolist()
     better = [name for name in better if name != "buy and hold"]
     print(f"\nbetter Sharpe than buy-and-hold: {better or 'none'}")
+
+    # A higher Sharpe is not an edge. Until this was added, the one module in
+    # the project that touches money was also the only one reporting a number
+    # without asking whether chance produced it.
+    print("\n--- does the timing beat chance? ---")
+    print(
+        "Each rule is compared against ITSELF applied at random times: the same\n"
+        "position series, circularly shifted, so exposure, turnover and costs are\n"
+        "unchanged and only the alignment with the price is destroyed."
+    )
+    asset_returns = np.log(data.prices.set_index("date")["close"].astype(float)).diff()
+    rows = []
+    for result in results:
+        aligned = asset_returns.reindex(result.positions.index).fillna(0.0)
+        try:
+            edge = edge_test(result.positions, aligned, n_permutations=2000)
+            weak = fragility(result.positions, aligned, n_permutations=500)
+        except ValueError as exc:
+            print(f"  {result.name}: skipped ({exc})")
+            continue
+        rows.append({
+            "strategy": result.name,
+            "sharpe": edge.observed,
+            "sharpe_random_timing": edge.null_mean,
+            "p_value": edge.p_value,
+            "episodes": weak.n_episodes,
+            "p_worst_without_one": weak.worst_p_value,
+            "fragile": weak.fragile,
+        })
+    if rows:
+        edges = pd.DataFrame(rows)
+        # Seven rules were tested, so seven chances to be lucky. Reporting the
+        # smallest raw p-value from a set and calling it significant is the
+        # error the rest of this project corrects for; there is no reason the
+        # backtest should be the exception.
+        edges["p_adjusted"] = benjamini_hochberg(edges["p_value"].to_numpy())
+        edges["survives_correction"] = edges["p_adjusted"] < 0.05
+        print()
+        print(edges.to_string(index=False, float_format=lambda v: f"{v:,.4f}"))
+        _save(edges, config, "backtest_edge.csv")
+        survivors = edges.loc[edges["survives_correction"], "strategy"].tolist()
+        print(
+            f"\n{len(edges)} rules tested, so {len(edges)} chances to be lucky. "
+            f"After Benjamini-Hochberg:\n  surviving: {survivors or 'none'}"
+        )
+        print(
+            "\n`p_worst_without_one` re-runs the test with each episode removed in "
+            "turn.\nA rule marked fragile loses its significance when a single "
+            "episode goes:\nthe p-value is as precise as the number of draws, but "
+            "only as strong as the\nnumber of trades behind it, and those are not "
+            "the same number."
+        )
     return 0
 
 

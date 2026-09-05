@@ -415,6 +415,35 @@ statistical check above and is indistinguishable from the NASDAQ**. Four cycles
 are four observations, and "be in the market for a year after the halving"
 largely overlaps with "be in the market during a bull run".
 
+**Does the timing beat chance?** A higher Sharpe is not an edge, so each rule
+is now compared against *itself applied at random times*: the same position
+series, circularly shifted, so exposure, turnover and costs are unchanged and
+only the alignment with the price is destroyed.
+
+| strategy | Sharpe | random timing | p | episodes | p without one | fragile |
+|---|---|---|---|---|---|---|
+| buy and hold | 0.71 | 0.72 | 0.96 | 1 | 0.97 | |
+| trend 50/200 | 0.90 | 0.56 | 0.20 | 12 | 0.28 | |
+| halving +90d | 0.70 | 0.19 | 0.085 | 4 | 0.52 | |
+| halving +365d | 1.18 | 0.34 | **0.0125** | 4 | 0.16 | **yes** |
+| macro | 0.32 | 0.22 | 0.38 | 25 | 0.64 | |
+
+Buy-and-hold returning p = 0.96 is the validity check: a constant position is
+unchanged by a shift, so it cannot have a timing edge and the test says so.
+
+`halving +365d` is the only rule under 0.05 raw, and it survives nothing.
+Seven rules were tested, so after Benjamini-Hochberg its q = 0.0875. And it is
+**fragile**: remove the 2012 halving — after which BTC rose roughly a
+hundredfold — and p goes from 0.0125 to 0.158. One window carries the whole
+result.
+
+That fragility column exists because this test can otherwise mislead badly. Its
+p-value is as precise as the number of permutation draws and only as strong as
+the number of trades behind it, and those are not the same number: the event
+study on the same four halvings reports p = 0.30 with an interval from −190% to
++441%, because its unit of observation is the event. Multiplying arrangements
+does not multiply evidence.
+
 ---
 
 ## Layout
