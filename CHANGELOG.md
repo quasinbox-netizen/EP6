@@ -65,6 +65,34 @@ on published results spelled out, never under **Fixed** as a detail.
   was not moved**; what changed is that it is defended as a risk choice rather
   than a measured optimum, with the half-of-days figure attached.
 
+- **Every sizing figure is restated: the cached volatility forecast had drifted
+  from the prices it was built from.** The stitch now prefers Binance from
+  2017-08-17, where Binance's history begins, in place of Bitstamp; the cache
+  predated that, so 3,305 of 4,035 daily forecasts behind the published sizing
+  were computed from a price series the database no longer holds. The band's
+  rank in its own sweep goes from 34th of 61 to **last**, the target's from
+  14th of 39 to 36th, and today's position from 0.82 to 0.79. The estimator is
+  unchanged and was verified deterministic: identical prices give identical
+  forecasts, and appending four days changes nothing before the last day, so
+  the whole move is the input. Both figures are on the page's corrections log.
+  The rank collapsing from mid-grid to bottom on a change of price source is
+  the sharpest evidence yet for what the sweep already argued - that ranking
+  these constants on this sample measures nothing.
+- The band's turnover figures on the agent page are read from the sweep instead
+  of written into the prose. They said "roughly 8.9x to 1.1x" and the refreshed
+  data already says 8.8x to 1.2x - harmless the day it was written, wrong within
+  a week of the daily job being switched on.
+- **The daily job now rebuilds the volatility forecast and the sizing tables.**
+  `sizing_today.csv` holds the position the agent page publishes, and it moved
+  only when the command was run by hand - so the site could advertise a daily
+  refresh while quoting a size computed on an arbitrary earlier day, with
+  nothing on the page to show the difference. The step runs `sizing --refresh`
+  (a bare `sizing` re-reads the cached forecast and would have been a no-op
+  dressed as a fix), sits between `ingest` and `paper` because both `paper` and
+  `publish` read what it writes, and is non-blocking: a failed refit leaves
+  yesterday's sizing in place and the day is still recorded. The four sizing
+  tables are now committed with the pages that chart them.
+
 ### Added
 
 - `backtest/sweep.py`: the band sweep, with the statistics that disqualify its

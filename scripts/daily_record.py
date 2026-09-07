@@ -6,6 +6,12 @@ Meant for a scheduler, so it has to behave like something nobody is watching:
   in the database. Recording without refreshing would re-record the same
   origin every day - harmless, since the ledger replaces rows for an origin it
   already holds, but it would never advance;
+* it then rebuilds the volatility forecast and the sizing tables, because the
+  position the agent publishes is read out of `sizing_today.csv` and that file
+  used to move only when somebody ran the command by hand. A site that
+  advertises a daily refresh while quoting a size from an arbitrary earlier
+  day is worse than one that admits it is stale, and nothing in the page would
+  have shown the difference;
 * a failed step does not stop the ones after it. A day with no network is
   still a day the app can be held to what it already believed;
 * the publish step commits and pushes, because the site is served from the
@@ -35,8 +41,26 @@ LOG = ROOT / "data" / "processed" / "daily.log"
 LOG_LIMIT_BYTES = 1_000_000
 PUBLISHED = "docs"
 
+# The sizing results the published pages read. They are committed alongside the
+# site because a chart whose source table is not in the repository is a chart
+# nobody can check, and because leaving them regenerated-but-uncommitted would
+# put the working tree permanently dirty for an unattended job to trip over.
+SIZING_ARTEFACTS = (
+    "data/processed/sizing_today.csv",
+    "data/processed/sizing_comparison.csv",
+    "data/processed/sizing_sweep.csv",
+    "data/processed/sizing_target_sweep.csv",
+)
+
 STEPS = (
     ("ingest", ["ingest", "--what", "prices"]),
+    # `--refresh` and not a bare `sizing`. The volatility forecast is a cache,
+    # and without rebuilding it the command re-reads yesterday's file and
+    # prints yesterday's size no matter how often it runs - which is the exact
+    # failure this step was added to prevent, only now on a schedule. The
+    # rebuild is a GARCH refit over the whole history; it costs minutes, which
+    # is what the generous per-step timeout is for.
+    ("sizing", ["sizing", "--refresh"]),
     ("ledger", ["ledger", "--record"]),
     ("paper", ["paper"]),
     ("publish", ["publish", "--out", PUBLISHED]),
@@ -108,7 +132,8 @@ def main() -> int:
             log(handle, "RESULT: the site was not rebuilt, so nothing was pushed")
         else:
             ok, lines = commit_and_push(
-                ROOT, [PUBLISHED], f"Refresh the published site for {today}"
+                ROOT, [PUBLISHED, *SIZING_ARTEFACTS],
+                f"Refresh the published site for {today}",
             )
             for line in lines:
                 log(handle, f"[git] {line}")

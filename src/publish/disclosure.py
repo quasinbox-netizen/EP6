@@ -65,6 +65,28 @@ CORRECTIONS: tuple[Correction, ...] = (
             "as bad as the page said, and it is still losing to doing nothing."
         ),
     ),
+    Correction(
+        date="2026-09-08",
+        page="trader.html",
+        headline="The sweeps were computed on a price history that has been re-stitched",
+        was="the band ranked 34th of 61, the target 14th of 39",
+        now="the band ranks last of 61, the target 36th of 39",
+        why=(
+            "The volatility forecast is built from the stitched price series and "
+            "was cached. Since it was last built, the stitch began preferring "
+            "Binance from 2017-08-17 - the date Binance's history starts - in "
+            "place of Bitstamp, which changed 3,305 of the 4,035 daily forecasts "
+            "behind every sizing figure on this page. The estimator itself is "
+            "unchanged and deterministic: the same prices give the same numbers, "
+            "and four more days of data on their own change nothing before the "
+            "last day. What moved was the input. The forecast is now rebuilt "
+            "every morning so it cannot drift from the prices again. Read the "
+            "size of this move as what it is: a parameter whose rank falls from "
+            "the middle of its grid to the bottom when the price source changes "
+            "underneath it was never ranked on anything real, which is what the "
+            "sweep below already said in a weaker way."
+        ),
+    ),
 )
 
 
@@ -155,11 +177,10 @@ def provenance_html(sizing: pd.DataFrame, comparison: pd.DataFrame) -> str:
         "highest-Sharpe variant among those compared - three of them - and the "
         "comparison ran on the same history the edge test then scores. That is "
         "selection in sample, and the sweep below shows what it was worth. "
-        "The band's job is to cut turnover - it takes annual turnover "
-        "from roughly 8.9x to 1.1x - and on that job the choice is cheap to "
-        "defend; as a return claim it is not, because a value chosen for "
-        "having the best score on a sample has no score left to report on "
-        "that sample.</li>"
+        "The band's job is to cut turnover, and the sweep prices that job; on "
+        "it the choice is cheap to defend. As a return claim it is not, "
+        "because a value chosen for having the best score on a sample has no "
+        "score left to report on that sample.</li>"
         "</ul>"
         + beaten
         + "<p class='note'>Neither number is being defended as optimal. They are "
@@ -196,6 +217,17 @@ def sweep_html(sweep: pd.DataFrame, adopted: float, chart: str = "") -> str:
         table.index[table["n_position_changes"] <= 1]
         if "n_position_changes" in table.columns else []
     )
+    # Read, not written: the daily refresh moves these, and a hardcoded "8.9x"
+    # was already wrong the first morning the job ran on its own.
+    turnover = ""
+    if "turnover_annual" in table.columns:
+        busiest = float(table["turnover_annual"].max())
+        here = float(table["turnover_annual"].loc[nearest])
+        turnover = (
+            f"it takes annual turnover from {busiest:.1f}x, with no band at all, "
+            f"to {here:.1f}x"
+        )
+
     frozen_line = ""
     if len(frozen):
         frozen_line = (
@@ -232,8 +264,8 @@ def sweep_html(sweep: pd.DataFrame, adopted: float, chart: str = "") -> str:
         f"to {best_band:.0%} because it won this sweep is precisely the mistake "
         "the sweep exposes, and it would need its own out-of-sample test before "
         "it meant anything. The band stays where it is, defended on the one "
-        "ground that does not move: it takes annual turnover from roughly 8.9x "
-        "to 1.1x, and turnover is a cost, not a score.</p></section>"
+        f"ground that does not move: {turnover or 'it cuts turnover sharply'}, "
+        "and turnover is a cost, not a score.</p></section>"
     )
 
 

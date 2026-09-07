@@ -230,3 +230,32 @@ def test_a_grid_without_the_cap_column_claims_nothing_about_it(target_grid):
 
 def test_no_target_sweep_no_section():
     assert target_sweep_html(pd.DataFrame(), adopted=0.60) == ""
+
+
+def test_the_turnover_claim_is_read_from_the_sweep_not_written_into_the_page():
+    """It said "roughly 8.9x to 1.1x" in prose, and the data had moved to 8.75x.
+
+    Harmless on the day it was written and wrong within a week of the daily
+    refresh being switched on, which is the shape of every stale number this
+    module exists to prevent. The figures now come out of the same table the
+    chart is drawn from.
+    """
+    grid = pd.DataFrame([
+        {"band": 0.00, "sharpe": 1.0, "turnover_annual": 12.5, "n_position_changes": 900},
+        {"band": 0.30, "sharpe": 1.1, "turnover_annual": 2.4, "n_position_changes": 40},
+    ])
+    html = sweep_html(grid, adopted=0.30)
+
+    assert "from 12.5x, with no band at all, to 2.4x" in html
+    assert "8.9x" not in html
+
+
+def test_a_sweep_without_turnover_still_defends_the_band():
+    grid = pd.DataFrame([
+        {"band": 0.00, "sharpe": 1.0, "n_position_changes": 900},
+        {"band": 0.30, "sharpe": 1.1, "n_position_changes": 40},
+    ])
+    html = sweep_html(grid, adopted=0.30)
+
+    assert "it cuts turnover sharply" in html
+    assert "turnover is a cost, not a score" in html
