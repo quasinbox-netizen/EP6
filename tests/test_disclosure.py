@@ -16,7 +16,7 @@ import pytest
 
 from publish.disclosure import (
     CORRECTIONS, Correction, corrections_for, corrections_html, provenance_html,
-    sweep_html, target_sweep_html,
+    rank_history_html, sweep_html, target_sweep_html,
 )
 
 
@@ -259,3 +259,61 @@ def test_a_sweep_without_turnover_still_defends_the_band():
 
     assert "it cuts turnover sharply" in html
     assert "turnover is a cost, not a score" in html
+
+
+@pytest.fixture
+def rank_log() -> pd.DataFrame:
+    rows = []
+    for day, (band_rank, target_rank, best) in enumerate(
+        ((34, 14, 0.42), (12, 31, 0.24), (61, 36, 0.43)), start=6
+    ):
+        rows.append({"recorded": f"2026-09-0{day}", "parameter": "band",
+                     "adopted": 0.30, "rank": band_rank, "of": 61, "best": best})
+        rows.append({"recorded": f"2026-09-0{day}", "parameter": "target",
+                     "adopted": 0.60, "rank": target_rank, "of": 39, "best": 0.30})
+    return pd.DataFrame(rows)
+
+
+def test_one_run_is_reported_as_one_run_not_drawn_as_a_trend(rank_log):
+    """A line through a single point would assert what it cannot show."""
+    one_day = rank_log[rank_log["recorded"] == "2026-09-06"]
+    html = rank_history_html(one_day, chart="<div id='rankchart'></div>", minimum=3)
+
+    assert "holds <b>1 run</b>" in html
+    assert "not enough to draw a line through" in html
+    # The figure itself is withheld, not just captioned away. The word "chart"
+    # appears in the prose, so the marker is what this checks.
+    assert "id='rankchart'" not in html
+
+
+def test_the_section_points_at_the_correction_while_it_waits(rank_log):
+    """The restatement is real evidence and is already published; say so.
+
+    It belongs in the corrections rather than on this chart because it is a
+    same-day restatement, not a point in a series - and a reader looking at an
+    almost-empty section should be told where the known movement is.
+    """
+    html = rank_history_html(rank_log[rank_log["recorded"] == "2026-09-06"], minimum=3)
+
+    assert "corrections below" in html
+    assert "without a line of code changing between the two" in html
+
+
+def test_with_enough_runs_it_reports_the_span_each_constant_covered(rank_log):
+    html = rank_history_html(rank_log, chart="<div id='rankchart'></div>", minimum=3)
+
+    assert "rankchart" in html
+    assert "<b>band</b> in use has placed between <b>12</b> and <b>61</b> of 61" in html
+    assert "<b>target</b> in use has placed between <b>14</b> and <b>36</b> of 39" in html
+    assert "3 different ones" in html              # a new winner every single run
+
+
+def test_the_section_refuses_to_chase_the_current_winner(rank_log):
+    html = rank_history_html(rank_log, minimum=3)
+
+    assert "neither constant has been moved" in html
+    assert "made by measurement rather than by a standard error" in html
+
+
+def test_no_log_no_section():
+    assert rank_history_html(pd.DataFrame()) == ""

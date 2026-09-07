@@ -78,6 +78,19 @@ on published results spelled out, never under **Fixed** as a detail.
   The rank collapsing from mid-grid to bottom on a change of price source is
   the sharpest evidence yet for what the sweep already argued - that ranking
   these constants on this sample measures nothing.
+- `backtest/rank_history.py`: a log of where each constant placed in its own
+  sweep, one row per run, written every time the sizing is rebuilt and never
+  pruned. The sweeps argue that ranking these constants measures nothing using
+  statistics computed inside a single run; this makes the same argument by
+  keeping the ranking and watching it move, which needs no standard error to
+  believe. Rows are keyed on the day they were RECORDED rather than the last
+  day of data used, because those come apart exactly when it matters - two runs
+  over the same window can disagree once the window is restated underneath
+  them, and both answers are worth keeping in the order they were believed.
+  Charted on the agent page as each value's place in its own grid, so a
+  61-value sweep and a 39-value one share an axis; below three distinct days
+  the section says how many runs it holds and withholds the chart rather than
+  drawing a trend through two points.
 - The band's turnover figures on the agent page are read from the sweep instead
   of written into the prose. They said "roughly 8.9x to 1.1x" and the refreshed
   data already says 8.8x to 1.2x - harmless the day it was written, wrong within

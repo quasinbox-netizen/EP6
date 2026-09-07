@@ -256,3 +256,44 @@ def target_sweep_chart(frame: pd.DataFrame, adopted: float,
         legend={"orientation": "h", "y": -0.22},
     )
     return figure
+
+
+def rank_history_chart(frame: pd.DataFrame) -> go.Figure:
+    """Where each constant has placed in its own sweep, run after run.
+
+    Plotted as a share of the grid rather than a raw rank, because 34th means
+    one thing out of 61 and another out of 39 and the two lines have to share
+    an axis. The raw counts ride along in the hover, so nobody is shown a ratio
+    without the numbers behind it.
+
+    The axis is reversed: best at the top, which is the direction a reader
+    already expects. A parameter chosen on something real would draw a line
+    that stays near where it was put. The interesting outcome here is a line
+    that does not.
+    """
+    figure = go.Figure()
+    colours = {"band": COLORS["car"], "target": "#20c97e"}
+
+    for name, rows in frame.groupby("parameter"):
+        rows = rows.sort_values("recorded")
+        figure.add_trace(go.Scatter(
+            x=pd.to_datetime(rows["recorded"]), y=rows["placement"],
+            mode="lines+markers", name=name,
+            line={"color": colours.get(name, COLORS["price"]), "width": 1.8},
+            marker={"size": 7},
+            customdata=rows[["rank", "of", "adopted", "best"]].to_numpy(),
+            hovertemplate=(
+                "%{x|%Y-%m-%d}<br>placed %{customdata[0]} of %{customdata[1]}"
+                "<br>in use %{customdata[2]:.0%}, best %{customdata[3]:.0%}"
+                "<extra>" + str(name) + "</extra>"
+            ),
+        ))
+
+    figure.update_layout(
+        height=300, margin={"l": 60, "r": 16, "t": 24, "b": 40},
+        yaxis={"title": "place in its own sweep", "tickformat": ".0%",
+               "autorange": "reversed", "range": [1, 0]},
+        xaxis={"title": ""},
+        legend={"orientation": "h", "y": -0.24},
+    )
+    return figure

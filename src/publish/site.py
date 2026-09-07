@@ -29,14 +29,17 @@ import pandas as pd
 import plotly.graph_objects as go
 
 from analysis.evidence import build as build_evidence
+from backtest.rank_history import MIN_OBSERVATIONS as MIN_RANK_OBSERVATIONS
+from backtest.rank_history import placement as rank_placement
 from forecast.ledger import load as load_ledger
 from forecast.ledger import score as score_ledger
 from forecast.ledger import scoreboard as ledger_scoreboard
 from forecast.ledger import verdict as ledger_verdict
 from publish.charts import (band_sweep_chart, cycle_clock, range_chart,
-                            target_sweep_chart)
+                            rank_history_chart, target_sweep_chart)
 from publish.disclosure import (corrections_html, provenance_html,
-                                sweep_html, target_sweep_html)
+                                rank_history_html, sweep_html,
+                                target_sweep_html)
 from publish.pages import cards as _cards
 from publish.pages import evidence_page, figure_html, today_page
 from publish.pages import table as _table
@@ -230,6 +233,17 @@ def _target_sweep_section(inputs: SiteInputs) -> str:
         "targetsweep",
     )
     return target_sweep_html(sweep, float(adopted), chart)
+
+
+def _rank_history_section(inputs: SiteInputs) -> str:
+    """How the constants' placings have moved across runs, once there are any."""
+    history = (inputs.saved or {}).get("rank_history", pd.DataFrame())
+    if history.empty or "parameter" not in history.columns:
+        return ""
+    chart = ""
+    if history["recorded"].nunique() >= MIN_RANK_OBSERVATIONS:
+        chart = figure_html(rank_history_chart(rank_placement(history)), "rankhistory")
+    return rank_history_html(history, chart, minimum=MIN_RANK_OBSERVATIONS)
 
 
 def build(destination: Path, dashboard_dir: Path, inputs: SiteInputs) -> list:
@@ -429,6 +443,7 @@ def build(destination: Path, dashboard_dir: Path, inputs: SiteInputs) -> list:
                               (inputs.saved or {}).get("sizing_comparison", pd.DataFrame()))
             + _band_sweep_section(inputs)
             + _target_sweep_section(inputs)
+            + _rank_history_section(inputs)
             + corrections_html("trader.html")
         )
         written.append(_write(destination / "trader.html",

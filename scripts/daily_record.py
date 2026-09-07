@@ -50,6 +50,10 @@ SIZING_ARTEFACTS = (
     "data/processed/sizing_comparison.csv",
     "data/processed/sizing_sweep.csv",
     "data/processed/sizing_target_sweep.csv",
+    # The record of where each constant placed, one row per run. It is the
+    # evidence for a claim the page makes about its own parameters, so it has
+    # to travel with the page rather than live only on this machine.
+    "data/processed/rank_history.csv",
 )
 
 STEPS = (

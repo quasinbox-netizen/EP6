@@ -349,3 +349,62 @@ def target_sweep_html(sweep: pd.DataFrame, adopted: float, chart: str = "") -> s
         "statement includes the fact that at this setting the rule spends half "
         "its days holding everything it is allowed to hold.</p></section>"
     )
+
+
+def rank_history_html(history: pd.DataFrame, chart: str = "",
+                      minimum: int = 3) -> str:
+    """The sweeps' argument, made by measurement instead of by statistics.
+
+    The sweeps say a ranking computed on this sample means nothing, and support
+    it with numbers taken from inside a single run. This says the same thing by
+    keeping the ranking and watching it move, which is the version that does
+    not require the reader to trust a standard error.
+
+    Below `minimum` distinct days there is no movement to show, and the section
+    says so instead of drawing a line through two points. A chart that claimed
+    wandering from two observations would be doing what the sweeps warn against.
+    """
+    if history.empty or "parameter" not in history.columns:
+        return ""
+    days = int(history["recorded"].nunique())
+    parts = ["<section><h2>Where these constants have placed, run after run</h2>"]
+
+    if days < minimum:
+        runs = "run" if days == 1 else "runs"
+        return "".join(parts + [
+            "<p class='note'>The record starts here and holds "
+            f"<b>{days} {runs}</b> so far, which is not enough to draw a line "
+            "through. It is written every time the sizing is rebuilt, which is "
+            "now every morning, so this becomes a chart on its own without "
+            "anybody deciding to make one.</p>"
+            "<p class='note'>What is already known sits in the corrections "
+            "below: the band placed in the middle of its grid on one price "
+            "series and last on the restated one, without a line of code "
+            "changing between the two. That is a same-day restatement rather "
+            "than a series over time, which is why it is a correction and not "
+            "a point on this chart.</p></section>",
+        ])
+
+    parts.append(chart)
+    lines = []
+    for name in sorted(history["parameter"].unique()):
+        rows = history.loc[history["parameter"] == name].sort_values("recorded")
+        best, worst = int(rows["rank"].min()), int(rows["rank"].max())
+        moved = int(rows["best"].nunique())
+        lines.append(
+            f"<li>The <b>{name}</b> in use has placed between <b>{best}</b> and "
+            f"<b>{worst}</b> of {int(rows['of'].iloc[-1])} across "
+            f"{int(rows['recorded'].nunique())} runs, and the value that scored "
+            f"highest has been {moved} different one{'s' if moved != 1 else ''} "
+            "over the same period.</li>"
+        )
+    parts.append("<ul>" + "".join(lines) + "</ul>")
+    parts.append(
+        "<p class='note'>Nothing about the rule changes between these points. "
+        "The sample grows by a day, and the answer to \"which value is best\" "
+        "moves. That is the sweeps' argument again, made by measurement rather "
+        "than by a standard error the reader has to take on faith - and it is "
+        "the reason neither constant has been moved to whichever value happens "
+        "to be winning today.</p></section>"
+    )
+    return "".join(parts)

@@ -65,6 +65,8 @@ from agent.live import append_observation, fetch_price, observe, should_publish 
 from agent.live import feed as agent_feed  # noqa: E402
 from backtest.paper import run_paper, state, target_weights  # noqa: E402
 from features.halving import CONFIRMED_HALVINGS  # noqa: E402
+from backtest.rank_history import movement as rank_movement  # noqa: E402
+from backtest.rank_history import record as record_rank  # noqa: E402
 from backtest.sweep import band_sweep, target_sweep  # noqa: E402
 from backtest.sizing import (  # noqa: E402
     DEFAULT_REFIT_EVERY as SIZING_REFIT_EVERY,
@@ -774,7 +776,7 @@ def cmd_publish(args) -> int:
     saved = {
         name: read(f"{name}.csv")
         for name in ("sizing_today", "sizing_comparison", "sizing_sweep",
-                     "sizing_target_sweep",
+                     "sizing_target_sweep", "rank_history",
                      "backtest_edge",
                      "backtest_comparison", "event_study_halving",
                      "event_study_categories", "hypothesis_scan", "walk_forward",
@@ -1119,6 +1121,8 @@ def cmd_sizing(args) -> int:
     _save(sweep.table.reset_index(), config, "sizing_sweep.csv")
     print("\n--- every band, not just the three compared ---")
     print(sweep.summary())
+    history_path = _processed_dir(config) / "rank_history.csv"
+    record_rank(history_path, sweep, as_of=usable.max(), recorded=pd.Timestamp.today())
 
     # And the other constant, which was never swept at all. It is a risk dial
     # rather than a threshold, so its Sharpe column is the wrong place to look,
@@ -1128,6 +1132,16 @@ def cmd_sizing(args) -> int:
     _save(targets.table.reset_index(), config, "sizing_target_sweep.csv")
     print("\n--- every volatility target ---")
     print(targets.summary())
+    history = record_rank(history_path, targets, as_of=usable.max(),
+                          recorded=pd.Timestamp.today())
+    for name in ("band", "target"):
+        travel = rank_movement(history, name)
+        if travel:
+            print(
+                f"  Over {travel['observations']} runs the {name} has placed "
+                f"between {travel['best_rank']} and {travel['worst_rank']} of "
+                f"{travel['of']}."
+            )
     print(
         "  Drawdown across that grid runs from "
         f"{targets.table['max_drawdown'].max():.0%} to "
