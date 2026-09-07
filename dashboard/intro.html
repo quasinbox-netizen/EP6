@@ -1,0 +1,579 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BTC Cycle Lab - intro</title>
+<style>html,body{margin:0;height:100%;background:#05070a;overflow:hidden}</style>
+</head>
+<body>
+<script>window.__BTCLAB_STANDALONE__ = true;</script>
+<!--INTRO:START-->
+<style>
+#btclab-intro{
+  position:fixed; inset:0; z-index:2147483000;
+  background:#05070a; overflow:hidden;
+  opacity:1; transition:opacity .55s ease;
+  font-family:"Impact","Haettenschweiler","Arial Black",system-ui,sans-serif;
+  cursor:pointer;
+}
+#btclab-intro.btclab-out{opacity:0}
+#btclab-intro canvas{display:block;width:100%;height:100%}
+#btclab-intro .btclab-skip{
+  position:absolute; right:18px; top:16px; z-index:3;
+  padding:7px 14px; border:1px solid rgba(240,240,240,.28); border-radius:4px;
+  background:rgba(10,12,16,.55); color:#cfd3da; cursor:pointer;
+  font:600 12px/1 ui-monospace,SFMono-Regular,Consolas,monospace;
+  letter-spacing:.16em; text-transform:uppercase;
+}
+#btclab-intro .btclab-skip:hover{color:#fff;border-color:rgba(247,147,26,.8)}
+</style>
+<div id="btclab-intro"><canvas></canvas><button class="btclab-skip" type="button">Skip</button></div>
+<script>
+(function () {
+  /* An overlay left over from an earlier play would shadow the new one, since
+     getElementById returns the first match in document order. */
+  var stale = document.querySelectorAll('#btclab-intro[data-started="1"]');
+  for (var i = 0; i < stale.length; i++) {
+    if (stale[i].parentNode) stale[i].parentNode.removeChild(stale[i]);
+  }
+
+  var root = document.getElementById('btclab-intro');
+  if (!root) return;
+  root.dataset.started = '1';
+
+  /* Inside Streamlit this markup arrives inside an element container that the
+     next rerun throws away - which killed the animation halfway through.
+     Moving the overlay to <body> hands its lifetime to the code below.
+     Streamlit sets the container's innerHTML rather than tracking these nodes
+     individually, so nothing on the React side misses them. */
+  if (document.body && root.parentNode !== document.body) {
+    document.body.appendChild(root);
+  }
+
+  var canvas = root.querySelector('canvas');
+  var ctx = canvas.getContext('2d');
+  var skipBtn = root.querySelector('.btclab-skip');
+  var standalone = !!window.__BTCLAB_STANDALONE__;
+  var reduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  var W = 0, H = 0, DPR = 1;
+  function resize() {
+    DPR = Math.min(window.devicePixelRatio || 1, 2);
+    W = root.clientWidth || window.innerWidth;
+    H = root.clientHeight || window.innerHeight;
+    canvas.width = Math.round(W * DPR);
+    canvas.height = Math.round(H * DPR);
+    canvas.style.width = W + 'px';
+    canvas.style.height = H + 'px';
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  }
+  resize();
+  window.addEventListener('resize', resize);
+
+  /* ---------------------------------------------------------------- theme */
+  var GREEN = '#20c97e', GREEN_D = '#0f7d4d';
+  var RED = '#ef4056', RED_D = '#8f1f2e';
+  var GOLD = '#f7931a', BONE = '#efeadc';
+
+  /* ------------------------------------------------------- the fight plan */
+  /* Every clash: who swings and what pops up. The coin lands green candles,
+     the skull lands red ones, so the chart in the background doubles as the
+     scoreboard. The last beat is a double KO on purpose - see drawTitle. */
+  var SCRIPT = [
+    { t: 2050, by: 'coin',  word: 'PUMP!' },
+    { t: 2750, by: 'skull', word: 'REKT!' },
+    { t: 3450, by: 'coin',  word: 'HODL!' },
+    { t: 4150, by: 'skull', word: '-84%' },
+    { t: 4850, by: 'coin',  word: 'BONK!' },
+    { t: 5550, by: 'both',  word: 'NO EDGE' }
+  ];
+  var T_SKULL_IN = 900, T_COIN_IN = 1400, T_FIGHT = 1720;
+  var T_TITLE = 5900, T_END = 8400;
+
+  /* ------------------------------------------------------------- the tape */
+  var price = 41850, candles = [];
+  function pushCandle(bias, power) {
+    var open = price;
+    var move = (Math.random() - 0.5) * 0.018 + bias * 0.02 * power;
+    var close = open * (1 + move);
+    candles.push({
+      o: open, c: close,
+      h: Math.max(open, close) * (1 + Math.random() * 0.011),
+      l: Math.min(open, close) * (1 - Math.random() * 0.011)
+    });
+    price = close;
+    if (candles.length > 260) candles.shift();
+  }
+  for (var seed = 0; seed < 200; seed++) pushCandle(Math.sin(seed / 8) * 0.55, 1);
+
+  /* ---------------------------------------------------------------- state */
+  var now = 0, prev = 0, started = 0, fired = 0, done = false;
+  var shake = 0, flash = null, words = [], puffs = [];
+  var dmgSkull = 0, dmgCoin = 0, nextCandle = 0;
+
+  function hit(by) {
+    shake = 26;
+    var i;
+    if (by === 'coin') { flash = { c: GREEN, a: 0.5 }; for (i = 0; i < 3; i++) pushCandle(1.4, 1.6); dmgSkull++; }
+    if (by === 'skull') { flash = { c: RED, a: 0.5 }; for (i = 0; i < 3; i++) pushCandle(-1.4, 1.6); dmgCoin++; }
+    if (by === 'both') { flash = { c: '#ffffff', a: 0.85 }; pushCandle(-2.2, 2); pushCandle(1.9, 2); dmgSkull++; dmgCoin++; }
+  }
+  function say(text, color, lift) {
+    words.push({
+      text: text, born: now, color: color,
+      tilt: (Math.random() - 0.5) * 0.34,
+      dx: (Math.random() - 0.5) * 140,
+      dy: -30 - Math.random() * 40 - (lift || 0)
+    });
+  }
+  function puff(x, y, r) { puffs.push({ x: x, y: y, r: r, born: now }); }
+
+  /* -------------------------------------------------------------- helpers */
+  function ease(p) { return p < 0 ? 0 : p > 1 ? 1 : p * p * (3 - 2 * p); }
+  function easeIn(p) { return p < 0 ? 0 : p > 1 ? 1 : p * p * p; }
+  function rr(x, y, w, h, r) {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.arcTo(x + w, y, x + w, y + h, r);
+    ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r);
+    ctx.arcTo(x, y, x + w, y, r);
+    ctx.closePath();
+  }
+
+  /* ----------------------------------------------------------- background */
+  function drawChart() {
+    var g = ctx.createLinearGradient(0, 0, 0, H);
+    g.addColorStop(0, '#080b11'); g.addColorStop(1, '#04060a');
+    ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+
+    var cw = Math.max(14, Math.min(26, W / 46));
+    var count = Math.ceil(W / cw) + 1;
+    var vis = candles.slice(Math.max(0, candles.length - count));
+    var lo = Infinity, hi = -Infinity, i;
+    for (i = 0; i < vis.length; i++) {
+      if (vis[i].l < lo) lo = vis[i].l;
+      if (vis[i].h > hi) hi = vis[i].h;
+    }
+    var pad = (hi - lo) * 0.22 || 1;
+    lo -= pad; hi += pad;
+    var top = H * 0.10, bot = H * 0.92;
+    function py(v) { return bot - ((v - lo) / (hi - lo)) * (bot - top); }
+
+    ctx.strokeStyle = 'rgba(120,140,170,.09)'; ctx.lineWidth = 1;
+    for (i = 1; i < 7; i++) {
+      var gy = top + (bot - top) * i / 7;
+      ctx.beginPath(); ctx.moveTo(0, gy); ctx.lineTo(W, gy); ctx.stroke();
+    }
+
+    ctx.globalAlpha = 0.62;
+    for (i = 0; i < vis.length; i++) {
+      var k = vis[i], x = W - (vis.length - i) * cw + cw * 0.5;
+      var up = k.c >= k.o;
+      ctx.strokeStyle = up ? GREEN_D : RED_D;
+      ctx.lineWidth = Math.max(1, cw * 0.09);
+      ctx.beginPath(); ctx.moveTo(x, py(k.h)); ctx.lineTo(x, py(k.l)); ctx.stroke();
+      ctx.fillStyle = up ? GREEN : RED;
+      var yo = py(k.o), yc = py(k.c);
+      ctx.fillRect(x - cw * 0.34, Math.min(yo, yc), cw * 0.68, Math.max(2, Math.abs(yc - yo)));
+    }
+    ctx.globalAlpha = 1;
+
+    var last = candles[candles.length - 1];
+    var ly = py(last.c), rising = last.c >= last.o;
+    ctx.setLineDash([6, 6]);
+    ctx.strokeStyle = rising ? 'rgba(32,201,126,.55)' : 'rgba(239,64,86,.55)';
+    ctx.beginPath(); ctx.moveTo(0, ly); ctx.lineTo(W, ly); ctx.stroke();
+    ctx.setLineDash([]);
+
+    ctx.font = '600 12px ui-monospace,SFMono-Regular,Consolas,monospace';
+    ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+    ctx.fillStyle = rising ? GREEN : RED;
+    ctx.fillRect(W - 96, ly - 10, 88, 20);
+    ctx.fillStyle = '#05070a';
+    ctx.fillText('$' + Math.round(last.c).toLocaleString('en-US'), W - 88, ly + 1);
+
+    var chg = (last.c / candles[Math.max(0, candles.length - 40)].c - 1) * 100;
+    ctx.fillStyle = 'rgba(200,210,225,.72)';
+    ctx.fillText('BTC/USD  1D', 22, 30);
+    ctx.fillStyle = chg >= 0 ? GREEN : RED;
+    ctx.fillText((chg >= 0 ? '+' : '') + chg.toFixed(2) + '%', 130, 30);
+  }
+
+  /* --------------------------------------------------------------- skull */
+  function drawSkull(x, y, s, rot, punch, dmg) {
+    ctx.save();
+    ctx.translate(x, y); ctx.rotate(rot); ctx.scale(s / 100, s / 100);
+
+    glove(-50, 40, 17, '#7a1220', '#3c0810');
+
+    var g = ctx.createLinearGradient(-40, -60, 30, 60);
+    g.addColorStop(0, '#ffffff'); g.addColorStop(0.45, BONE); g.addColorStop(1, '#a9a294');
+    ctx.fillStyle = g;
+    ctx.shadowColor = 'rgba(255,70,90,.45)'; ctx.shadowBlur = 26;
+    rr(-27, 14, 54, 34, 13); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(0, -13, 45, 43, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.shadowBlur = 0;
+
+    ctx.strokeStyle = 'rgba(60,52,44,.55)'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(-24, 16); ctx.lineTo(24, 16); ctx.stroke();
+
+    /* eye sockets - the glow is what does the scaring */
+    [-18, 18].forEach(function (ex) {
+      ctx.fillStyle = '#0b0b0e';
+      ctx.beginPath(); ctx.ellipse(ex, -16, 14, 16, 0, 0, Math.PI * 2); ctx.fill();
+      var rg = ctx.createRadialGradient(ex, -14, 1, ex, -14, 15);
+      rg.addColorStop(0, 'rgba(255,60,80,.95)');
+      rg.addColorStop(1, 'rgba(255,0,30,0)');
+      ctx.fillStyle = rg;
+      ctx.beginPath(); ctx.ellipse(ex, -14, 14, 16, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#ff5566';
+      ctx.beginPath(); ctx.arc(ex + 3, -13, 3.4, 0, Math.PI * 2); ctx.fill();
+    });
+
+    ctx.strokeStyle = 'rgba(70,60,52,.75)'; ctx.lineWidth = 5; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(-31, -34); ctx.lineTo(-7, -26); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(31, -34); ctx.lineTo(7, -26); ctx.stroke();
+
+    ctx.fillStyle = '#12100f';
+    ctx.beginPath(); ctx.moveTo(0, -4); ctx.lineTo(-7, 10); ctx.lineTo(7, 10); ctx.closePath(); ctx.fill();
+
+    /* teeth - one drops out per hit taken */
+    ctx.fillStyle = '#f7f3e8';
+    for (var i = 0; i < 6; i++) {
+      if (i === 2 && dmg >= 1) continue;
+      if (i === 4 && dmg >= 3) continue;
+      ctx.fillRect(-24 + i * 8.4, 18, 6.6, 13);
+      ctx.fillRect(-24 + i * 8.4, 33, 6.6, 11);
+    }
+
+    if (dmg >= 2) {
+      ctx.strokeStyle = 'rgba(50,40,36,.8)'; ctx.lineWidth = 2.2;
+      ctx.beginPath(); ctx.moveTo(-30, -40); ctx.lineTo(-16, -22); ctx.lineTo(-24, -12); ctx.stroke();
+    }
+    if (dmg >= 3) {
+      ctx.beginPath(); ctx.moveTo(26, -46); ctx.lineTo(16, -30); ctx.lineTo(30, -22); ctx.stroke();
+    }
+
+    glove(48 + punch * 74, 26 - punch * 20, 19, '#c0182c', '#5c0a16');
+    ctx.restore();
+  }
+
+  /* ---------------------------------------------------------------- coin */
+  function drawCoin(x, y, s, rot, punch, dmg) {
+    ctx.save();
+    ctx.translate(x, y); ctx.rotate(rot); ctx.scale(s / 100, s / 100);
+
+    glove(50, 40, 17, '#1b4f8f', '#0a2447');
+
+    ctx.shadowColor = 'rgba(247,147,26,.55)'; ctx.shadowBlur = 30;
+    var g = ctx.createRadialGradient(-16, -20, 6, 0, 0, 52);
+    g.addColorStop(0, '#ffd27a'); g.addColorStop(0.55, GOLD); g.addColorStop(1, '#a9600b');
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(0, 0, 48, 0, Math.PI * 2); ctx.fill();
+    ctx.shadowBlur = 0;
+
+    ctx.strokeStyle = 'rgba(255,214,140,.85)'; ctx.lineWidth = 4;
+    ctx.beginPath(); ctx.arc(0, 0, 43, 0, Math.PI * 2); ctx.stroke();
+
+    /* dents: the rim stops being perfect once it takes hits */
+    if (dmg >= 1) { ctx.fillStyle = '#05070a'; ctx.beginPath(); ctx.arc(-40, -24, 9, 0, Math.PI * 2); ctx.fill(); }
+    if (dmg >= 2) { ctx.fillStyle = '#05070a'; ctx.beginPath(); ctx.arc(18, 44, 8, 0, Math.PI * 2); ctx.fill(); }
+
+    /* the B is drawn, not typed: no font here can be trusted to ship U+20BF */
+    ctx.fillStyle = '#5a3406';
+    ctx.font = '900 54px "Arial Black",Impact,sans-serif';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText('B', 1, 16);
+    ctx.fillRect(-10, -13, 6, 60);
+    ctx.fillRect(4, -13, 6, 60);
+
+    /* cartoon eyes: this is the half that is meant to be funny */
+    [-17, 17].forEach(function (ex) {
+      ctx.fillStyle = '#fffdf6';
+      ctx.beginPath(); ctx.ellipse(ex, -28, 11, 12, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#141414';
+      ctx.beginPath(); ctx.arc(ex - 2, -27, 4.4, 0, Math.PI * 2); ctx.fill();
+    });
+    ctx.strokeStyle = '#4a2a05'; ctx.lineWidth = 4.5; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(-30, -45); ctx.lineTo(-10, -38); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(30, -45); ctx.lineTo(10, -38); ctx.stroke();
+
+    glove(-50 - punch * 74, 26 - punch * 20, 19, '#2a6fc4', '#0a2447');
+    ctx.restore();
+  }
+
+  function glove(x, y, r, fill, edge) {
+    ctx.fillStyle = fill; ctx.strokeStyle = edge; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = 'rgba(255,255,255,.22)';
+    ctx.beginPath(); ctx.arc(x - r * 0.3, y - r * 0.35, r * 0.32, 0, Math.PI * 2); ctx.fill();
+  }
+
+  /* --------------------------------------------------------- choreography */
+  function clashNow(t) {
+    for (var i = 0; i < SCRIPT.length; i++) {
+      var dt = t - SCRIPT[i].t;
+      if (dt >= -400 && dt <= 340) return { c: SCRIPT[i], dt: dt };
+    }
+    return null;
+  }
+
+  /* Windows are 400ms of charge and 340ms of recoil against beats 700ms
+     apart, so at most one clash is ever live - which is why this can return
+     a single state instead of summing overlapping ones. */
+  function fighterOffsets(t, size) {
+    var o = { s: 0, c: 0, ps: 0, pc: 0 };
+    var st = clashNow(t);
+    if (!st) return o;
+    var attackS = st.c.by === 'skull' || st.c.by === 'both';
+    var attackC = st.c.by === 'coin' || st.c.by === 'both';
+    /* Travel is whatever it takes to close the gap between the two bodies. A
+       fixed reach left the puncher swinging at air on a narrow window. */
+    var reach = Math.max(40, W * 0.44 - size * 1.05);
+    if (attackS && attackC) reach *= 0.5;
+    if (st.dt < 0) {
+      var p = easeIn((st.dt + 400) / 400);
+      var punch = Math.max(0, (p - 0.5) / 0.5);
+      o.s = attackS ? reach * p : -16 * p;
+      o.c = attackC ? -reach * p : 16 * p;
+      o.ps = attackS ? punch : 0;
+      o.pc = attackC ? punch : 0;
+    } else {
+      var back = 1 - ease(st.dt / 340);
+      o.s = attackS ? reach * back * 0.85 : -105 * back;
+      o.c = attackC ? -reach * back * 0.85 : 105 * back;
+      o.ps = attackS ? 0.75 * back : 0;
+      o.pc = attackC ? 0.75 * back : 0;
+    }
+    return o;
+  }
+
+  /* ---------------------------------------------------------------- words */
+  function drawWord(w, t) {
+    var age = t - w.born;
+    if (age > 640) return false;
+    var pop = age < 130 ? 0.25 + 1.05 * ease(age / 130) : 1.3 - 0.3 * ease((age - 130) / 260);
+    var alpha = age < 400 ? 1 : 1 - (age - 400) / 240;
+    ctx.save();
+    ctx.globalAlpha = Math.max(0, alpha);
+    ctx.translate(W / 2 + w.dx, H * 0.42 + w.dy - age * 0.045);
+    ctx.rotate(w.tilt); ctx.scale(pop, pop);
+    ctx.font = '900 64px "Arial Black",Impact,sans-serif';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.lineWidth = 9; ctx.strokeStyle = '#05070a';
+    ctx.strokeText(w.text, 0, 0);
+    ctx.fillStyle = w.color; ctx.shadowColor = w.color; ctx.shadowBlur = 22;
+    ctx.fillText(w.text, 0, 0);
+    ctx.restore();
+    return true;
+  }
+
+  /* ---------------------------------------------------------------- title */
+  function drawTitle(t) {
+    var age = t - T_TITLE;
+    if (age < 0) return;
+    var title = 'BTC CYCLE LAB';
+    ctx.save();
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.font = '900 ' + Math.round(Math.min(86, W / 12)) + 'px "Arial Black",Impact,sans-serif';
+    var widths = [], total = 0, i;
+    for (i = 0; i < title.length; i++) { widths[i] = ctx.measureText(title[i]).width; total += widths[i]; }
+    var x = W / 2 - total / 2, y = H * 0.44;
+    for (i = 0; i < title.length; i++) {
+      var a = ease((age - i * 45) / 260);
+      ctx.globalAlpha = a;
+      ctx.fillStyle = '#f6f2e8';
+      ctx.shadowColor = 'rgba(247,147,26,' + (0.9 * a) + ')';
+      ctx.shadowBlur = 26 + 10 * Math.sin(t / 260);
+      ctx.fillText(title[i], x + widths[i] / 2, y + (1 - a) * 26);
+      x += widths[i];
+    }
+    ctx.shadowBlur = 0;
+
+    /* The scoreboard is the project's own punchline, phrased so it cannot go
+       stale: three hits each is true by construction of SCRIPT, and "nobody
+       wins" is the finding itself rather than a number that drifts. */
+    var sub = ease((age - 620) / 420);
+    ctx.globalAlpha = sub;
+    ctx.font = '600 15px ui-monospace,SFMono-Regular,Consolas,monospace';
+    ctx.fillStyle = 'rgba(210,218,230,.9)';
+    ctx.fillText('SKULL 3  -  3  BITCOIN', W / 2, y + 66);
+    ctx.fillStyle = 'rgba(150,162,180,.85)';
+    ctx.fillText('everybody swings    nobody wins', W / 2, y + 92);
+    ctx.globalAlpha = sub * (0.55 + 0.45 * Math.sin(t / 380));
+    ctx.fillStyle = 'rgba(247,147,26,.95)';
+    ctx.fillText('CLICK TO ENTER THE LAB', W / 2, y + 132);
+    ctx.restore();
+  }
+
+  function drawTitleStatic() {
+    ctx.save();
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.font = '900 ' + Math.round(Math.min(86, W / 12)) + 'px "Arial Black",Impact,sans-serif';
+    ctx.fillStyle = '#f6f2e8';
+    ctx.fillText('BTC CYCLE LAB', W / 2, H * 0.46);
+    ctx.font = '600 15px ui-monospace,SFMono-Regular,Consolas,monospace';
+    ctx.fillStyle = 'rgba(150,162,180,.85)';
+    ctx.fillText('everybody swings    nobody wins', W / 2, H * 0.46 + 60);
+    ctx.restore();
+  }
+
+  /* -------------------------------------------------------------- effects */
+  function drawVignette() {
+    var g = ctx.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.3,
+                                     W / 2, H / 2, Math.max(W, H) * 0.75);
+    g.addColorStop(0, 'rgba(0,0,0,0)');
+    g.addColorStop(1, 'rgba(0,0,0,.72)');
+    ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = 'rgba(255,255,255,.022)';
+    for (var y = 0; y < H; y += 3) ctx.fillRect(0, y, W, 1);
+  }
+
+  /* ----------------------------------------------------------------- loop */
+  function frame(ts) {
+    /* A detached overlay is a superseded one: stop rather than animate into
+       a canvas nobody can see. */
+    if (done || !root.isConnected) return;
+    if (!started) { started = ts; prev = ts; }
+    now = ts - started;
+    var dt = Math.min(64, ts - prev);
+    prev = ts;
+
+    /* Reduced motion: no brawl, no flashing - just the card and out. */
+    if (reduced) {
+      ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+      drawChart(); drawVignette(); drawTitleStatic();
+      if (now > 2600) { dismiss(); return; }
+      requestAnimationFrame(frame);
+      return;
+    }
+
+    nextCandle -= dt;
+    if (nextCandle <= 0) { nextCandle = 130; pushCandle(Math.sin(now / 900) * 0.5, 1); }
+
+    while (fired < SCRIPT.length && now >= SCRIPT[fired].t) {
+      var beat = SCRIPT[fired];
+      hit(beat.by);
+      say(beat.word, beat.by === 'coin' ? GREEN : beat.by === 'skull' ? RED : '#ffffff');
+      if (beat.by === 'both') {
+        puff(W / 2, H * 0.56, 30);
+        puff(W / 2 - 60, H * 0.56, 24);
+        puff(W / 2 + 60, H * 0.56, 24);
+      }
+      fired++;
+    }
+    if (now >= T_SKULL_IN && now < T_SKULL_IN + 40) {
+      shake = 20;
+      puff(W * 0.28, H * 0.64, 22); puff(W * 0.22, H * 0.65, 15); puff(W * 0.34, H * 0.65, 15);
+    }
+    if (now >= T_COIN_IN && now < T_COIN_IN + 40) {
+      shake = 20;
+      puff(W * 0.72, H * 0.64, 22); puff(W * 0.66, H * 0.65, 15); puff(W * 0.78, H * 0.65, 15);
+    }
+    if (now >= T_FIGHT && now < T_FIGHT + 40) say('FIGHT!', '#ffd24a', 120);
+
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    ctx.translate((Math.random() - 0.5) * shake, (Math.random() - 0.5) * shake);
+    shake *= Math.pow(0.86, dt / 16);
+
+    drawChart();
+
+    for (var p = puffs.length - 1; p >= 0; p--) {
+      var pf = puffs[p], pa = (now - pf.born) / 700;
+      if (pa > 1) { puffs.splice(p, 1); continue; }
+      var pr = pf.r * (1 + pa * 2.2), px = pf.x, py2 = pf.y - pa * 40;
+      var pg = ctx.createRadialGradient(px, py2, pr * 0.15, px, py2, pr);
+      pg.addColorStop(0, 'rgba(201,206,219,' + (1 - pa) * 0.34 + ')');
+      pg.addColorStop(1, 'rgba(201,206,219,0)');
+      ctx.fillStyle = pg;
+      ctx.beginPath(); ctx.arc(px, py2, pr, 0, Math.PI * 2); ctx.fill();
+    }
+
+    var baseY = H * 0.56, size = Math.max(140, Math.min(215, W / 6.4));
+    var bob = Math.sin(now / 260) * 7;
+    var off = fighterOffsets(now, size);
+    var inS = ease((now - (T_SKULL_IN - 420)) / 420);
+    var inC = ease((now - (T_COIN_IN - 420)) / 420);
+    var exit = ease((now - 5700) / 700);
+    var exitY = -exit * H * 1.1, exitSpin = exit * 7;
+
+    if (inS > 0) {
+      drawSkull(W * 0.28 + off.s - exit * 90,
+                baseY + (1 - inS) * -H * 0.9 + bob + exitY,
+                size, Math.sin(now / 400) * 0.05 + off.ps * 0.2 + exitSpin,
+                off.ps, dmgSkull);
+    }
+    if (inC > 0) {
+      drawCoin(W * 0.72 + off.c + exit * 90,
+               baseY + (1 - inC) * -H * 0.9 - bob + exitY,
+               size, -Math.sin(now / 380) * 0.05 - off.pc * 0.2 - exitSpin,
+               off.pc, dmgCoin);
+    }
+
+    for (var wi = words.length - 1; wi >= 0; wi--) {
+      if (!drawWord(words[wi], now)) words.splice(wi, 1);
+    }
+
+    if (flash) {
+      flash.a -= dt / 380;
+      if (flash.a <= 0) { flash = null; }
+      else {
+        ctx.fillStyle = flash.c; ctx.globalAlpha = flash.a;
+        ctx.fillRect(-40, -40, W + 80, H + 80);
+        ctx.globalAlpha = 1;
+      }
+    }
+
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    drawVignette();
+    drawTitle(now);
+
+    if (now < 900) {
+      ctx.globalAlpha = 0.55 + 0.45 * Math.sin(now / 90);
+      ctx.font = '600 13px ui-monospace,SFMono-Regular,Consolas,monospace';
+      ctx.textAlign = 'center';
+      ctx.fillStyle = '#8fa0b8';
+      ctx.fillText('LOADING MARKET DATA...', W / 2, H * 0.5);
+      ctx.globalAlpha = 1;
+    }
+
+    if (now > T_END) { dismiss(); return; }
+    requestAnimationFrame(frame);
+  }
+
+  /* ------------------------------------------------------------------ exit */
+  function dismiss() {
+    if (done) return;
+    done = true;
+    root.classList.add('btclab-out');
+    window.setTimeout(function () {
+      /* Standalone there is nothing else on the page, so it loops instead of
+         leaving a black screen. */
+      if (standalone) { replay(); }
+      else if (root.parentNode) { root.parentNode.removeChild(root); }
+    }, 600);
+  }
+  function replay() {
+    root.classList.remove('btclab-out');
+    words = []; puffs = []; flash = null; shake = 0;
+    dmgSkull = 0; dmgCoin = 0; fired = 0; started = 0; done = false;
+    requestAnimationFrame(frame);
+  }
+
+  root.addEventListener('click', dismiss);
+  skipBtn.addEventListener('click', function (e) { e.stopPropagation(); dismiss(); });
+  window.addEventListener('keydown', function () { dismiss(); }, { once: true });
+
+  requestAnimationFrame(frame);
+  window.__btclabIntro = {
+    dismiss: dismiss,
+    replay: replay,
+    state: function () { return { now: now, fired: fired, done: done, shake: shake }; }
+  };
+})();
+</script>
+<!--INTRO:END-->
+</body>
+</html>

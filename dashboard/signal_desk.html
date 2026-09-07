@@ -1,0 +1,553 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BTC Cycle Lab - signal desk</title>
+</head>
+<body>
+<!--DESK:START-->
+<style>
+  html,body{height:100%; margin:0; background:#080b11}
+  .btclab-desk *{box-sizing:border-box}
+  .btclab-desk{
+    --bg:#080b11; --panel:#0d1219; --line:#1c2530; --ink:#e7ecf3; --dim:#8b98a9;
+    --green:#20c97e; --red:#ef4056; --gold:#f7931a;
+    margin:0; padding:0; background:var(--bg); color:var(--ink);
+    font:13px/1.45 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    border:1px solid var(--line); border-radius:10px; overflow:hidden;
+    height:100%; display:flex; flex-direction:column;
+  }
+  .btclab-desk .bar{
+    display:flex; align-items:center; gap:8px; flex-wrap:wrap;
+    padding:9px 12px; border-bottom:1px solid var(--line); background:var(--panel);
+  }
+  .btclab-desk .pill{
+    padding:5px 10px; border:1px solid var(--line); border-radius:999px;
+    background:#0a0f15; color:var(--dim); cursor:pointer; font:inherit; font-size:11.5px;
+    white-space:nowrap;
+  }
+  .btclab-desk .pill:hover{color:var(--ink); border-color:#2b3846}
+  .btclab-desk .pill[aria-pressed="true"]{
+    color:#06090d; background:var(--gold); border-color:var(--gold); font-weight:700;
+  }
+  .btclab-desk .spacer{flex:1 1 auto}
+  .btclab-desk .live{
+    display:flex; align-items:center; gap:7px; padding:5px 10px;
+    border:1px solid var(--line); border-radius:6px; background:#0a0f15; font-size:11.5px;
+  }
+  .btclab-desk .dot{width:7px; height:7px; border-radius:50%; background:#4a5666}
+  .btclab-desk .dot.on{background:var(--green); box-shadow:0 0 8px var(--green); animation:btclab-pulse 2s infinite}
+  @keyframes btclab-pulse{0%,100%{opacity:1}50%{opacity:.35}}
+  .btclab-desk .body{display:grid; grid-template-columns:minmax(230px,300px) 1fr; gap:0;
+    flex:1 1 auto; min-height:0}
+  @media (max-width:620px){ .btclab-desk .body{grid-template-columns:1fr} }
+  .btclab-desk .side{padding:12px; border-right:1px solid var(--line); min-width:0;
+    overflow-y:auto}
+  .btclab-desk .chartwrap{position:relative; min-width:0; min-height:0}
+  .btclab-desk canvas{display:block; width:100%; height:100%}
+  .btclab-desk .state{
+    display:flex; align-items:baseline; gap:9px; padding:10px 12px; border-radius:8px;
+    border:1px solid var(--line); background:#0a0f15; margin-bottom:10px;
+  }
+  .btclab-desk .state b{font-size:26px; letter-spacing:.06em; line-height:1}
+  .btclab-desk .state.long b{color:var(--green)}
+  .btclab-desk .state.flat b{color:var(--dim)}
+  .btclab-desk .state span{color:var(--dim); font-size:11.5px}
+  .btclab-desk .trigger{
+    padding:10px 12px; border-radius:8px; border:1px solid #2a3444;
+    background:linear-gradient(180deg,#111823,#0b1017); margin-bottom:10px;
+  }
+  .btclab-desk .trigger.armed{border-color:var(--gold); box-shadow:0 0 0 1px rgba(247,147,26,.25)}
+  .btclab-desk .trigger.fired{border-color:var(--green); box-shadow:0 0 18px rgba(32,201,126,.25)}
+  .btclab-desk .trigger h4{margin:0 0 5px; font-size:10px; letter-spacing:.18em; color:var(--dim); font-weight:600}
+  .btclab-desk .trigger p{margin:0; font-size:12.5px}
+  .btclab-desk .gap{margin-top:7px; height:5px; border-radius:3px; background:#18202b; overflow:hidden}
+  .btclab-desk .gap i{display:block; height:100%; width:0; background:var(--gold); transition:width .4s ease}
+  .btclab-desk .grid{display:grid; grid-template-columns:1fr 1fr; gap:6px 10px; margin-bottom:10px}
+  .btclab-desk .cell{padding:7px 9px; border:1px solid var(--line); border-radius:6px; background:#0a0f15}
+  .btclab-desk .cell u{display:block; text-decoration:none; font-size:9.5px; letter-spacing:.14em; color:var(--dim)}
+  .btclab-desk .cell b{font-size:14px; font-weight:600}
+  .btclab-desk .trades{display:flex; gap:3px; align-items:flex-end; height:38px; margin-bottom:6px}
+  .btclab-desk .trades i{flex:1 1 0; border-radius:2px 2px 0 0; min-height:2px}
+  .btclab-desk .note{color:var(--dim); font-size:10.5px; line-height:1.5}
+  .btclab-desk .note b{color:#c3ccd8; font-weight:600}
+  .btclab-desk .foot{
+    padding:8px 12px; border-top:1px solid var(--line); background:var(--panel);
+    color:var(--dim); font-size:10.5px;
+  }
+  .btclab-desk .foot b{color:var(--gold)}
+  .btclab-desk .flash{
+    position:absolute; inset:0; pointer-events:none; opacity:0;
+    transition:opacity .5s ease; background:radial-gradient(circle at 50% 60%, currentColor, transparent 70%);
+  }
+</style>
+
+<div class="btclab-desk" id="btclab-desk">
+  <div class="bar" id="btclab-rules"></div>
+  <div class="body">
+    <div class="side">
+      <div class="state" id="btclab-state"><b>-</b><span></span></div>
+      <div class="trigger" id="btclab-trigger">
+        <h4>WHAT FLIPS IT</h4>
+        <p id="btclab-trigger-text">-</p>
+        <div class="gap"><i id="btclab-gap"></i></div>
+      </div>
+      <div class="grid" id="btclab-metrics"></div>
+      <div class="trades" id="btclab-trades" title="Closed round trips, net of fees and slippage"></div>
+      <p class="note" id="btclab-note"></p>
+    </div>
+    <div class="chartwrap">
+      <canvas id="btclab-canvas"></canvas>
+      <div class="flash" id="btclab-flash"></div>
+    </div>
+  </div>
+  <div class="foot" id="btclab-foot"></div>
+</div>
+
+<script type="application/json" id="btclab-signal-data">
+<!--DATA:START-->
+{"demo": true, "asOf": "2026-09-03", "lastClose": 96000, "costRate": 0.0025,
+ "price": {"d": [], "c": []}, "strategies": []}
+<!--DATA:END-->
+</script>
+
+<script>
+(function () {
+  var root = document.getElementById('btclab-desk');
+  if (!root || root.dataset.started === '1') return;
+  root.dataset.started = '1';
+
+  var DATA = {};
+  try {
+    DATA = JSON.parse(document.getElementById('btclab-signal-data').textContent);
+  } catch (err) { DATA = {}; }
+  var RULES = DATA.strategies || [];
+  var PRICE = DATA.price || { d: [], c: [] };
+
+  var GREEN = '#20c97e', RED = '#ef4056', GOLD = '#f7931a', DIM = '#8b98a9';
+  var canvas = document.getElementById('btclab-canvas');
+  var ctx = canvas.getContext('2d');
+  var flashEl = document.getElementById('btclab-flash');
+  /* Open on a rule that has something to watch: the baseline is always in
+     the market, so it makes the dullest possible first screen. */
+  var active = 0;
+  for (var r = 0; r < RULES.length; r++) {
+    if (RULES[r].trigger && RULES[r].trigger.kind === 'price') { active = r; break; }
+    if (RULES[r].trigger && RULES[r].trigger.kind !== 'none' && active === 0) active = r;
+  }
+  var live = null, soundOn = false, replayIndex = -1, armed = false;
+
+  /* ------------------------------------------------------------------ audio */
+  /* Browsers refuse to make noise until the user asks for it, so every sound
+     goes through here and stays silent until the toggle is pressed. */
+  var actx = null;
+  function audio() {
+    if (!soundOn) return null;
+    if (!actx) {
+      var Ctor = window.AudioContext || window.webkitAudioContext;
+      if (!Ctor) return null;
+      actx = new Ctor();
+    }
+    if (actx.state === 'suspended') actx.resume();
+    return actx;
+  }
+  function tone(freqs, step, dur, type, peak) {
+    var ac = audio();
+    if (!ac) return;
+    freqs.forEach(function (f, i) {
+      var t0 = ac.currentTime + i * step;
+      var osc = ac.createOscillator(), gain = ac.createGain();
+      osc.type = type || 'triangle';
+      osc.frequency.setValueAtTime(f, t0);
+      gain.gain.setValueAtTime(0.0001, t0);
+      gain.gain.exponentialRampToValueAtTime(peak || 0.16, t0 + 0.012);
+      gain.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+      osc.connect(gain); gain.connect(ac.destination);
+      osc.start(t0); osc.stop(t0 + dur + 0.02);
+    });
+  }
+  var sound = {
+    buy: function () { tone([523.25, 783.99], 0.085, 0.16, 'triangle', 0.18); },
+    sell: function () { tone([392.0, 261.63], 0.085, 0.2, 'sawtooth', 0.13); },
+    tick: function () { tone([1320], 0, 0.03, 'sine', 0.04); },
+    arm: function () { tone([880, 1174.66, 880], 0.09, 0.12, 'square', 0.09); },
+    fire: function () { tone([659.25, 987.77, 1318.5], 0.1, 0.22, 'square', 0.16); }
+  };
+
+  /* ----------------------------------------------------------------- format */
+  function money(v) {
+    if (v === null || v === undefined || !isFinite(v)) return '-';
+    return '$' + Math.round(v).toLocaleString('en-US');
+  }
+  function pct(v, digits) {
+    if (v === null || v === undefined || !isFinite(v)) return '-';
+    return (v >= 0 ? '+' : '') + (v * 100).toFixed(digits === undefined ? 1 : digits) + '%';
+  }
+  function num(v, digits) {
+    if (v === null || v === undefined || !isFinite(v)) return '-';
+    return v.toFixed(digits === undefined ? 2 : digits);
+  }
+  function daysBetween(a, b) {
+    return Math.round((new Date(b) - new Date(a)) / 86400000);
+  }
+
+  /* ------------------------------------------------------------- rule pills */
+  var rulesBar = document.getElementById('btclab-rules');
+  function buildBar() {
+    rulesBar.innerHTML = '';
+    RULES.forEach(function (rule, i) {
+      var b = document.createElement('button');
+      b.className = 'pill';
+      b.type = 'button';
+      b.textContent = rule.name;
+      b.setAttribute('aria-pressed', String(i === active));
+      b.addEventListener('click', function () { active = i; render(); });
+      rulesBar.appendChild(b);
+    });
+
+    var spacer = document.createElement('div');
+    spacer.className = 'spacer';
+    rulesBar.appendChild(spacer);
+
+    var replay = document.createElement('button');
+    replay.className = 'pill';
+    replay.type = 'button';
+    replay.textContent = 'Replay signals';
+    replay.addEventListener('click', startReplay);
+    rulesBar.appendChild(replay);
+
+    var snd = document.createElement('button');
+    snd.className = 'pill';
+    snd.type = 'button';
+    snd.id = 'btclab-sound';
+    snd.textContent = 'Sound off';
+    snd.setAttribute('aria-pressed', 'false');
+    snd.addEventListener('click', function () {
+      soundOn = !soundOn;
+      snd.textContent = soundOn ? 'Sound on' : 'Sound off';
+      snd.setAttribute('aria-pressed', String(soundOn));
+      if (soundOn) sound.arm();
+    });
+    rulesBar.appendChild(snd);
+
+    var liveBox = document.createElement('div');
+    liveBox.className = 'live';
+    liveBox.innerHTML = '<span class="dot" id="btclab-dot"></span>' +
+                        '<span id="btclab-live">live: connecting</span>';
+    rulesBar.appendChild(liveBox);
+  }
+
+  /* ------------------------------------------------------------- live price */
+  /* The database stops at the last ingest; the tape does not. This is the only
+     number on the page that is not from the local sample, and it is labelled
+     as such - it feeds the trigger distance, never the statistics. */
+  var lastLive = null;
+  function poll() {
+    fetch('https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT', { cache: 'no-store' })
+      .then(function (r) { return r.json(); })
+      .then(function (j) {
+        var price = parseFloat(j.price);
+        if (!isFinite(price)) throw new Error('bad payload');
+        var moved = lastLive !== null && Math.abs(price - lastLive) > 0.5;
+        lastLive = live = price;
+        var box = document.getElementById('btclab-live');
+        var dot = document.getElementById('btclab-dot');
+        if (box) {
+          var drift = DATA.lastClose ? price / DATA.lastClose - 1 : null;
+          box.innerHTML = 'live ' + money(price) +
+            (drift === null ? '' : ' <span style="color:' +
+              (drift >= 0 ? GREEN : RED) + '">' + pct(drift) + ' vs last close</span>');
+        }
+        if (dot) dot.className = 'dot on';
+        if (moved) sound.tick();
+        render();
+      })
+      .catch(function () {
+        var box = document.getElementById('btclab-live');
+        var dot = document.getElementById('btclab-dot');
+        if (box) box.textContent = 'live: offline (using last close)';
+        if (dot) dot.className = 'dot';
+      });
+  }
+
+  /* ----------------------------------------------------------------- canvas */
+  var W = 0, H = 0, DPR = 1;
+  function resize() {
+    var box = canvas.parentNode.getBoundingClientRect();
+    DPR = Math.min(window.devicePixelRatio || 1, 2);
+    W = Math.max(240, box.width);
+    H = Math.max(220, box.height);
+    canvas.width = Math.round(W * DPR);
+    canvas.height = Math.round(H * DPR);
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  }
+  if (window.ResizeObserver) {
+    new ResizeObserver(function () { resize(); draw(); }).observe(canvas.parentNode);
+  }
+  window.addEventListener('resize', function () { resize(); draw(); });
+
+  function draw() {
+    if (!W || !H) resize();
+    var rule = RULES[active];
+    var closes = PRICE.c || [], dates = PRICE.d || [];
+    ctx.clearRect(0, 0, W, H);
+    ctx.fillStyle = '#080b11';
+    ctx.fillRect(0, 0, W, H);
+    if (!closes.length) {
+      ctx.fillStyle = DIM;
+      ctx.font = '12px ui-monospace,Consolas,monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText('no price data - run ingest first', W / 2, H / 2);
+      return;
+    }
+
+    var padL = 8, padR = 74, padT = 16, padB = 22;
+    var lo = Infinity, hi = -Infinity, i;
+    for (i = 0; i < closes.length; i++) {
+      if (closes[i] < lo) lo = closes[i];
+      if (closes[i] > hi) hi = closes[i];
+    }
+    var trigger = rule && rule.trigger || {};
+    var levelInView = trigger.kind === 'price' && trigger.level &&
+                      trigger.level < hi * 1.6 && trigger.level > lo * 0.6;
+    if (levelInView) { lo = Math.min(lo, trigger.level); hi = Math.max(hi, trigger.level); }
+    if (live) { lo = Math.min(lo, live); hi = Math.max(hi, live); }
+    var span = (hi - lo) || 1;
+    lo -= span * 0.08; hi += span * 0.08;
+
+    function x(i) { return padL + (i / (closes.length - 1)) * (W - padL - padR); }
+    function y(v) { return padT + (1 - (v - lo) / (hi - lo)) * (H - padT - padB); }
+
+    ctx.strokeStyle = 'rgba(120,140,170,.10)';
+    ctx.lineWidth = 1;
+    for (i = 0; i <= 4; i++) {
+      var gy = padT + (H - padT - padB) * i / 4;
+      ctx.beginPath(); ctx.moveTo(padL, gy); ctx.lineTo(W - padR, gy); ctx.stroke();
+      ctx.fillStyle = 'rgba(139,152,169,.65)';
+      ctx.font = '10px ui-monospace,Consolas,monospace';
+      ctx.textAlign = 'left';
+      ctx.fillText(money(hi - (hi - lo) * i / 4), W - padR + 8, gy + 3);
+    }
+
+    /* Shade the stretches the rule was actually holding. */
+    var holds = (rule && rule.holds) || [];
+    holds.forEach(function (h) {
+      var x0 = x(h[0]), x1 = x(h[1]);
+      ctx.fillStyle = 'rgba(32,201,126,.075)';
+      ctx.fillRect(x0, padT, Math.max(1.5, x1 - x0), H - padT - padB);
+    });
+
+    ctx.beginPath();
+    ctx.moveTo(x(0), y(closes[0]));
+    for (i = 1; i < closes.length; i++) ctx.lineTo(x(i), y(closes[i]));
+    ctx.strokeStyle = '#c9d3e0';
+    ctx.lineWidth = 1.4;
+    ctx.stroke();
+
+    if (levelInView) {
+      ctx.setLineDash([5, 5]);
+      ctx.strokeStyle = GOLD;
+      ctx.lineWidth = 1.2;
+      ctx.beginPath(); ctx.moveTo(padL, y(trigger.level)); ctx.lineTo(W - padR, y(trigger.level)); ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.fillStyle = GOLD;
+      ctx.font = '10px ui-monospace,Consolas,monospace';
+      ctx.textAlign = 'left';
+      ctx.fillText('flip ' + money(trigger.level), padL + 4, y(trigger.level) - 5);
+    }
+
+    var marks = (rule && rule.marks) || [];
+    marks.forEach(function (m, idx) {
+      var mx = x(m.i), my = y(closes[m.i]);
+      var buy = m.side === 'buy';
+      var hot = idx === replayIndex;
+      ctx.fillStyle = buy ? GREEN : RED;
+      ctx.globalAlpha = hot ? 1 : 0.9;
+      ctx.beginPath();
+      if (buy) {
+        ctx.moveTo(mx, my + 12); ctx.lineTo(mx - 6, my + 22); ctx.lineTo(mx + 6, my + 22);
+      } else {
+        ctx.moveTo(mx, my - 12); ctx.lineTo(mx - 6, my - 22); ctx.lineTo(mx + 6, my - 22);
+      }
+      ctx.closePath(); ctx.fill();
+      if (hot) {
+        ctx.strokeStyle = buy ? GREEN : RED;
+        ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.moveTo(mx, padT); ctx.lineTo(mx, H - padB); ctx.stroke();
+        ctx.beginPath(); ctx.arc(mx, my, 9, 0, Math.PI * 2); ctx.stroke();
+      }
+      ctx.globalAlpha = 1;
+    });
+
+    if (live) {
+      var ly = y(live);
+      ctx.setLineDash([2, 4]);
+      ctx.strokeStyle = 'rgba(199,210,225,.5)';
+      ctx.beginPath(); ctx.moveTo(padL, ly); ctx.lineTo(W - padR, ly); ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.fillStyle = '#c9d3e0';
+      ctx.beginPath(); ctx.arc(W - padR, ly, 3.2, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#0b0f15';
+      ctx.fillRect(W - padR + 6, ly - 8, 66, 16);
+      ctx.strokeStyle = 'rgba(199,210,225,.45)';
+      ctx.strokeRect(W - padR + 6, ly - 8, 66, 16);
+      ctx.fillStyle = '#e7ecf3';
+      ctx.font = '10px ui-monospace,Consolas,monospace';
+      ctx.textAlign = 'left';
+      ctx.fillText(money(live), W - padR + 10, ly + 3);
+    }
+
+    ctx.fillStyle = 'rgba(139,152,169,.75)';
+    ctx.font = '10px ui-monospace,Consolas,monospace';
+    ctx.textAlign = 'left';
+    ctx.fillText(dates[0] || '', padL + 2, H - 7);
+    ctx.textAlign = 'right';
+    ctx.fillText(dates[dates.length - 1] || '', W - padR - 2, H - 7);
+  }
+
+  function flash(color) {
+    flashEl.style.color = color;
+    flashEl.style.opacity = '0.5';
+    window.setTimeout(function () { flashEl.style.opacity = '0'; }, 260);
+  }
+
+  /* ----------------------------------------------------------------- render */
+  function render() {
+    var rule = RULES[active];
+    Array.prototype.forEach.call(rulesBar.querySelectorAll('.pill'), function (b, i) {
+      if (i < RULES.length) b.setAttribute('aria-pressed', String(i === active));
+    });
+    if (!rule) { draw(); return; }
+
+    var stateEl = document.getElementById('btclab-state');
+    var isLong = rule.side === 'long';
+    stateEl.className = 'state ' + (isLong ? 'long' : 'flat');
+    stateEl.innerHTML = '<b>' + (isLong ? 'IN' : 'OUT') + '</b><span>' +
+      (isLong ? 'holding' : 'no position') +
+      (rule.since ? ' since ' + rule.since + ' &middot; ' + rule.days + 'd' : '') +
+      (rule.unrealized !== null && rule.unrealized !== undefined
+        ? ' &middot; open ' + pct(rule.unrealized) : '') +
+      '</span>';
+
+    /* The trigger, and how far the live price is from it. */
+    var trig = rule.trigger || {};
+    var box = document.getElementById('btclab-trigger');
+    var text = document.getElementById('btclab-trigger-text');
+    var gap = document.getElementById('btclab-gap');
+    var reference = live || DATA.lastClose;
+    box.className = 'trigger';
+    gap.style.width = '0%';
+    text.textContent = trig.text || '-';
+
+    if (trig.kind === 'price' && trig.level && reference) {
+      var distance = (trig.level - reference) / reference;
+      var crossed = trig.direction === 'above' ? reference >= trig.level : reference <= trig.level;
+      var near = Math.abs(distance) <= 0.02;
+      text.innerHTML = trig.text + '<br><span style="color:' +
+        (crossed ? GREEN : near ? GOLD : DIM) + '">' +
+        (crossed
+          ? 'the live price is already past it - the rule flips on today’s close'
+          : Math.abs(distance * 100).toFixed(1) + '% ' +
+            (trig.direction === 'above' ? 'above' : 'below') + ' the live price') +
+        '</span>';
+      /* Full bar = 10% away, so the bar is a distance gauge, not a probability. */
+      gap.style.width = Math.max(2, Math.min(100, (1 - Math.abs(distance) / 0.10) * 100)) + '%';
+      if (crossed) {
+        box.className = 'trigger fired';
+        if (!armed) { armed = true; sound.fire(); flash(GREEN); }
+      } else if (near) {
+        box.className = 'trigger armed';
+        if (!armed) { armed = true; sound.arm(); }
+      } else {
+        armed = false;
+      }
+    } else if (trig.kind === 'date' && trig.date) {
+      var left = daysBetween(DATA.asOf, trig.date);
+      text.innerHTML = trig.text + '<br><span style="color:' + DIM + '">' +
+        (left > 0 ? left + ' days from the last close in the sample' : 'already past') + '</span>';
+      gap.style.width = Math.max(2, Math.min(100, (1 - Math.min(left, 365) / 365) * 100)) + '%';
+    }
+
+    var m = rule.metrics || {};
+    document.getElementById('btclab-metrics').innerHTML = [
+      ['SHARPE', num(m.sharpe), m.sharpe >= 1 ? '#e7ecf3' : DIM],
+      ['VS BUY &amp; HOLD', num(rule.excessSharpe), rule.excessSharpe >= 0 ? GREEN : RED],
+      ['CAGR', pct(m.cagr, 0), m.cagr >= 0 ? GREEN : RED],
+      ['MAX DRAWDOWN', pct(m.maxDrawdown, 0), RED],
+      ['ROUND TRIPS', String(rule.tradeCount), '#e7ecf3'],
+      ['WON, NET', rule.closedCount ? Math.round(rule.winRateNet * 100) + '%' : '-', '#e7ecf3']
+    ].map(function (c) {
+      return '<div class="cell"><u>' + c[0] + '</u><b style="color:' + c[2] + '">' + c[1] + '</b></div>';
+    }).join('');
+
+    var strip = document.getElementById('btclab-trades');
+    strip.innerHTML = '';
+    var recent = (rule.trades || []).slice(-24);
+    var biggest = recent.reduce(function (a, t) { return Math.max(a, Math.abs(t.net)); }, 0.01);
+    recent.forEach(function (t) {
+      var i2 = document.createElement('i');
+      i2.style.height = Math.max(3, Math.abs(t.net) / biggest * 36) + 'px';
+      i2.style.background = t.net >= 0 ? GREEN : RED;
+      i2.style.opacity = t.open ? '.45' : '1';
+      i2.title = t.in + ' → ' + (t.open ? 'open' : t.out) + '  ' + pct(t.net);
+      strip.appendChild(i2);
+    });
+
+    document.getElementById('btclab-note').innerHTML =
+      'Bars: last ' + recent.length + ' round trips, <b>net of ' +
+      (DATA.costRate * 2 * 100).toFixed(2) + '% round-trip costs</b>. ' +
+      'Shaded stretches on the chart are days the rule was holding.';
+
+    document.getElementById('btclab-foot').innerHTML =
+      'Mechanical rule replayed on ' + (DATA.sampleDays || '?') + ' days of history to ' +
+      (DATA.asOf || '?') + '. <b>Not advice, and not an edge:</b> in this project no ' +
+      'hypothesis survives multiple-testing correction, and the specification curve ' +
+      'finds random dates beating the real ones. Read it as what the rule says, not as what will happen.';
+
+    draw();
+  }
+
+  /* ----------------------------------------------------------------- replay */
+  var replayTimer = null;
+  function startReplay() {
+    var rule = RULES[active];
+    if (!rule || !(rule.marks || []).length) return;
+    window.clearInterval(replayTimer);
+    var marks = rule.marks;
+    var i = Math.max(0, marks.length - 14);
+    replayTimer = window.setInterval(function () {
+      if (i >= marks.length) {
+        window.clearInterval(replayTimer);
+        replayIndex = -1;
+        draw();
+        return;
+      }
+      replayIndex = i;
+      var m = marks[i];
+      if (m.side === 'buy') { sound.buy(); flash(GREEN); } else { sound.sell(); flash(RED); }
+      draw();
+      i++;
+    }, 420);
+  }
+
+  buildBar();
+  resize();
+  render();
+  poll();
+  window.setInterval(poll, 5000);
+
+  window.__btclabDesk = {
+    state: function () {
+      var rule = RULES[active] || {};
+      return { rules: RULES.length, active: active, name: rule.name,
+               side: rule.side, live: live, soundOn: soundOn,
+               audio: actx ? actx.state : null, replaying: replayIndex };
+    },
+    select: function (i) { active = i; render(); }
+  };
+})();
+</script>
+<!--DESK:END-->
+</body>
+</html>

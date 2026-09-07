@@ -1,0 +1,265 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BTC Cycle Lab - evidence meter</title>
+</head>
+<body>
+<!--METER:START-->
+<style>
+  html,body{height:100%; margin:0; background:#080b11}
+  .btclab-meter *{box-sizing:border-box}
+  .btclab-meter{
+    --bg:#080b11; --panel:#0d1219; --line:#1c2530; --ink:#e7ecf3; --dim:#8b98a9;
+    --green:#20c97e; --red:#ef4056; --gold:#f7931a;
+    height:100%; display:flex; flex-direction:column; overflow:hidden;
+    background:var(--bg); color:var(--ink); border:1px solid var(--line);
+    border-radius:10px;
+    font:13px/1.45 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  }
+  .btclab-meter .stage{position:relative; flex:0 0 168px; min-height:0}
+  .btclab-meter canvas{display:block; width:100%; height:100%}
+  .btclab-meter .parts{
+    flex:1 1 auto; min-height:0; overflow-y:auto; padding:10px 12px 12px;
+    border-top:1px solid var(--line); background:var(--panel);
+  }
+  .btclab-meter .part{display:grid; grid-template-columns:132px 74px 1fr; gap:10px;
+    align-items:center; padding:3px 0}
+  .btclab-meter .part u{text-decoration:none; color:var(--dim); font-size:10.5px;
+    letter-spacing:.1em; text-transform:uppercase}
+  .btclab-meter .track{height:6px; border-radius:3px; background:#18202b; overflow:hidden}
+  .btclab-meter .track i{display:block; height:100%; background:var(--gold)}
+  .btclab-meter .part span{color:#c3ccd8; font-size:11.5px}
+  .btclab-meter .part.empty span{color:var(--dim); font-style:italic}
+  .btclab-meter .foot{padding:8px 12px; border-top:1px solid var(--line);
+    color:var(--dim); font-size:10.5px}
+</style>
+
+<div class="btclab-meter" id="btclab-meter">
+  <div class="stage"><canvas id="btclab-meter-canvas"></canvas></div>
+  <div class="parts" id="btclab-meter-parts"></div>
+  <div class="foot" id="btclab-meter-foot"></div>
+</div>
+
+<script type="application/json" id="btclab-evidence-data">
+<!--DATA:START-->
+{"score": 0, "label": "NO DATA", "blurb": "Nothing has been computed yet.", "components": []}
+<!--DATA:END-->
+</script>
+
+<script>
+(function () {
+  var root = document.getElementById('btclab-meter');
+  if (!root || root.dataset.started === '1') return;
+  root.dataset.started = '1';
+
+  var DATA = {};
+  try {
+    DATA = JSON.parse(document.getElementById('btclab-evidence-data').textContent);
+  } catch (err) { DATA = { score: 0, label: "NO DATA", blurb: "", components: [] }; }
+
+  var GREEN = '#20c97e', RED = '#ef4056', GOLD = '#f7931a', BONE = '#efeadc', DIM = '#8b98a9';
+  var canvas = document.getElementById('btclab-meter-canvas');
+  var ctx = canvas.getContext('2d');
+  var score = Math.max(0, Math.min(100, Number(DATA.score) || 0));
+  var strength = score / 100;   // 0 = the tests found nothing, 1 = they found plenty
+  var W = 0, H = 0, DPR = 1, start = 0;
+
+  function resize() {
+    var box = canvas.parentNode.getBoundingClientRect();
+    DPR = Math.min(window.devicePixelRatio || 1, 2);
+    W = Math.max(320, box.width);
+    H = Math.max(120, box.height);
+    canvas.width = Math.round(W * DPR);
+    canvas.height = Math.round(H * DPR);
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  }
+
+  /* --------------------------------------------------------------- mascots */
+  /* The two of them are a gauge, not decoration: the skull is drawn from how
+     little the tests found, the coin from how much. At this project's real
+     numbers the skull is nearly full size, which is the honest picture. */
+  function skull(x, y, size, grin) {
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.scale(size / 100, size / 100);
+
+    var g = ctx.createLinearGradient(-40, -55, 30, 55);
+    g.addColorStop(0, '#ffffff'); g.addColorStop(0.45, BONE); g.addColorStop(1, '#a29b8d');
+    ctx.fillStyle = g;
+    ctx.shadowColor = 'rgba(255,70,90,' + (0.15 + 0.35 * (1 - strength)) + ')';
+    ctx.shadowBlur = 24;
+    ctx.beginPath(); ctx.ellipse(0, -8, 42, 40, 0, 0, Math.PI * 2); ctx.fill();
+    rounded(-25, 22, 50, 26, 11); ctx.fill();
+    ctx.shadowBlur = 0;
+
+    [-17, 17].forEach(function (ex) {
+      ctx.fillStyle = '#0b0b0e';
+      ctx.beginPath(); ctx.ellipse(ex, -12, 13, 15, 0, 0, Math.PI * 2); ctx.fill();
+      var glow = ctx.createRadialGradient(ex, -10, 1, ex, -10, 14);
+      glow.addColorStop(0, 'rgba(255,60,80,' + (0.35 + 0.6 * (1 - strength)) + ')');
+      glow.addColorStop(1, 'rgba(255,0,30,0)');
+      ctx.fillStyle = glow;
+      ctx.beginPath(); ctx.ellipse(ex, -10, 13, 15, 0, 0, Math.PI * 2); ctx.fill();
+    });
+
+    ctx.fillStyle = '#12100f';
+    ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(-6, 12); ctx.lineTo(6, 12); ctx.closePath(); ctx.fill();
+
+    /* The grin is the joke and the reading at once: it widens as the evidence
+       thins, so a wide smile here is bad news for the hypothesis. */
+    var teeth = Math.round(3 + 4 * grin);
+    var width = 5.6, gap = 1.6, total = teeth * width + (teeth - 1) * gap;
+    ctx.fillStyle = '#f7f3e8';
+    for (var i = 0; i < teeth; i++) {
+      ctx.fillRect(-total / 2 + i * (width + gap), 26, width, 11 + 3 * grin);
+    }
+    ctx.restore();
+  }
+
+  function coin(x, y, size, mood) {
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.scale(size / 100, size / 100);
+
+    ctx.shadowColor = 'rgba(247,147,26,' + (0.15 + 0.45 * mood) + ')';
+    ctx.shadowBlur = 26;
+    var g = ctx.createRadialGradient(-14, -18, 5, 0, 0, 48);
+    g.addColorStop(0, '#ffd27a'); g.addColorStop(0.55, GOLD); g.addColorStop(1, '#a9600b');
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(0, 0, 44, 0, Math.PI * 2); ctx.fill();
+    ctx.shadowBlur = 0;
+    ctx.strokeStyle = 'rgba(255,214,140,.85)'; ctx.lineWidth = 3.5;
+    ctx.beginPath(); ctx.arc(0, 0, 39, 0, Math.PI * 2); ctx.stroke();
+
+    ctx.fillStyle = '#5a3406';
+    ctx.font = '900 46px "Arial Black",Impact,sans-serif';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText('B', 1, 14);
+    ctx.fillRect(-9, -11, 5, 52);
+    ctx.fillRect(4, -11, 5, 52);
+
+    [-15, 15].forEach(function (ex) {
+      ctx.fillStyle = '#fffdf6';
+      ctx.beginPath(); ctx.ellipse(ex, -24, 9, 10, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#141414';
+      ctx.beginPath(); ctx.arc(ex - 1, -23 + 2 * (1 - mood), 3.6, 0, Math.PI * 2); ctx.fill();
+    });
+    /* Brows lift with the score; at zero the coin is thoroughly unimpressed. */
+    ctx.strokeStyle = '#4a2a05'; ctx.lineWidth = 4; ctx.lineCap = 'round';
+    var lift = 6 * mood;
+    ctx.beginPath(); ctx.moveTo(-25, -38 + lift); ctx.lineTo(-8, -33 - lift); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(25, -38 + lift); ctx.lineTo(8, -33 - lift); ctx.stroke();
+    ctx.restore();
+  }
+
+  function rounded(x, y, w, h, r) {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.arcTo(x + w, y, x + w, y + h, r);
+    ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r);
+    ctx.arcTo(x, y, x + w, y, r);
+    ctx.closePath();
+  }
+
+  /* ----------------------------------------------------------------- meter */
+  function meter(cx, top, width, shown) {
+    var height = 12, left = cx - width / 2;
+    var gradient = ctx.createLinearGradient(left, 0, left + width, 0);
+    gradient.addColorStop(0, 'rgba(239,64,86,.85)');
+    gradient.addColorStop(0.5, 'rgba(247,147,26,.85)');
+    gradient.addColorStop(1, 'rgba(32,201,126,.85)');
+    ctx.fillStyle = '#131a24';
+    rounded(left, top, width, height, height / 2); ctx.fill();
+    ctx.save();
+    rounded(left, top, width, height, height / 2); ctx.clip();
+    ctx.fillStyle = gradient;
+    ctx.fillRect(left, top, width * (shown / 100), height);
+    ctx.restore();
+
+    ctx.strokeStyle = 'rgba(140,155,175,.25)'; ctx.lineWidth = 1;
+    [10, 30, 50, 70].forEach(function (tick) {
+      var x = left + width * tick / 100;
+      ctx.beginPath(); ctx.moveTo(x, top); ctx.lineTo(x, top + height); ctx.stroke();
+      ctx.fillStyle = 'rgba(139,152,169,.7)';
+      ctx.font = '9px ui-monospace,Consolas,monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText(String(tick), x, top + height + 12);
+    });
+
+    var needle = left + width * (shown / 100);
+    ctx.fillStyle = '#e7ecf3';
+    ctx.beginPath();
+    ctx.moveTo(needle, top - 3);
+    ctx.lineTo(needle - 5, top - 12);
+    ctx.lineTo(needle + 5, top - 12);
+    ctx.closePath(); ctx.fill();
+  }
+
+  function draw(now) {
+    if (!W || !H) resize();
+    if (!start) start = now;
+    var age = now - start;
+    // One pass of the needle, so the reading is watched rather than glanced at.
+    var eased = Math.min(1, age / 900);
+    var shown = score * (eased * eased * (3 - 2 * eased));
+
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    ctx.clearRect(0, 0, W, H);
+    ctx.fillStyle = '#080b11';
+    ctx.fillRect(0, 0, W, H);
+
+    var mid = H / 2, breathe = Math.sin(age / 900) * 2;
+    var half = Math.max(96, Math.min(300, W * 0.30));
+    skull(W / 2 - half, mid + breathe, 74 + 46 * (1 - strength), 1 - strength);
+    coin(W / 2 + half, mid - breathe, 52 + 62 * strength, strength);
+
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#f6f2e8';
+    ctx.font = '900 ' + Math.round(Math.min(44, W / 13)) + 'px "Arial Black",Impact,sans-serif';
+    ctx.fillText(shown.toFixed(1), W / 2, mid - 26);
+    ctx.fillStyle = shown < 30 ? RED : shown < 70 ? GOLD : GREEN;
+    ctx.font = '700 13px ui-monospace,Consolas,monospace';
+    ctx.fillText(String(DATA.label || ''), W / 2, mid - 4);
+
+    meter(W / 2, mid + 16, Math.min(360, W * 0.46), shown);
+
+    ctx.fillStyle = DIM;
+    ctx.font = '11px ui-monospace,Consolas,monospace';
+    ctx.fillText('evidence out of 100', W / 2, mid + 58);
+
+    if (age < 1400) requestAnimationFrame(draw);
+  }
+
+  /* ----------------------------------------------------------- the numbers */
+  var parts = document.getElementById('btclab-meter-parts');
+  parts.innerHTML = '';
+  (DATA.components || []).forEach(function (component) {
+    var row = document.createElement('div');
+    row.className = 'part' + (component.hasData ? '' : ' empty');
+    var pct = Math.round(100 * Math.max(0, Math.min(1, component.value)));
+    row.innerHTML =
+      '<u>' + component.name.replace(/_/g, ' ') + '</u>' +
+      '<div class="track"><i style="width:' + pct + '%"></i></div>' +
+      '<span>' + component.detail + '</span>';
+    parts.appendChild(row);
+  });
+
+  document.getElementById('btclab-meter-foot').textContent =
+    (DATA.blurb || '') + ' Equal weights, every component shown, nothing below zero. '
+    + 'It measures how much survived the tests - never which way a price goes.';
+
+  if (window.ResizeObserver) {
+    new ResizeObserver(function () { resize(); start = 0; requestAnimationFrame(draw); })
+      .observe(canvas.parentNode);
+  }
+  resize();
+  requestAnimationFrame(draw);
+  window.__btclabMeter = { score: score, label: DATA.label };
+})();
+</script>
+<!--METER:END-->
+</body>
+</html>
