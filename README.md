@@ -89,6 +89,7 @@ Then run any of these:
 | `run.py range --days 10` | how far the price may move, as a calibrated interval |
 | `run.py sizing` | how much to hold, from the volatility forecast |
 | `run.py ledger --record` | write today's forecast down; without the flag, score the ones that came due |
+| `run.py paper` | advance the public paper portfolio and print its trades |
 | `run.py publish` | build the static site into `site/` for a web host |
 | `run.py backtest` | strategies vs buy-and-hold |
 | `run.py all` | everything in sequence |

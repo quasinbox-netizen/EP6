@@ -57,8 +57,18 @@ def site(tmp_path_factory, data) -> dict:
     }
 
 
-def test_every_page_is_written(site):
-    assert {path.name for path in site["paths"]} == {name for name, _ in PAGES}
+def test_every_page_written_is_one_the_navigation_knows(site):
+    """No orphan pages, and no navigation entry that leads nowhere.
+
+    The paper portfolio is the one page that can be absent: it needs a saved
+    volatility forecast to size itself, and without one it is left out rather
+    than filled with a guess.
+    """
+    written = {path.name for path in site["paths"]}
+    known = {name for name, _ in PAGES}
+
+    assert written <= known
+    assert known - written <= {"trader.html"}
 
 
 def test_no_control_series_reaches_the_output(site):
@@ -139,3 +149,13 @@ def test_building_twice_replaces_rather_than_accumulates(tmp_path, data):
     build(destination, DASHBOARD, inputs)
 
     assert not (destination / "stale.html").exists()
+
+
+def test_the_paper_page_states_what_decides_it(site):
+    """A portfolio page reads as a recommendation unless it says otherwise."""
+    if "trader.html" not in site["text"]:
+        pytest.skip("no volatility forecast in this fixture, so no paper page")
+    trader = site["text"]["trader.html"]
+
+    assert "no demonstrated edge" in trader
+    assert "Nothing here is advice" in trader

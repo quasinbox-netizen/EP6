@@ -26,6 +26,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import pandas as pd
+import plotly.graph_objects as go
 
 from analysis.evidence import build as build_evidence
 from forecast.ledger import load as load_ledger
@@ -42,6 +43,7 @@ PANELS = {
     "intro": ("intro.html", "<!--INTRO:START-->", "<!--INTRO:END-->"),
     "desk": ("signal_desk.html", "<!--DESK:START-->", "<!--DESK:END-->"),
     "meter": ("evidence_meter.html", "<!--METER:START-->", "<!--METER:END-->"),
+    "paper": ("paper_desk.html", "<!--PAPER:START-->", "<!--PAPER:END-->"),
 }
 DATA_START, DATA_END = "<!--DATA:START-->", "<!--DATA:END-->"
 PLOTLY = "https://cdn.plot.ly/plotly-2.35.2.min.js"
@@ -49,6 +51,7 @@ PLOTLY = "https://cdn.plot.ly/plotly-2.35.2.min.js"
 PAGES = (
     ("index.html", "Today"),
     ("now.html", "Now"),
+    ("trader.html", "Paper trader"),
     ("evidence.html", "Evidence"),
     ("signals.html", "Signals"),
     ("receipts.html", "Receipts"),
@@ -87,6 +90,7 @@ class SiteInputs:
     range_calibration: pd.DataFrame | None = None
     range_days: int = 30
     ledger: pd.DataFrame | None = None
+    paper: dict | None = None
     # Saved results, read rather than recomputed: the site must not be able to
     # publish a number the terminal never printed.
     saved: dict = None
@@ -303,6 +307,44 @@ def build(destination: Path, dashboard_dir: Path, inputs: SiteInputs) -> list:
 
     written.append(_write(destination / "now.html",
                           _shell("BTC Cycle Lab - now", "Now", "".join(body), as_of=as_of)))
+
+    # --- the paper portfolio ---------------------------------------------
+    if inputs.paper:
+        equity = inputs.paper.get("curve")
+        chart = ""
+        if equity is not None and not equity.empty:
+            figure = go.Figure()
+            figure.add_trace(go.Scatter(
+                x=equity.index, y=equity["equity"], mode="lines", name="the portfolio",
+                line={"color": "#20c97e", "width": 2},
+            ))
+            figure.add_trace(go.Scatter(
+                x=equity.index, y=equity["buy_and_hold"], mode="lines",
+                name="just holding BTC", line={"color": "#8b98a9", "width": 1.4, "dash": "dot"},
+            ))
+            figure.update_layout(
+                height=340, margin={"l": 56, "r": 16, "t": 20, "b": 40},
+                hovermode="x unified", yaxis_title="USD",
+                legend={"orientation": "h", "y": -0.18},
+            )
+            chart = figure_html(figure, "paper")
+
+        trader_body = (
+            "<section><h2>A virtual portfolio, in public</h2>"
+            + panel(dashboard_dir, "paper", inputs.paper["payload"])
+            + "</section><section><h2>Against simply holding</h2>"
+            + chart
+            + "<p class='note'>Virtual money, started on the last halving - a date "
+              "fixed by the subject rather than chosen after seeing the curve. "
+              "Direction comes from the 50/200 crossover, which this project shows "
+              "has no demonstrated edge; size comes from the volatility forecast, "
+              "which does. Costs are charged on every change. The dotted line is "
+              "what doing nothing would have earned, and it is the only benchmark "
+              "that matters.</p></section>"
+        )
+        written.append(_write(destination / "trader.html",
+                              _shell("BTC Cycle Lab - paper trader", "Paper trader",
+                                     trader_body, as_of=as_of)))
 
     written.append(_write(destination / "evidence.html",
                           _shell("BTC Cycle Lab - evidence", "Evidence",

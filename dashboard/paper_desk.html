@@ -1,0 +1,222 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BTC Cycle Lab - paper portfolio</title>
+</head>
+<body>
+<!--PAPER:START-->
+<style>
+  html,body{height:100%; margin:0; background:#080b11}
+  .btclab-paper *{box-sizing:border-box}
+  .btclab-paper{
+    --bg:#080b11; --panel:#0d1219; --line:#1c2530; --ink:#e7ecf3; --dim:#8b98a9;
+    --green:#20c97e; --red:#ef4056; --gold:#f7931a;
+    background:var(--bg); color:var(--ink); border:1px solid var(--line);
+    border-radius:10px; overflow:hidden;
+    font:13px/1.5 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  }
+  .btclab-paper .bar{
+    display:flex; align-items:center; gap:10px; flex-wrap:wrap;
+    padding:10px 14px; border-bottom:1px solid var(--line); background:var(--panel);
+  }
+  .btclab-paper .badge{
+    padding:4px 11px; border-radius:999px; font-size:11.5px; font-weight:700;
+    letter-spacing:.1em; text-transform:uppercase;
+  }
+  .btclab-paper .badge.in{background:rgba(32,201,126,.16); color:var(--green);
+    border:1px solid rgba(32,201,126,.4)}
+  .btclab-paper .badge.out{background:rgba(139,152,169,.12); color:var(--dim);
+    border:1px solid rgba(139,152,169,.3)}
+  .btclab-paper .spacer{flex:1 1 auto}
+  .btclab-paper .live{display:flex; align-items:center; gap:7px; font-size:11.5px;
+    padding:4px 10px; border:1px solid var(--line); border-radius:6px; background:#0a0f15}
+  .btclab-paper .dot{width:7px;height:7px;border-radius:50%;background:#4a5666}
+  .btclab-paper .dot.on{background:var(--green); box-shadow:0 0 8px var(--green);
+    animation:btclab-beat 2s infinite}
+  @keyframes btclab-beat{0%,100%{opacity:1}50%{opacity:.35}}
+  .btclab-paper .cells{display:grid; grid-template-columns:repeat(auto-fit,minmax(148px,1fr));
+    gap:10px; padding:14px}
+  .btclab-paper .cell{border:1px solid var(--line); border-radius:8px; background:#0a0f15;
+    padding:9px 11px}
+  .btclab-paper .cell u{display:block; text-decoration:none; color:var(--dim);
+    font-size:9.5px; letter-spacing:.14em; text-transform:uppercase}
+  .btclab-paper .cell b{font-size:19px; font-weight:600}
+  .btclab-paper .cell s{display:block; text-decoration:none; font-size:11px; color:var(--dim)}
+  .btclab-paper .next{margin:0 14px 14px; padding:11px 13px; border-radius:8px;
+    border:1px solid #2a3444; background:linear-gradient(180deg,#111823,#0b1017)}
+  .btclab-paper .next.armed{border-color:var(--gold); box-shadow:0 0 0 1px rgba(247,147,26,.25)}
+  .btclab-paper .next h4{margin:0 0 5px; font-size:10px; letter-spacing:.18em;
+    color:var(--dim); font-weight:600}
+  .btclab-paper .next p{margin:0; font-size:12.5px}
+  .btclab-paper table{width:100%; border-collapse:collapse; font-size:12px}
+  .btclab-paper th,.btclab-paper td{padding:6px 14px; text-align:left;
+    border-top:1px solid var(--line)}
+  .btclab-paper th{color:var(--dim); font-size:10px; letter-spacing:.1em;
+    text-transform:uppercase; font-weight:600}
+  .btclab-paper td.buy{color:var(--green)}
+  .btclab-paper td.sell{color:var(--red)}
+  .btclab-paper .foot{padding:9px 14px; border-top:1px solid var(--line);
+    background:var(--panel); color:var(--dim); font-size:10.5px}
+</style>
+
+<div class="btclab-paper" id="btclab-paper">
+  <div class="bar">
+    <span class="badge out" id="btclab-paper-badge">-</span>
+    <span id="btclab-paper-since" style="color:#8b98a9;font-size:11.5px"></span>
+    <span class="spacer"></span>
+    <span class="live"><span class="dot" id="btclab-paper-dot"></span>
+      <span id="btclab-paper-live">live: connecting</span></span>
+  </div>
+  <div class="cells" id="btclab-paper-cells"></div>
+  <div class="next" id="btclab-paper-next">
+    <h4>WHAT IT DOES NEXT</h4>
+    <p id="btclab-paper-next-text">-</p>
+  </div>
+  <table id="btclab-paper-trades"></table>
+  <div class="foot" id="btclab-paper-foot"></div>
+</div>
+
+<script type="application/json" id="btclab-paper-data">
+<!--DATA:START-->
+{"state": {}, "trades": []}
+<!--DATA:END-->
+</script>
+
+<script>
+(function () {
+  var root = document.getElementById('btclab-paper');
+  if (!root || root.dataset.started === '1') return;
+  root.dataset.started = '1';
+
+  var DATA = {};
+  try {
+    DATA = JSON.parse(document.getElementById('btclab-paper-data').textContent);
+  } catch (err) { DATA = { state: {}, trades: [] }; }
+  var S = DATA.state || {}, TRADES = DATA.trades || [];
+
+  var GREEN = '#20c97e', RED = '#ef4056', GOLD = '#f7931a', DIM = '#8b98a9';
+  var live = null;
+
+  function money(v, digits) {
+    if (v === null || v === undefined || !isFinite(v)) return '-';
+    return '$' + Number(v).toLocaleString('en-US', {
+      minimumFractionDigits: digits || 0, maximumFractionDigits: digits || 0,
+    });
+  }
+  function pct(v, digits) {
+    if (v === null || v === undefined || !isFinite(v)) return '-';
+    return (v >= 0 ? '+' : '') + (v * 100).toFixed(digits === undefined ? 1 : digits) + '%';
+  }
+
+  /* The only number that moves while you watch: the open position revalued at
+     the live price. Everything else is settled history from the last close. */
+  function markToMarket() {
+    var price = live || S.lastPrice;
+    var equity = (S.cash || 0) + (S.units || 0) * (price || 0);
+    var hold = S.hold || 0;
+    var capital = S.capital || 1;
+
+    document.getElementById('btclab-paper-cells').innerHTML = [
+      ['Portfolio now', money(equity), pct(equity / capital - 1) + ' since ' + (S.started || '-'),
+       equity >= capital ? GREEN : RED],
+      ['Just holding BTC', money(hold), pct(hold / capital - 1) + ' over the same days',
+       hold >= capital ? GREEN : RED],
+      ['Difference', pct(equity / hold - 1) , 'portfolio against holding',
+       equity >= hold ? GREEN : RED],
+      ['Position', (S.weight ? (S.weight * 100).toFixed(0) + '% in BTC' : 'all cash'),
+       (S.units ? S.units.toFixed(4) + ' BTC + ' + money(S.cash) : money(S.cash) + ' in cash'),
+       S.weight ? GREEN : DIM],
+    ].map(function (c) {
+      return '<div class="cell"><u>' + c[0] + '</u><b style="color:' + c[3] + '">'
+        + c[1] + '</b><s>' + c[2] + '</s></div>';
+    }).join('');
+  }
+
+  function renderNext() {
+    var box = document.getElementById('btclab-paper-next');
+    var text = document.getElementById('btclab-paper-next-text');
+    var level = S.flipLevel, price = live || S.lastPrice;
+    box.className = 'next';
+
+    if (!level || !price) {
+      text.textContent = S.flipText || 'The rule has no price trigger right now.';
+      return;
+    }
+    var holding = (S.weight || 0) > 0;
+    var crossed = holding ? price <= level : price >= level;
+    var distance = (level - price) / price;
+    text.innerHTML = S.flipText
+      + '<br><span style="color:' + (crossed ? GOLD : DIM) + '">'
+      + (crossed
+          ? 'The live price is already past it, so the portfolio '
+            + (holding ? 'sells' : 'buys') + ' at the next daily close.'
+          : Math.abs(distance * 100).toFixed(1) + '% away from the live price')
+      + '</span>';
+    if (crossed) box.className = 'next armed';
+  }
+
+  function renderTrades() {
+    var table = document.getElementById('btclab-paper-trades');
+    if (!TRADES.length) {
+      table.innerHTML = '<tr><td style="color:#8b98a9">No trade yet.</td></tr>';
+      return;
+    }
+    var head = '<tr><th>date</th><th>action</th><th>price</th><th>position after</th>'
+             + '<th>cost</th><th>portfolio</th></tr>';
+    var rows = TRADES.slice().reverse().map(function (t) {
+      return '<tr><td>' + t.date + '</td>'
+        + '<td class="' + t.action + '">' + t.action + '</td>'
+        + '<td>' + money(t.price) + '</td>'
+        + '<td>' + (t.weight_to * 100).toFixed(0) + '%</td>'
+        + '<td>' + money(t.cost, 2) + '</td>'
+        + '<td>' + money(t.equity) + '</td></tr>';
+    }).join('');
+    table.innerHTML = head + rows;
+  }
+
+  function poll() {
+    fetch('https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT', { cache: 'no-store' })
+      .then(function (r) { return r.json(); })
+      .then(function (j) {
+        var price = parseFloat(j.price);
+        if (!isFinite(price)) throw new Error('bad payload');
+        live = price;
+        document.getElementById('btclab-paper-live').textContent = 'live ' + money(price);
+        document.getElementById('btclab-paper-dot').className = 'dot on';
+        markToMarket();
+        renderNext();
+      })
+      .catch(function () {
+        document.getElementById('btclab-paper-live').textContent =
+          'live: offline (valued at the last close)';
+        document.getElementById('btclab-paper-dot').className = 'dot';
+      });
+  }
+
+  var badge = document.getElementById('btclab-paper-badge');
+  var holding = (S.weight || 0) > 0;
+  badge.className = 'badge ' + (holding ? 'in' : 'out');
+  badge.textContent = holding ? 'holding BTC' : 'in cash';
+  document.getElementById('btclab-paper-since').textContent =
+    'started ' + (S.started || '-') + ' with ' + money(S.capital)
+    + ' | settled to ' + (S.asOf || '-') + ' | ' + (S.trades || 0) + ' trades';
+
+  document.getElementById('btclab-paper-foot').textContent =
+    'Virtual money. Direction from a mechanical rule with no demonstrated edge, size '
+    + 'from the volatility forecast, costs of ' + ((S.costRate || 0) * 100).toFixed(2)
+    + '% charged on every change. Nothing here is advice, and the point of publishing '
+    + 'it is to find out whether following the rule beats simply holding.';
+
+  markToMarket();
+  renderNext();
+  renderTrades();
+  poll();
+  window.setInterval(poll, 5000);
+  window.__btclabPaper = { state: function () { return { live: live, weight: S.weight }; } };
+})();
+</script>
+<!--PAPER:END-->
+</body>
+</html>

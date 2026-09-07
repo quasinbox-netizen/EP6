@@ -60,6 +60,8 @@ from analysis.specification import (  # noqa: E402
 )
 from backtest.edge import edge_test, fragility  # noqa: E402
 from backtest.engine import BacktestConfig, compare, run_backtest  # noqa: E402
+from backtest.paper import run_paper, state, target_weights  # noqa: E402
+from features.halving import CONFIRMED_HALVINGS  # noqa: E402
 from backtest.sizing import (  # noqa: E402
     DEFAULT_REFIT_EVERY as SIZING_REFIT_EVERY,
     TRADING_DAYS,
@@ -771,10 +773,42 @@ def cmd_publish(args) -> int:
     saved["range_10"] = read("range_forecast_10d.csv")
     saved["range_30"] = read("range_forecast_30d.csv")
 
+    # The public paper portfolio, if the volatility forecast it sizes itself
+    # from has been built. Without that there is no honest size to hold, so
+    # the page is left out rather than filled with a guess.
+    paper = None
+    volatility_path = processed / "conditional_volatility.csv"
+    chosen = next(
+        (item for item in signals["strategies"] if item["report"].name == "trend 50/200"),
+        None,
+    )
+    if volatility_path.exists() and chosen is not None:
+        volatility = pd.read_csv(volatility_path, index_col=0, parse_dates=True).iloc[:, 0]
+        size = apply_rebalance_band(
+            volatility_target_position(volatility, target_annual_volatility=0.60), 0.30
+        )
+        run = run_paper(
+            data.features["close"], target_weights(chosen["positions"], size),
+            capital=10_000.0, cost_rate=BacktestConfig.from_config(config).cost_rate,
+            start=max(CONFIRMED_HALVINGS),
+        )
+        trades = run.trades
+        if not trades.empty:
+            trades = trades.assign(date=trades["date"].dt.strftime("%Y-%m-%d"))
+        paper = {
+            "payload": {
+                "state": state(run, flip_level=chosen["report"].trigger.level,
+                               flip_text=chosen["report"].trigger.text),
+                "trades": trades.to_dict("records"),
+            },
+            "curve": pd.DataFrame({"equity": run.equity, "buy_and_hold": run.hold}),
+        }
+        print(f"  paper portfolio: {run.summary()}")
+
     inputs = SiteInputs(
         outlook=outlook, signals=signals, evidence=evidence, study=study,
         scan=scan, curve_summary=curve_summary, control_note=control_note,
-        saved=saved,
+        saved=saved, paper=paper,
         range_forecast=forecast if not forecast.empty else None,
         range_calibration=calibration if not calibration.empty else None,
         range_days=args.days,
@@ -789,6 +823,87 @@ def cmd_publish(args) -> int:
         "Upload the contents of that folder to the /btc/ directory of the site. "
         "No Python runs there: the pages are files, and the only thing they fetch "
         "at run time is the live BTC quote on the signals page."
+    )
+    return 0
+
+
+def cmd_paper(args) -> int:
+    """Advance the public paper portfolio and say what it did.
+
+    Direction from a mechanical rule, size from the volatility forecast, costs
+    charged on every change in weight. The start date is the last confirmed
+    halving rather than a date chosen after seeing the curve - any start date
+    flatters or hurts, so it is anchored to the thing this project studies and
+    stated on the page.
+    """
+    config = load_config()
+    data = load_lab_data(config)
+    if data.is_empty:
+        print("the database is empty - run `ingest` first")
+        return 1
+
+    processed = _processed_dir(config)
+    volatility_path = processed / "conditional_volatility.csv"
+    if not volatility_path.exists():
+        print(
+            "No volatility forecast saved. The portfolio sizes itself from it,\n"
+            "so build it first:\n\n    python run.py sizing\n"
+        )
+        return 1
+
+    volatility = pd.read_csv(volatility_path, index_col=0, parse_dates=True).iloc[:, 0]
+    close = data.features["close"]
+
+    signals = strategy_signals(data, config)
+    chosen = next(
+        (item for item in signals["strategies"] if item["report"].name == args.rule),
+        None,
+    )
+    if chosen is None:
+        names = ", ".join(item["report"].name for item in signals["strategies"])
+        print(f"no rule called {args.rule!r}. Available: {names}")
+        return 1
+
+    size = apply_rebalance_band(
+        volatility_target_position(volatility, target_annual_volatility=args.target),
+        args.band,
+    )
+    weights = target_weights(chosen["positions"], size)
+
+    start = pd.Timestamp(args.start) if args.start else max(CONFIRMED_HALVINGS)
+    settings = BacktestConfig.from_config(config)
+    run = run_paper(
+        close, weights, capital=args.capital,
+        cost_rate=settings.cost_rate, start=start,
+    )
+
+    print(f"--- paper portfolio: {args.rule}, sized by the volatility forecast ---")
+    print(run.summary())
+    report = state(
+        run,
+        flip_level=chosen["report"].trigger.level,
+        flip_text=chosen["report"].trigger.text,
+    )
+    print(
+        f"\nHolding {report['weight']:.0%} of {report['equity']:,.0f} "
+        f"({report['units']:.4f} BTC and {report['cash']:,.0f} in cash) "
+        f"as of {report['asOf']}."
+    )
+    print(f"What flips it: {report['flipText']}")
+
+    if not run.trades.empty:
+        print("\n--- the last trades ---")
+        print(run.trades.tail(8).to_string(index=False))
+        _save(run.trades, config, "paper_trades.csv")
+    _save(
+        pd.DataFrame({"equity": run.equity, "buy_and_hold": run.hold}),
+        config, "paper_equity.csv",
+    )
+    print(
+        "\nThe direction rule has no demonstrated edge - that is this project's "
+        "finding, not\na caveat. What the portfolio tests in public is whether "
+        "following it anyway,\nsized by a volatility model that does work, beats "
+        "simply holding."
     )
     return 0
 
@@ -1397,6 +1512,26 @@ def build_parser() -> argparse.ArgumentParser:
         help="which calibrated interval horizon to show (default 30)",
     )
     publish_parser.set_defaults(func=cmd_publish)
+
+    paper_parser = subparsers.add_parser(
+        "paper", help="advance the public paper portfolio"
+    )
+    paper_parser.add_argument(
+        "--rule", default="trend 50/200", help="which rule decides direction"
+    )
+    paper_parser.add_argument(
+        "--capital", type=float, default=10_000.0, help="starting capital"
+    )
+    paper_parser.add_argument(
+        "--start", help="start date (default: the last confirmed halving)"
+    )
+    paper_parser.add_argument(
+        "--target", type=float, default=0.60, help="target annualised volatility"
+    )
+    paper_parser.add_argument(
+        "--band", type=float, default=0.30, help="rebalance band"
+    )
+    paper_parser.set_defaults(func=cmd_paper)
 
     speccurve = subparsers.add_parser(
         "speccurve",
