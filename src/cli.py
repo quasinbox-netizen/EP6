@@ -1094,15 +1094,30 @@ def cmd_sizing(args) -> int:
     print(table.to_string(float_format=lambda v: f"{v:,.3f}"))
     _save(table, config, "sizing_comparison.csv")
 
+    # The edge test scores the row this command actually sizes with, NOT the
+    # row with the best Sharpe. It used to score the best, which meant the
+    # p-value on screen belonged to a variant the portfolio does not run - and
+    # picking a winner on the same sample the test then scores is the selection
+    # this project rejects everywhere else. The best row is still named, so
+    # testing the right one hides nothing.
     best = max(runs[1:], key=lambda r: r.metrics["sharpe"])
-    edge = edge_test(best.positions, aligned,
+    scored = next((r for r in runs[1:] if r.name == chosen_label), best)
+    edge = edge_test(scored.positions, aligned,
                      cost_rate=backtest_config.cost_rate, n_permutations=2000)
-    correlation = best.positions.shift(1).corr(aligned.abs())
+    correlation = scored.positions.shift(1).corr(aligned.abs())
 
     print(f"\nDoes the sizing carry information? Correlation between the position "
           f"held\nand the NEXT day's absolute move: {correlation:+.3f}. Negative "
           "means a smaller\nposition before a bigger move, which is the claim.")
-    print(f"\nDoes it earn a risk-adjusted edge? {best.name}: {edge.summary()}")
+    print(f"\nDoes it earn a risk-adjusted edge? {scored.name}: {edge.summary()}")
+    if best.name != scored.name:
+        print(
+            f"  The highest Sharpe here is {best.name}'s, at "
+            f"{best.metrics['sharpe']:.4f} against {scored.metrics['sharpe']:.4f}.\n"
+            "  It is not the row this command sizes with, and adopting it for\n"
+            "  having won on this sample is the mistake the rest of this project\n"
+            "  exists to catch."
+        )
     print(
         "\nRead those two lines together. The forecast has real content and the "
         "sizing\ndoes what it says - volatility and drawdown both fall. It does "
@@ -1139,7 +1154,10 @@ def cmd_sizing(args) -> int:
         pd.DataFrame([{
             "as_of": as_of.date(), "price": price,
             "forecast_annual_volatility": forecast, "median_annual_volatility": typical,
-            "target_position": float(target.loc[as_of]), "band": args.band,
+            "target_position": float(target.loc[as_of]),
+            # Recorded, not assumed: the published provenance note names the
+            # target it was actually sized with, and cannot drift from it.
+            "target_annual_volatility": args.target, "band": args.band,
             "position": today,
         }]),
         config, "sizing_today.csv",

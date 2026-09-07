@@ -10,6 +10,45 @@ the scan changes every corrected p-value in it; changing an estimation window
 changes every abnormal return. Those belong under **Changed** with the effect
 on published results spelled out, never under **Fixed** as a detail.
 
+## [1.1.0] - 2026-09-07
+
+### Changed
+
+- **The published paper portfolio was restated: -14.5% since the last halving
+  becomes -7.7%.** `run_paper` applies the one-day execution lag itself and was
+  being handed a series the backtest engine had already lagged, so every entry
+  and exit landed a day late and the account paid for a day of moves it was not
+  in. Every trade date on the page moves back one day (the 2024-08-11 sell is
+  now 2024-08-10, and so on). The rule did not change and its verdict did not
+  change: it still loses to holding, which returned +21.6% over the same window.
+  The correction is printed on the page itself, not only here.
+- **The two constants that size the portfolio are now disclosed as fitted.**
+  The volatility target of 60% is BTC's own median forecast volatility over
+  this history (measured at 59.95%), not an outside convention; the 30%
+  rebalance band was selected as the highest-Sharpe variant among those
+  compared, on the same history the edge test then scores. The comparison is
+  published in full, including the variant that scores higher than the one
+  adopted. No number changed - what changed is that the page no longer presents
+  either as though it came from outside the data.
+
+- **`sizing` now edge-tests the row it sizes with.** It tested whichever
+  variant had the best Sharpe, so the p-value on screen belonged to a strategy
+  the portfolio does not run - `vol target, EWMA band 10%`, p = 0.40 - while
+  the position came from `vol target, band 30%`, p = 0.079. Choosing the row on
+  its Sharpe and then testing that same row on that same sample is the
+  selection this project rejects elsewhere. The verdict is unchanged: neither
+  is significant, and the sizing still earns no risk-adjusted edge. The
+  best-scoring row is still printed by name.
+
+### Added
+
+- `publish/disclosure.py`: an append-only corrections log rendered on the page
+  whose figures moved, and the provenance note for the sizing constants. A
+  restatement absent from that log is a restatement the reader never sees, so
+  it is pinned by tests rather than by review.
+- `sizing_today.csv` records `target_annual_volatility`, so the published
+  provenance names the target the run actually used and cannot drift from it.
+
 ## [1.0.0] — 2026-09-05
 
 First release. The project answers its question, and the answer is negative:

@@ -34,6 +34,7 @@ from forecast.ledger import score as score_ledger
 from forecast.ledger import scoreboard as ledger_scoreboard
 from forecast.ledger import verdict as ledger_verdict
 from publish.charts import cycle_clock, range_chart
+from publish.disclosure import corrections_html, provenance_html
 from publish.pages import cards as _cards
 from publish.pages import evidence_page, figure_html, today_page
 from publish.pages import table as _table
@@ -378,6 +379,9 @@ def build(destination: Path, dashboard_dir: Path, inputs: SiteInputs) -> list:
               "which does. Costs are charged on every change. The dotted line is "
               "what doing nothing would have earned, and it is the only benchmark "
               "that matters.</p></section>"
+            + provenance_html((inputs.saved or {}).get("sizing_today", pd.DataFrame()),
+                              (inputs.saved or {}).get("sizing_comparison", pd.DataFrame()))
+            + corrections_html("trader.html")
         )
         written.append(_write(destination / "trader.html",
                               _shell("BTC Cycle Lab - the agent", "The agent",

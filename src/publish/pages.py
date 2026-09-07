@@ -75,7 +75,10 @@ def today_page(inputs) -> str:
         parts.append(
             "<p class='note'>The position is target volatility divided by forecast "
             "volatility, after a rebalance band. It says how much, never which way - "
-            "and volatility is the one thing in this project that is forecastable.</p>"
+            "and volatility is the one thing in this project that is forecastable. "
+            "Both the target and the band were chosen on this history rather than "
+            "brought in from outside it; <a href='trader.html'>the agent page says "
+            "how</a>.</p>"
         )
 
     for label, key in (("10 days", "range_10"), ("30 days", "range_30")):

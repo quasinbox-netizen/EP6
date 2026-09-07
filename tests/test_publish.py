@@ -183,3 +183,42 @@ def test_the_paper_page_states_what_decides_it(site):
 
     assert "no demonstrated edge" in trader
     assert "Nothing here is advice" in trader
+
+
+def test_the_agent_page_discloses_its_fitted_constants_and_its_corrections(tmp_path, data):
+    """Both disclosures reach the built page, not just the module that writes them.
+
+    The provenance note and the corrections log are only worth having if they
+    survive the trip through the site builder. This is the test that fails if
+    someone drops the call rather than the text.
+    """
+    signals = strategy_signals(data)
+    close = data.features["close"]
+    curve = pd.DataFrame({"equity": close / close.iloc[0] * 10_000.0,
+                          "buy_and_hold": close / close.iloc[0] * 10_000.0})
+    inputs = SiteInputs(
+        outlook=cycle_outlook(data), signals=signals,
+        evidence=build_evidence(hypotheses=1), study=halving_event_study(data, post=365),
+        scan=pd.DataFrame({"significant_adjusted": [False]}),
+        curve_summary=pd.DataFrame(), control_note="note",
+        saved={
+            "sizing_today": pd.DataFrame([{
+                "as_of": "2026-09-03", "price": 81270.37,
+                "forecast_annual_volatility": 0.5428, "position": 0.816,
+                "median_annual_volatility": 0.5995,
+                "target_annual_volatility": 0.60, "band": 0.30,
+            }]),
+            "sizing_comparison": pd.DataFrame([
+                {"strategy": "vol target, band 30%", "sharpe": 1.1316},
+                {"strategy": "vol target, EWMA band 10%", "sharpe": 1.1527},
+            ]),
+        },
+        paper={"payload": {"state": {}, "trades": []}, "curve": curve},
+    )
+    build(tmp_path / "site", DASHBOARD, inputs)
+    trader = (tmp_path / "site" / "trader.html").read_text(encoding="utf-8")
+
+    assert "chosen with this dataset in front of us" in trader
+    assert "selection in sample" in trader
+    assert "EWMA band 10%" in trader          # the variant that beat the adopted one
+    assert "-14.5%" in trader and "-7.7%" in trader
