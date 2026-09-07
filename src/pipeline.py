@@ -546,6 +546,8 @@ def strategy_signals(data: LabData, config=None) -> dict:
         reports.append({
             "report": signal,
             "positions": result.positions,
+            # Unlagged, for callers that apply their own lag.
+            "signal": result.signal,
             "excess_sharpe": (
                 signal.metrics.get("sharpe", float("nan"))
                 - baseline.metrics.get("sharpe", float("nan"))

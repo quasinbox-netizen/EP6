@@ -795,7 +795,7 @@ def cmd_publish(args) -> int:
             volatility_target_position(volatility, target_annual_volatility=0.60), 0.30
         )
         run = run_paper(
-            data.features["close"], target_weights(chosen["positions"], size),
+            data.features["close"], target_weights(chosen["signal"], size),
             capital=10_000.0, cost_rate=BacktestConfig.from_config(config).cost_rate,
             start=max(CONFIRMED_HALVINGS),
         )
@@ -875,7 +875,7 @@ def cmd_paper(args) -> int:
         volatility_target_position(volatility, target_annual_volatility=args.target),
         args.band,
     )
-    weights = target_weights(chosen["positions"], size)
+    weights = target_weights(chosen["signal"], size)
 
     start = pd.Timestamp(args.start) if args.start else max(CONFIRMED_HALVINGS)
     settings = BacktestConfig.from_config(config)

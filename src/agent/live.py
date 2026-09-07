@@ -21,10 +21,12 @@ a different strategy, and it needs intraday history, its own backtest and its
 own calibration before it is worth a cent. Until then this agent says what it
 sees and waits for the close.
 
-The journal is append-only and rolls: observations are trimmed to the last few
-thousand rows, but anything that changed the position is written to a separate
-file that is never trimmed. Losing the record of a trade would defeat the
-purpose of keeping one.
+The journal rolls: observations are trimmed to the last few thousand rows,
+which is a few weeks of ticks. Nothing is lost by that, because the agent does
+not trade - the positions and their trade log come from the settled daily run
+in backtest/paper.py, which is rebuilt from the price history every morning and
+published in full. The journal is the record of what was SEEN, not of what was
+done.
 """
 from __future__ import annotations
 
@@ -41,9 +43,9 @@ TICKER_URL = "https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT"
 JOURNAL_COLUMNS = [
     "timestamp", "price", "weight", "flip_level", "distance", "state", "note",
 ]
-# A quarter-hourly agent writes about 35,000 lines a year. The recent ones are
-# what anybody reads; the ones that mattered are copied to the trade file
-# before this trim can reach them.
+# A quarter-hourly agent writes about 35,000 lines a year, and the recent ones
+# are what anybody reads. Nothing irreplaceable is lost when older rows go: the
+# positions and trades are rebuilt from the price history every morning.
 JOURNAL_LIMIT = 5_000
 
 # How far from the trigger counts as "about to happen". Chosen to be wide

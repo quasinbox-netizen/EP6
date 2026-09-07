@@ -134,6 +134,30 @@ def test_a_panel_can_be_lifted_without_data(site):
     assert "INTRO:START" not in fragment  # markers stay behind
 
 
+def test_a_rebuild_leaves_files_it_does_not_own(tmp_path, data):
+    """The agent writes its feed into the same folder every fifteen minutes.
+
+    The builder used to rmtree the destination, which removed that feed on
+    every publish and blanked the live page's journal until the next tick
+    pushed it back. A builder may clear its own output; it may not clear a
+    directory it shares with another writer.
+    """
+    signals = strategy_signals(data)
+    inputs = SiteInputs(
+        outlook=cycle_outlook(data), signals=signals,
+        evidence=build_evidence(hypotheses=1), study=halving_event_study(data, post=365),
+        scan=pd.DataFrame({"significant_adjusted": [False]}),
+        curve_summary=pd.DataFrame(), control_note="note",
+    )
+    destination = tmp_path / "site"
+    build(destination, DASHBOARD, inputs)
+    (destination / "agent_feed.json").write_text('{"observations": []}', encoding="utf-8")
+
+    build(destination, DASHBOARD, inputs)
+
+    assert (destination / "agent_feed.json").exists()
+
+
 def test_building_twice_replaces_rather_than_accumulates(tmp_path, data):
     """A stale page from a previous build is worse than a missing one."""
     signals = strategy_signals(data)

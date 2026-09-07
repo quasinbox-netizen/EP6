@@ -188,9 +188,14 @@ def _shell(title: str, current: str, body: str, *, as_of: str) -> str:
 def build(destination: Path, dashboard_dir: Path, inputs: SiteInputs) -> list:
     """Write the site. Returns the paths written."""
     destination = Path(destination)
-    if destination.exists():
-        shutil.rmtree(destination)
-    destination.mkdir(parents=True)
+    # Delete only what this builder writes. It used to rmtree the whole folder,
+    # which also ate the agent's feed: the agent writes agent_feed.json into
+    # docs/ every quarter of an hour, so every morning's publish removed it and
+    # the live page lost its journal until the next tick pushed it back. A
+    # builder may clear its own output; it may not clear a directory it shares.
+    destination.mkdir(parents=True, exist_ok=True)
+    for stale in list(destination.glob("*.html")) + list(destination.glob(".nojekyll")):
+        stale.unlink()
     # GitHub Pages runs Jekyll unless told not to, and Jekyll drops files it
     # does not recognise. Nothing here is a Jekyll site.
     (destination / ".nojekyll").write_text("", encoding="utf-8")
@@ -323,6 +328,30 @@ def build(destination: Path, dashboard_dir: Path, inputs: SiteInputs) -> list:
                 x=equity.index, y=equity["buy_and_hold"], mode="lines",
                 name="just holding BTC", line={"color": "#8b98a9", "width": 1.4, "dash": "dot"},
             ))
+
+            # Every trade marked where it happened. The table below says when the
+            # agent acted; without these a reader cannot see what the action did
+            # to the curve, which is the only thing that matters about it.
+            for action, colour, symbol in (
+                ("buy", "#20c97e", "triangle-up"), ("sell", "#ef4056", "triangle-down"),
+            ):
+                marks = [t for t in inputs.paper["payload"]["trades"]
+                         if t["action"] == action]
+                if not marks:
+                    continue
+                days = pd.to_datetime([t["date"] for t in marks])
+                figure.add_trace(go.Scatter(
+                    x=days,
+                    y=[equity["equity"].asof(day) for day in days],
+                    mode="markers", name=action,
+                    marker={"symbol": symbol, "size": 11, "color": colour,
+                            "line": {"color": "#05070a", "width": 1.5}},
+                    customdata=[[t["price"], t["weight_to"] * 100] for t in marks],
+                    hovertemplate=(action + " at $%{customdata[0]:,.0f}<br>"
+                                   "position after: %{customdata[1]:.0f}%<br>"
+                                   "portfolio: $%{y:,.0f}<extra></extra>"),
+                ))
+
             figure.update_layout(
                 height=340, margin={"l": 56, "r": 16, "t": 20, "b": 40},
                 hovermode="x unified", yaxis_title="USD",

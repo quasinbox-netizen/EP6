@@ -66,6 +66,11 @@ class BacktestResult:
     costs: pd.Series
     metrics: dict = field(default_factory=dict)
     name: str = "strategy"
+    # The target as handed in, BEFORE the execution lag. Kept because a caller
+    # that applies its own lag - the paper portfolio does - must not be handed
+    # `positions`, which is already lagged: doing so delays every entry by a
+    # second day and quietly costs the first day of every move.
+    signal: pd.Series = field(default_factory=lambda: pd.Series(dtype=float))
     # What rule produced this, in machine-readable form: {"kind": "trend",
     # "fast": 50, "slow": 200}. The signal desk needs the parameters to say
     # what would flip the rule, and parsing them back out of `name` would
@@ -183,6 +188,7 @@ def run_backtest(
         equity, net, positions, costs, periods_per_year=config.periods_per_year
     )
     return BacktestResult(
+        signal=target,
         equity=equity,
         positions=positions,
         net_returns=net,

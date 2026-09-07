@@ -10,6 +10,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
+from backtest.engine import BacktestConfig, run_backtest
 from backtest.paper import TRADE_THRESHOLD, run_paper, state, target_weights
 
 
@@ -124,3 +125,27 @@ def test_the_summary_names_the_benchmark(close):
 
     assert "against" in run.summary()
     assert "holding" in run.summary()
+
+
+def test_the_portfolio_reproduces_the_engine_it_reports_against(close):
+    """The invariant that catches a second lag, and did not exist before.
+
+    run_paper applies the execution lag itself, so it must be handed the raw
+    target - not `positions`, which the engine has already lagged. Feeding it
+    the lagged series delays every entry by a day: on this fixture the
+    portfolio missed the whole +10% move and ended flat while the engine
+    ended up 10%. Costs are zero here so the two are directly comparable.
+    """
+    signal = pd.Series([0.0] * 10, index=close.index)
+    signal.iloc[4:] = 1.0
+    settings = BacktestConfig(fee_bps=0, slippage_bps=0, execution_lag_days=1,
+                              initial_equity=1000.0)
+    engine = run_backtest(close, signal, settings)
+
+    paper = run_paper(close, engine.signal, capital=1000.0, cost_rate=0.0)
+
+    assert paper.equity.iloc[-1] == pytest.approx(float(engine.equity.iloc[-1]))
+
+    # And the mistake this replaces, stated so it cannot come back silently.
+    double_lagged = run_paper(close, engine.positions, capital=1000.0, cost_rate=0.0)
+    assert double_lagged.equity.iloc[-1] < paper.equity.iloc[-1]
