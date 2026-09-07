@@ -151,3 +151,50 @@ def car_chart_from_frame(frame: pd.DataFrame, title: str) -> go.Figure:
         legend={"orientation": "h", "y": -0.22},
     )
     return figure
+
+
+def band_sweep_chart(frame: pd.DataFrame, adopted: float,
+                     frozen_from: float | None = None) -> go.Figure:
+    """Sharpe against every value of the rebalance band.
+
+    The shape is the argument. A parameter worth ranking would draw a hill with
+    the adopted value somewhere near its top; this draws a jagged line on which
+    the adopted value is unremarkable, and whose highest points sit against the
+    region where the band is so wide the rule stops trading altogether. That
+    region is shaded rather than cropped, because it explains why the scores
+    rise towards the right - not skill, but a strategy switching itself off.
+    """
+    figure = go.Figure()
+
+    if frozen_from is not None:
+        figure.add_vrect(
+            x0=frozen_from, x1=float(frame["band"].max()),
+            fillcolor="rgba(239, 64, 86, 0.10)", line_width=0, layer="below",
+            annotation_text="the rule stops trading here",
+            annotation_position="top left",
+            annotation_font={"size": 11, "color": "#ef4056"},
+        )
+
+    figure.add_trace(go.Scatter(
+        x=frame["band"], y=frame["sharpe"], mode="lines+markers",
+        name="Sharpe", line={"color": COLORS["car"], "width": 1.6},
+        marker={"size": 4},
+        hovertemplate="band %{x:.0%}<br>Sharpe %{y:.4f}<extra></extra>",
+    ))
+
+    row = frame.loc[(frame["band"] - adopted).abs().idxmin()]
+    figure.add_trace(go.Scatter(
+        x=[row["band"]], y=[row["sharpe"]], mode="markers+text",
+        name="the band in use", text=["the band in use"], textposition="bottom center",
+        textfont={"color": "#f7931a", "size": 11},
+        marker={"symbol": "circle-open", "size": 15, "color": "#f7931a",
+                "line": {"width": 2.5}},
+        hovertemplate="in use: band %{x:.0%}<br>Sharpe %{y:.4f}<extra></extra>",
+    ))
+
+    figure.update_layout(
+        height=320, margin={"l": 56, "r": 16, "t": 28, "b": 44},
+        showlegend=False, xaxis_title="rebalance band", yaxis_title="Sharpe ratio",
+        xaxis={"tickformat": ".0%"},
+    )
+    return figure

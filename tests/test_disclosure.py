@@ -16,6 +16,7 @@ import pytest
 
 from publish.disclosure import (
     CORRECTIONS, Correction, corrections_for, corrections_html, provenance_html,
+    sweep_html,
 )
 
 
@@ -126,3 +127,53 @@ def test_a_comparison_the_adopted_row_wins_names_no_rival(sizing):
     html = provenance_html(sizing, swept)
 
     assert "scores higher" not in html
+
+
+@pytest.fixture
+def sweep() -> pd.DataFrame:
+    """A grid whose best value is far from the adopted one, and a frozen tail."""
+    return pd.DataFrame([
+        {"band": 0.00, "sharpe": 1.0950, "n_position_changes": 900, "days": 4035},
+        {"band": 0.30, "sharpe": 1.1316, "n_position_changes": 40, "days": 4035},
+        {"band": 0.42, "sharpe": 1.1886, "n_position_changes": 12, "days": 4035},
+        {"band": 0.52, "sharpe": 1.1356, "n_position_changes": 1, "days": 4035},
+    ])
+
+
+def test_the_sweep_refuses_its_own_best_value(sweep):
+    """The section must not read as a recommendation to move the band.
+
+    A published argmax is an invitation, and the whole point of the sweep is
+    that this particular argmax is worth nothing. So the refusal is part of the
+    text and is pinned here.
+    """
+    html = sweep_html(sweep, adopted=0.30)
+
+    assert "Nothing here was changed in response" in html
+    assert "precisely the mistake the sweep exposes" in html
+    assert "turnover is a cost, not a score" in html
+
+
+def test_the_sweep_prices_the_band_actually_in_use(sweep):
+    """It reported the sweep's FIRST row as the band in use, which was 0%.
+
+    Subtracting the adopted value from the index and taking idxmin returns the
+    difference rather than the label, so the page confidently described a band
+    the portfolio does not use, with that band's score attached.
+    """
+    html = sweep_html(sweep, adopted=0.30)
+
+    assert "The band in use (30%) scores <b>1.1316</b>" in html
+    assert "The best (42%) scores <b>1.1886</b>" in html
+    assert "it ranks <b>3</b>" in html          # two of the four score higher
+
+
+def test_the_frozen_tail_is_named_as_such(sweep):
+    html = sweep_html(sweep, adopted=0.30)
+
+    assert "From <b>52%</b>" in html
+    assert "inherits buy-and-hold's Sharpe by construction" in html
+
+
+def test_no_sweep_no_section():
+    assert sweep_html(pd.DataFrame(), adopted=0.30) == ""

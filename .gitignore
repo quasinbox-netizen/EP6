@@ -34,6 +34,10 @@ data/processed/**
 # `sizing --refresh` rebuilds that in a few minutes.
 !data/processed/sizing_comparison.csv
 !data/processed/sizing_today.csv
+# The band sweep is tracked because it is the evidence for a published claim
+# about how the band was chosen. Regenerating it is cheap, but a reader who
+# wants to check the chart should not have to run anything to do it.
+!data/processed/sizing_sweep.csv
 .pytest_cache/
 .streamlit/secrets.toml
 *.log

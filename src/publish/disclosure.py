@@ -152,9 +152,10 @@ def provenance_html(sizing: pd.DataFrame, comparison: pd.DataFrame) -> str:
         "<ul>"
         + target_line
         + f"<li><b>The rebalance band ({band:.0%})</b> was picked as the "
-        "highest-Sharpe variant among those compared, and the comparison ran "
-        "on the same history the edge test then scores. That is selection in "
-        "sample. The band's job is to cut turnover - it takes annual turnover "
+        "highest-Sharpe variant among those compared - three of them - and the "
+        "comparison ran on the same history the edge test then scores. That is "
+        "selection in sample, and the sweep below shows what it was worth. "
+        "The band's job is to cut turnover - it takes annual turnover "
         "from roughly 8.9x to 1.1x - and on that job the choice is cheap to "
         "defend; as a return claim it is not, because a value chosen for "
         "having the best score on a sample has no score left to report on "
@@ -164,4 +165,73 @@ def provenance_html(sizing: pd.DataFrame, comparison: pd.DataFrame) -> str:
         + "<p class='note'>Neither number is being defended as optimal. They are "
         "being disclosed as fitted, so that anything built on top of them "
         "inherits the caveat instead of shedding it.</p></section>"
+    )
+
+
+def sweep_html(sweep: pd.DataFrame, adopted: float, chart: str = "") -> str:
+    """What every value of the band earned, and why that disqualifies ranking them.
+
+    Every figure is read out of the saved sweep. The conclusion this prints is
+    the one the numbers support and not a softer one: the band in use is not
+    the best value, the best value is not stable, and the highest scores belong
+    to bands so wide the rule barely trades.
+    """
+    if sweep.empty or "sharpe" not in sweep.columns:
+        return ""
+    table = sweep.set_index("band") if "band" in sweep.columns else sweep
+    sharpe = table["sharpe"]
+    # min() over the labels themselves. Subtracting from the index and taking
+    # idxmin returns the DIFFERENCE, not the band, which quietly reported the
+    # sweep's first row as the band in use.
+    nearest = min((float(band) for band in table.index),
+                  key=lambda band: abs(band - adopted))
+    mine = float(sharpe.loc[nearest])
+    best_band, best = float(sharpe.idxmax()), float(sharpe.max())
+    rank = int((sharpe > mine).sum()) + 1
+    step = float(sharpe.diff().abs().mean())
+
+    # Frozen: the weight never changes again after the entry. See
+    # backtest.sweep.FROZEN_CHANGES for why this counts rather than thresholds.
+    frozen = (
+        table.index[table["n_position_changes"] <= 1]
+        if "n_position_changes" in table.columns else []
+    )
+    frozen_line = ""
+    if len(frozen):
+        frozen_line = (
+            f"<li>From <b>{float(min(frozen)):.0%}</b> the band is wider than the "
+            "position ever moves. The rule stops trading, holds whatever it last "
+            "held, and inherits buy-and-hold's Sharpe by construction - and the "
+            "highest-scoring bands on the whole grid sit directly against that "
+            "edge. Scoring well by nearly switching yourself off is not a "
+            "finding, and it is most of what the right-hand side of this chart "
+            "is showing.</li>"
+        )
+
+    return (
+        "<section><h2>Every value of the band, not the three that were tried</h2>"
+        "<div class='verdict'>"
+        f"<b>The band in use is not the best value, and the best value is not "
+        f"worth having.</b> Across {len(table)} settings it ranks "
+        f"<b>{rank}</b> - below the middle of its own sweep."
+        "</div>"
+        + chart
+        + "<ul>"
+        f"<li>The band in use ({nearest:.0%}) scores <b>{mine:.4f}</b>. The best "
+        f"({best_band:.0%}) scores <b>{best:.4f}</b>. It was adopted for winning "
+        "a three-point comparison, and a three-point grid cannot tell a real "
+        "maximum from a bump because it has no shape to show.</li>"
+        f"<li>Moving the band by one percentage point changes the Sharpe by "
+        f"<b>{step:.4f}</b> on average, in a grid that spans only "
+        f"{sharpe.max() - sharpe.min():.4f} end to end. A surface that jerks "
+        "like that under a change nobody would defend on its merits is not "
+        "ranking strategies; it is ranking noise.</li>"
+        + frozen_line
+        + "</ul>"
+        "<p class='note'>Nothing here was changed in response. Moving the band "
+        f"to {best_band:.0%} because it won this sweep is precisely the mistake "
+        "the sweep exposes, and it would need its own out-of-sample test before "
+        "it meant anything. The band stays where it is, defended on the one "
+        "ground that does not move: it takes annual turnover from roughly 8.9x "
+        "to 1.1x, and turnover is a cost, not a score.</p></section>"
     )

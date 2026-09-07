@@ -65,6 +65,7 @@ from agent.live import append_observation, fetch_price, observe, should_publish 
 from agent.live import feed as agent_feed  # noqa: E402
 from backtest.paper import run_paper, state, target_weights  # noqa: E402
 from features.halving import CONFIRMED_HALVINGS  # noqa: E402
+from backtest.sweep import band_sweep  # noqa: E402
 from backtest.sizing import (  # noqa: E402
     DEFAULT_REFIT_EVERY as SIZING_REFIT_EVERY,
     TRADING_DAYS,
@@ -772,7 +773,8 @@ def cmd_publish(args) -> int:
     # the terminal never printed.
     saved = {
         name: read(f"{name}.csv")
-        for name in ("sizing_today", "sizing_comparison", "backtest_edge",
+        for name in ("sizing_today", "sizing_comparison", "sizing_sweep",
+                     "backtest_edge",
                      "backtest_comparison", "event_study_halving",
                      "event_study_categories", "hypothesis_scan", "walk_forward",
                      "out_of_sample", "forecast_pooled")
@@ -1109,6 +1111,14 @@ def cmd_sizing(args) -> int:
     print(f"\nDoes the sizing carry information? Correlation between the position "
           f"held\nand the NEXT day's absolute move: {correlation:+.3f}. Negative "
           "means a smaller\nposition before a bigger move, which is the claim.")
+    # The whole band, not the three values that happened to be compared above.
+    # The band was adopted for winning a three-point grid, and a grid that small
+    # cannot show whether the maximum is a shape or a bump.
+    sweep = band_sweep(window, target, backtest_config, adopted=float(args.band))
+    _save(sweep.table.reset_index(), config, "sizing_sweep.csv")
+    print("\n--- every band, not just the three compared ---")
+    print(sweep.summary())
+
     print(f"\nDoes it earn a risk-adjusted edge? {scored.name}: {edge.summary()}")
     if best.name != scored.name:
         print(

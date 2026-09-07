@@ -33,8 +33,8 @@ from forecast.ledger import load as load_ledger
 from forecast.ledger import score as score_ledger
 from forecast.ledger import scoreboard as ledger_scoreboard
 from forecast.ledger import verdict as ledger_verdict
-from publish.charts import cycle_clock, range_chart
-from publish.disclosure import corrections_html, provenance_html
+from publish.charts import band_sweep_chart, cycle_clock, range_chart
+from publish.disclosure import corrections_html, provenance_html, sweep_html
 from publish.pages import cards as _cards
 from publish.pages import evidence_page, figure_html, today_page
 from publish.pages import table as _table
@@ -184,6 +184,28 @@ def _shell(title: str, current: str, body: str, *, as_of: str) -> str:
 """
 
 
+
+
+def _band_sweep_section(inputs: SiteInputs) -> str:
+    """The band sweep with its chart, or nothing if the sweep was never run."""
+    saved = inputs.saved or {}
+    sweep = saved.get("sizing_sweep", pd.DataFrame())
+    sizing = saved.get("sizing_today", pd.DataFrame())
+    if sweep.empty or sizing.empty or "band" not in sweep.columns:
+        return ""
+    adopted = float(sizing.iloc[0]["band"])
+    # Frozen: the weight never changes again after the entry. See
+    # backtest.sweep.FROZEN_CHANGES for why this counts rather than thresholds.
+    quiet = (
+        sweep.loc[sweep["n_position_changes"] <= 1, "band"]
+        if "n_position_changes" in sweep.columns else pd.Series(dtype=float)
+    )
+    chart = figure_html(
+        band_sweep_chart(sweep, adopted,
+                         float(quiet.min()) if len(quiet) else None),
+        "bandsweep",
+    )
+    return sweep_html(sweep, adopted, chart)
 
 
 def build(destination: Path, dashboard_dir: Path, inputs: SiteInputs) -> list:
@@ -381,6 +403,7 @@ def build(destination: Path, dashboard_dir: Path, inputs: SiteInputs) -> list:
               "that matters.</p></section>"
             + provenance_html((inputs.saved or {}).get("sizing_today", pd.DataFrame()),
                               (inputs.saved or {}).get("sizing_comparison", pd.DataFrame()))
+            + _band_sweep_section(inputs)
             + corrections_html("trader.html")
         )
         written.append(_write(destination / "trader.html",

@@ -40,8 +40,24 @@ on published results spelled out, never under **Fixed** as a detail.
   is significant, and the sizing still earns no risk-adjusted edge. The
   best-scoring row is still printed by name.
 
+- **The rebalance band is no longer defended on its Sharpe.** A sweep of all 61
+  values from 0% to 60% shows the adopted 30% ranks **34th**, below the middle
+  of its own grid; the best is 42% at 1.1886 against 1.1316. Neighbouring bands
+  differ by 0.0149 on average against a standard error of 0.0202 for any one of
+  these Sharpes, so the ranking is noise. From 52% the band is wider than the
+  position ever moves: the rule stops trading and takes buy-and-hold's Sharpe
+  by construction, which is why the highest scores cluster at the right-hand
+  edge. **The band was not moved** - adopting 42% for winning this sweep is the
+  mistake the sweep exposes. It is now defended on turnover, which is a cost
+  and does not move, rather than on a score that does.
+
 ### Added
 
+- `backtest/sweep.py`: the band sweep, with the statistics that disqualify its
+  own argmax - the adopted band's rank, the mean step between neighbours, Lo's
+  iid standard error (the optimistic one, stated as such), and the band from
+  which the rule stops trading. Saved as `sizing_sweep.csv` and charted on the
+  agent page with the frozen region shaded rather than cropped.
 - `publish/disclosure.py`: an append-only corrections log rendered on the page
   whose figures moved, and the provenance note for the sizing constants. A
   restatement absent from that log is a restatement the reader never sees, so
