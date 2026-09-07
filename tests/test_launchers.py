@@ -7,6 +7,8 @@ like "it does not start" with nothing on screen to say why.
 from __future__ import annotations
 
 import pathlib
+import subprocess
+import sys
 import re
 
 import pytest
@@ -154,3 +156,65 @@ def test_dashboard_health_check_uses_the_endpoint_not_the_page():
 def test_a_bad_port_argument_is_refused_not_passed_through():
     module = _run_py()
     assert module.start_dashboard(None, "not-a-port") == 1
+
+
+# --- staying out of the way ------------------------------------------------
+
+
+def test_heavy_commands_run_below_normal_priority():
+    """Reported as "it slowed my PC down terribly".
+
+    None of this is memory-hungry - the dashboard settles at 240 MB - but
+    several commands hold a core at 100% for minutes. Nothing here needs to
+    finish promptly: research taking eleven minutes instead of ten is not
+    worse, a machine that stops responding while it runs is.
+    """
+    module = _run_py()
+    kwargs = module.low_priority_kwargs()
+    assert kwargs, "no way to deprioritise on this platform"
+    if sys.platform == "win32":
+        assert kwargs["creationflags"] == subprocess.BELOW_NORMAL_PRIORITY_CLASS
+    else:
+        assert callable(kwargs["preexec_fn"])
+
+
+def test_the_dashboard_is_not_deprioritised():
+    """Someone is watching it, so it must not be pushed behind other work.
+
+    Deprioritising the thing being looked at is how an application is made to
+    feel broken while saving nothing.
+    """
+    source = (ROOT / "run.py").read_text(encoding="utf-8")
+    dashboard = source.split("def start_dashboard", 1)[1].split("\ndef ", 1)[0]
+    assert "low_priority=False" in dashboard
+
+
+def test_commands_that_take_minutes_say_so_first(capsys):
+    """A terminal silent for ten minutes looks exactly like a hung one.
+
+    The reasonable response to that is to kill it and try again, which wastes
+    the ten minutes twice.
+    """
+    module = _run_py()
+
+    module.announce_duration("speccurve", [])
+    assert "10 minutes" in capsys.readouterr().out
+
+    module.announce_duration("range", ["--days", "10", "--calibrate"])
+    assert "10 minutes" in capsys.readouterr().out
+
+    module.announce_duration("sizing", ["--refresh"])
+    assert "6 minutes" in capsys.readouterr().out
+
+
+def test_fast_commands_say_nothing():
+    """The warning is only useful while it is rare."""
+    module = _run_py()
+    import io
+    import contextlib
+
+    for command, rest in (("study", []), ("sizing", []), ("backtest", []), ("doctor", [])):
+        buffer = io.StringIO()
+        with contextlib.redirect_stdout(buffer):
+            module.announce_duration(command, rest)
+        assert buffer.getvalue() == "", f"{command} should not warn"

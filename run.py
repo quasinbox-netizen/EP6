@@ -153,9 +153,38 @@ def child_environment() -> dict:
     return environment
 
 
-def run(python: Path, arguments: list[str]) -> int:
+def low_priority_kwargs() -> dict:
+    """Ask the OS to schedule the analysis behind whatever the user is doing.
+
+    Reported as "it slowed my PC down terribly". The commands here are not
+    memory-hungry - the dashboard settles at 240 MB - but several of them hold
+    one core at 100% for minutes: `speccurve` fits 160 event studies 201 times,
+    `range --calibrate` and `sizing --refresh` refit GARCH a few hundred times.
+    On a laptop that means fans, thermal throttling, and everything else
+    feeling slow, even though a core is nominally free.
+
+    Nothing here needs to finish promptly. Research that takes eleven minutes
+    instead of ten is not worse; a machine that stops responding while it runs
+    is. So the child is started below normal priority and yields to the
+    browser, the editor and everything else the moment they want the CPU.
+
+    Windows uses a creation flag; POSIX has no equivalent at spawn time, so the
+    child niced itself would need a preexec hook - `os.nice` in a preexec_fn is
+    not available on Windows and not worth a second code path, so POSIX gets
+    the same treatment through `preexec_fn` only where it exists.
+    """
+    if sys.platform == "win32":
+        return {"creationflags": getattr(subprocess, "BELOW_NORMAL_PRIORITY_CLASS", 0)}
+    if hasattr(os, "nice"):
+        return {"preexec_fn": lambda: os.nice(10)}  # noqa: PLW1509
+    return {}
+
+
+def run(python: Path, arguments: list[str], *, low_priority: bool = True) -> int:
+    extra = low_priority_kwargs() if low_priority else {}
     return subprocess.run(
-        [str(python), *arguments], cwd=str(ROOT), env=child_environment(), check=False
+        [str(python), *arguments], cwd=str(ROOT), env=child_environment(),
+        check=False, **extra,
     ).returncode
 
 
@@ -229,10 +258,14 @@ def start_dashboard(python: Path, port: str) -> int:
 
     print(f"Dashboard starting on http://localhost:{port_number}")
     print("Press Ctrl+C in this window to stop.\n")
+    # Normal priority, unlike the batch commands: someone is sitting in front
+    # of this waiting for it to redraw. Deprioritising the thing being watched
+    # is how you make an application feel broken while saving nothing - it
+    # settles at 240 MB and 2% of a core once loaded.
     return run(python, [
         "-m", "streamlit", "run", str(ROOT / "dashboard" / "app.py"),
         "--server.port", str(port_number), "--browser.gatherUsageStats", "false",
-    ])
+    ], low_priority=False)
 
 
 def doctor(python: Path) -> int:
@@ -259,6 +292,42 @@ def doctor(python: Path) -> int:
                               "print('streamlit', streamlit.__version__)"])
 
 
+# Measured on this repo, not guessed. Everyday commands take 5-9 seconds and
+# are absent from this table; only the ones long enough to look like a hang.
+SLOW_COMMANDS = {
+    "speccurve": "about 10 minutes (160 event studies, 201 times over)",
+    "all": "about a minute",
+}
+SLOW_FLAGS = {
+    ("range", "--calibrate"): "about 10 minutes (a walk through the whole history)",
+    ("sizing", "--refresh"): "about 6 minutes (a GARCH refit every 30 days)",
+}
+
+
+def announce_duration(command: str, rest: list[str]) -> None:
+    """Say up front when a command will take minutes.
+
+    A terminal that prints nothing for ten minutes is indistinguishable from a
+    hung one, and the reasonable response - kill it and try again - wastes the
+    ten minutes twice. Saying so first costs one line.
+
+    These commands now also run below normal priority, so the machine stays
+    usable while they work; that is worth stating too, because a laptop with
+    its fans up otherwise looks like something is wrong.
+    """
+    estimate = SLOW_COMMANDS.get(command)
+    for (name, flag), text in SLOW_FLAGS.items():
+        if command == name and flag in rest:
+            estimate = text
+    if not estimate:
+        return
+    print(
+        f"`{command}` takes {estimate}.\n"
+        "Running below normal priority so the rest of the machine stays "
+        "responsive.\n"
+    )
+
+
 def main(argv: list[str]) -> int:
     if argv and argv[0] in ("-h", "--help", "help"):
         print(__doc__)
@@ -282,6 +351,7 @@ def main(argv: list[str]) -> int:
     if command == "doctor":
         return doctor(python)
 
+    announce_duration(command, rest)
     return run(python, [str(ROOT / "src" / "cli.py"), command, *rest])
 
 
