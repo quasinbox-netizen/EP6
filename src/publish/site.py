@@ -44,6 +44,7 @@ PANELS = {
     "desk": ("signal_desk.html", "<!--DESK:START-->", "<!--DESK:END-->"),
     "meter": ("evidence_meter.html", "<!--METER:START-->", "<!--METER:END-->"),
     "paper": ("paper_desk.html", "<!--PAPER:START-->", "<!--PAPER:END-->"),
+    "agent": ("agent_desk.html", "<!--AGENT:START-->", "<!--AGENT:END-->"),
 }
 DATA_START, DATA_END = "<!--DATA:START-->", "<!--DATA:END-->"
 PLOTLY = "https://cdn.plot.ly/plotly-2.35.2.min.js"
@@ -51,7 +52,7 @@ PLOTLY = "https://cdn.plot.ly/plotly-2.35.2.min.js"
 PAGES = (
     ("index.html", "Today"),
     ("now.html", "Now"),
-    ("trader.html", "Paper trader"),
+    ("trader.html", "The agent"),
     ("evidence.html", "Evidence"),
     ("signals.html", "Signals"),
     ("receipts.html", "Receipts"),
@@ -330,7 +331,14 @@ def build(destination: Path, dashboard_dir: Path, inputs: SiteInputs) -> list:
             chart = figure_html(figure, "paper")
 
         trader_body = (
-            "<section><h2>A virtual portfolio, in public</h2>"
+            "<section><h2>What the agent is doing right now</h2>"
+            + panel(dashboard_dir, "agent")
+            + "<p class='note'>It looks at the price every fifteen minutes and writes "
+              "down what it sees, whether or not anything happens. The position "
+              "changes only when a daily bar settles: the rule was tested on daily "
+              "closes, and acting on an intraday tick would be an untested rule "
+              "borrowing a tested one's credibility.</p></section>"
+            + "<section><h2>A virtual portfolio, in public</h2>"
             + panel(dashboard_dir, "paper", inputs.paper["payload"])
             + "</section><section><h2>Against simply holding</h2>"
             + chart
@@ -343,7 +351,7 @@ def build(destination: Path, dashboard_dir: Path, inputs: SiteInputs) -> list:
               "that matters.</p></section>"
         )
         written.append(_write(destination / "trader.html",
-                              _shell("BTC Cycle Lab - paper trader", "Paper trader",
+                              _shell("BTC Cycle Lab - the agent", "The agent",
                                      trader_body, as_of=as_of)))
 
     written.append(_write(destination / "evidence.html",

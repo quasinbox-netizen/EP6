@@ -26,6 +26,10 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+
+from publish.deploy import commit_and_push  # noqa: E402
+
 ROOT = Path(__file__).resolve().parents[1]
 LOG = ROOT / "data" / "processed" / "daily.log"
 LOG_LIMIT_BYTES = 1_000_000
@@ -85,42 +89,6 @@ def run(handle, name: str, command: list, timeout: int = 1800) -> bool:
     return True
 
 
-def publish_changes(handle, as_of: str) -> bool:
-    """Commit and push the rebuilt pages, and nothing else.
-
-    Only `docs/` is staged. An unattended job that ran `git add -A` would
-    eventually push somebody's half-finished edit to a public repository, and
-    the first anyone would know of it is when it appeared on the site.
-    """
-    git = ["git", "-C", str(ROOT)]
-    status = subprocess.run(
-        git + ["status", "--porcelain", "--", PUBLISHED],
-        capture_output=True, text=True, encoding="utf-8", errors="replace",
-    )
-    if status.returncode != 0:
-        log(handle, f"[git] status failed: {status.stderr.strip()}")
-        return False
-    if not status.stdout.strip():
-        log(handle, "[git] the site is unchanged; nothing to publish")
-        return True
-
-    steps = [
-        ("add", git + ["add", "--", PUBLISHED]),
-        ("commit", git + ["commit", "-m", f"Refresh the published site for {as_of}"]),
-        ("push", git + ["push", "origin", "HEAD"]),
-    ]
-    for name, command in steps:
-        finished = subprocess.run(
-            command, capture_output=True, text=True,
-            encoding="utf-8", errors="replace", timeout=600,
-        )
-        if finished.returncode != 0:
-            log(handle, f"[git] {name} failed: "
-                        f"{(finished.stderr or finished.stdout).strip()}")
-            return False
-        log(handle, f"[git] {name}: {(finished.stdout or 'ok').strip()}")
-    return True
-
 
 def main() -> int:
     LOG.parent.mkdir(parents=True, exist_ok=True)
@@ -138,8 +106,14 @@ def main() -> int:
 
         if "publish" in failures:
             log(handle, "RESULT: the site was not rebuilt, so nothing was pushed")
-        elif not publish_changes(handle, today):
-            failures.append("git")
+        else:
+            ok, lines = commit_and_push(
+                ROOT, [PUBLISHED], f"Refresh the published site for {today}"
+            )
+            for line in lines:
+                log(handle, f"[git] {line}")
+            if not ok:
+                failures.append("git")
 
         # Only the recording and the publishing decide the exit code. A missing
         # network is a normal day, not a failed job.

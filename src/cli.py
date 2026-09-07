@@ -23,6 +23,7 @@ Every command writes its output to data/processed/ and prints a summary.
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -60,6 +61,8 @@ from analysis.specification import (  # noqa: E402
 )
 from backtest.edge import edge_test, fragility  # noqa: E402
 from backtest.engine import BacktestConfig, compare, run_backtest  # noqa: E402
+from agent.live import append_observation, fetch_price, observe, should_publish  # noqa: E402
+from agent.live import feed as agent_feed  # noqa: E402
 from backtest.paper import run_paper, state, target_weights  # noqa: E402
 from features.halving import CONFIRMED_HALVINGS  # noqa: E402
 from backtest.sizing import (  # noqa: E402
@@ -72,6 +75,8 @@ from backtest.sizing import (  # noqa: E402
 )
 from analysis.evidence import build as build_evidence  # noqa: E402
 from analysis.outlook import base_rates  # noqa: E402
+from ingest.http import FetchError  # noqa: E402
+from publish.deploy import commit_and_push  # noqa: E402
 from publish.site import SiteInputs  # noqa: E402
 from publish.site import build as build_site  # noqa: E402
 from forecast.coverage import (  # noqa: E402
@@ -910,6 +915,98 @@ def cmd_paper(args) -> int:
     return 0
 
 
+def cmd_agent(args) -> int:
+    """One tick: look at the price, write down what the rule sees, publish if it matters.
+
+    The agent watches continuously and trades on settled closes only - the
+    reason is in agent/live.py and it is the difference between running the
+    rule that was tested and a lookalike that was not.
+
+    Publishing is a single small JSON file rather than a site rebuild. A
+    quarter-hourly rebuild would be a hundred commits a day and a two-hundred
+    kilobyte diff each time; the page fetches the feed itself.
+    """
+    config = load_config()
+    processed = _processed_dir(config)
+    journal_path = processed / "agent_journal.csv"
+
+    data = load_lab_data(config)
+    if data.is_empty:
+        print("the database is empty - run `ingest` first")
+        return 1
+
+    signals = strategy_signals(data, config)
+    chosen = next(
+        (item for item in signals["strategies"] if item["report"].name == args.rule),
+        None,
+    )
+    if chosen is None:
+        names = ", ".join(item["report"].name for item in signals["strategies"])
+        print(f"no rule called {args.rule!r}. Available: {names}")
+        return 1
+
+    report = chosen["report"]
+    # The size to hold comes from the volatility model, exactly as the paper
+    # portfolio sizes itself. A position the agent reports has to be the one
+    # the portfolio would hold, or the page tells two stories.
+    sizing_path = processed / "sizing_today.csv"
+    size = 1.0
+    if sizing_path.exists():
+        sizing = pd.read_csv(sizing_path)
+        if not sizing.empty:
+            size = float(sizing.iloc[0]["position"])
+    weight = size if report.side == "long" else 0.0
+
+    try:
+        price = fetch_price()
+    except FetchError as error:
+        print(f"no live price: {error}")
+        return 1
+
+    seen = observe(
+        price, weight=weight, flip_level=report.trigger.level,
+        flip_text=report.trigger.text,
+    )
+    journal = append_observation(journal_path, seen)
+    print(f"{seen.timestamp:%Y-%m-%d %H:%M:%S}  {seen.state:8s}  {seen.note}")
+
+    destination = Path(args.out).resolve() if args.out else config.root / "docs"
+    feed_path = destination / "agent_feed.json"
+    payload = agent_feed(journal)
+    payload["rule"] = report.name
+    payload["weight"] = weight
+    payload["flipLevel"] = report.trigger.level
+    payload["flipText"] = report.trigger.text
+    payload["asOf"] = f"{signals['as_of']:%Y-%m-%d}"
+    destination.mkdir(parents=True, exist_ok=True)
+    feed_path.write_text(json.dumps(payload, indent=1), encoding="utf-8")
+
+    last = None
+    if args.since:
+        last = pd.Timestamp(args.since)
+    elif feed_path.exists():
+        marker = processed / "agent_last_publish.txt"
+        if marker.exists():
+            last = pd.Timestamp(marker.read_text(encoding="utf-8").strip())
+
+    publish, reason = should_publish(journal, last_published=last)
+    print(f"publish: {publish} ({reason})")
+    if not publish or args.no_publish:
+        return 0
+
+    ok, lines = commit_and_push(
+        config.root, [feed_path.relative_to(config.root).as_posix()],
+        f"Agent feed {seen.timestamp:%Y-%m-%d %H:%M}",
+    )
+    for line in lines:
+        print(f"  {line}")
+    if ok:
+        (processed / "agent_last_publish.txt").write_text(
+            seen.timestamp.strftime("%Y-%m-%d %H:%M:%S"), encoding="utf-8"
+        )
+    return 0 if ok else 1
+
+
 def cmd_sizing(args) -> int:
     """How much to hold, from the volatility forecast - never which way.
 
@@ -1534,6 +1631,17 @@ def build_parser() -> argparse.ArgumentParser:
         "--band", type=float, default=0.30, help="rebalance band"
     )
     paper_parser.set_defaults(func=cmd_paper)
+
+    agent_parser = subparsers.add_parser(
+        "agent", help="one agent tick: watch the price, journal it, publish if it matters"
+    )
+    agent_parser.add_argument("--rule", default="trend 50/200")
+    agent_parser.add_argument("--out", help="where the feed is written (default: docs/)")
+    agent_parser.add_argument(
+        "--no-publish", action="store_true", help="write the feed but never push"
+    )
+    agent_parser.add_argument("--since", help="treat this as the last publish time")
+    agent_parser.set_defaults(func=cmd_agent)
 
     speccurve = subparsers.add_parser(
         "speccurve",
