@@ -899,6 +899,50 @@ def main() -> None:
             "match, the condition is not carrying information."
         )
 
+        st.subheader("What the model says")
+        # The same gate as the Forecast tab, deliberately: one flag, so the two
+        # pages can never show a fitted model and an unfitted one at once.
+        if not st.session_state.get("forecast_requested"):
+            st.info(
+                "The directional model is not fitted until you ask - 13 "
+                "walk-forward folds take about a minute. Everything above "
+                "needs no model, which is why it is above."
+            )
+            if st.button("Fit the model", icon=":material/play_arrow:", key="fit_model_now"):
+                st.session_state["forecast_requested"] = True
+                st.rerun()
+        else:
+            report = cached_forecast()
+            if "error" in report:
+                st.warning(report["error"])
+            else:
+                verdict_text = report["run"].summary()
+                latest = report["latest"]
+                cells = st.columns(3)
+                if "error" in latest:
+                    cells[0].metric("Model", "-")
+                else:
+                    cells[0].metric(
+                        f"Model: next {report['horizon']} days up",
+                        f"{latest['probability_up']:.1%}",
+                        delta=f"{latest['edge_over_base_rate']:+.1%} vs its training base rate",
+                    )
+                cells[1].metric(
+                    "Days like today", f"{conditional.share_positive:.0%}",
+                    delta=f"{conditional.effective_n} independent windows",
+                    delta_color="off",
+                )
+                cells[2].metric("Every day", f"{unconditional.share_positive:.0%}")
+                if "NO EDGE" in verdict_text:
+                    st.error(
+                        verdict_text
+                        + "  \nThe model lost to the baseline out of sample, so read "
+                        "its probability as decoration and the base rates next to it "
+                        "as the honest answer."
+                    )
+                else:
+                    st.success(verdict_text)
+
         st.subheader("What the rules say, and what the tests say")
         signals = cached_signals()
         state_rows = []
