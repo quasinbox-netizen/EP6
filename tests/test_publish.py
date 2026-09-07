@@ -222,3 +222,42 @@ def test_the_agent_page_discloses_its_fitted_constants_and_its_corrections(tmp_p
     assert "selection in sample" in trader
     assert "EWMA band 10%" in trader          # the variant that beat the adopted one
     assert "-14.5%" in trader and "-7.7%" in trader
+
+
+def test_both_sweeps_reach_the_built_agent_page(tmp_path, data):
+    """The band sweep and the target sweep, through the builder rather than alone."""
+    signals = strategy_signals(data)
+    close = data.features["close"]
+    curve = pd.DataFrame({"equity": close / close.iloc[0] * 10_000.0,
+                          "buy_and_hold": close / close.iloc[0] * 10_000.0})
+    inputs = SiteInputs(
+        outlook=cycle_outlook(data), signals=signals,
+        evidence=build_evidence(hypotheses=1), study=halving_event_study(data, post=365),
+        scan=pd.DataFrame({"significant_adjusted": [False]}),
+        curve_summary=pd.DataFrame(), control_note="note",
+        saved={
+            "sizing_today": pd.DataFrame([{
+                "as_of": "2026-09-03", "price": 81270.37,
+                "forecast_annual_volatility": 0.5428, "position": 0.816,
+                "median_annual_volatility": 0.5995,
+                "target_annual_volatility": 0.60, "band": 0.30,
+            }]),
+            "sizing_sweep": pd.DataFrame([
+                {"band": 0.30, "sharpe": 1.1316, "n_position_changes": 40},
+                {"band": 0.42, "sharpe": 1.1886, "n_position_changes": 12},
+            ]),
+            "sizing_target_sweep": pd.DataFrame([
+                {"target": 0.60, "sharpe": 1.1316, "at_the_cap": 0.5016,
+                 "max_drawdown": -0.6638},
+                {"target": 1.60, "sharpe": 1.1172, "at_the_cap": 0.9901,
+                 "max_drawdown": -0.8319},
+            ]),
+        },
+        paper={"payload": {"state": {}, "trades": []}, "curve": curve},
+    )
+    build(tmp_path / "site", DASHBOARD, inputs)
+    trader = (tmp_path / "site" / "trader.html").read_text(encoding="utf-8")
+
+    assert "Every value of the band" in trader
+    assert "Every volatility target" in trader
+    assert "On 50.2% of days the position is pinned" in trader

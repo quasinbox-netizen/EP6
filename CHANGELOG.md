@@ -51,13 +51,32 @@ on published results spelled out, never under **Fixed** as a detail.
   mistake the sweep exposes. It is now defended on turnover, which is a cost
   and does not move, rather than on a score that does.
 
+- **The volatility target is no longer defended on its Sharpe either, and for a
+  different reason: that was never the right measurement.** The target is a dial
+  on how much risk to carry - across 39 values from 10% to 200% it moves the
+  worst drawdown from -18% to -83% - and a Sharpe ratio is built to be
+  indifferent to how large a position is. On that statistic the adopted 60%
+  ranks 14th of 39 (1.1316 against 1.2151 for the best, at 30%). The number that
+  does describe what the target is doing had never been published at all: **at
+  60% the position sits at the no-borrowing cap on 50.2% of days**, so on half
+  of them the rule is not sizing anything, it is holding the asset. From a
+  target of 160% it is pinned on 99% of days and the rule simply is
+  buy-and-hold, its drawdown converging on buy-and-hold's own -83%. **The target
+  was not moved**; what changed is that it is defended as a risk choice rather
+  than a measured optimum, with the half-of-days figure attached.
+
 ### Added
 
 - `backtest/sweep.py`: the band sweep, with the statistics that disqualify its
   own argmax - the adopted band's rank, the mean step between neighbours, Lo's
   iid standard error (the optimistic one, stated as such), and the band from
   which the rule stops trading. Saved as `sizing_sweep.csv` and charted on the
-  agent page with the frozen region shaded rather than cropped.
+  agent page with the frozen region shaded rather than cropped. `target_sweep`
+  does the same for the volatility target and additionally records
+  `at_the_cap`, the share of days the position is pinned at the no-borrowing
+  limit - the column that says what a risk dial is doing, which no score can.
+  Saved as `sizing_target_sweep.csv` and charted with Sharpe and drawdown on
+  the same axes, because the comparison between those two lines is the point.
 - `publish/disclosure.py`: an append-only corrections log rendered on the page
   whose figures moved, and the provenance note for the sizing constants. A
   restatement absent from that log is a restatement the reader never sees, so

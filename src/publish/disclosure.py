@@ -235,3 +235,85 @@ def sweep_html(sweep: pd.DataFrame, adopted: float, chart: str = "") -> str:
         "ground that does not move: it takes annual turnover from roughly 8.9x "
         "to 1.1x, and turnover is a cost, not a score.</p></section>"
     )
+
+
+def target_sweep_html(sweep: pd.DataFrame, adopted: float, chart: str = "") -> str:
+    """Every volatility target, and why its Sharpe column cannot choose one.
+
+    This section makes a different argument from the band's. The band's problem
+    was that its ranking is noise. The target's problem is that ranking it on a
+    Sharpe was never the right question: it sets how much risk to carry, and a
+    Sharpe ratio is built not to see how much risk is being carried. The figure
+    that does see it - the share of days the position is jammed against the
+    no-borrowing cap - had never been published at all.
+    """
+    if sweep.empty or "sharpe" not in sweep.columns:
+        return ""
+    table = sweep.set_index("target") if "target" in sweep.columns else sweep
+    sharpe = table["sharpe"]
+    nearest = min((float(value) for value in table.index),
+                  key=lambda value: abs(value - adopted))
+    mine = float(sharpe.loc[nearest])
+    best_value, best = float(sharpe.idxmax()), float(sharpe.max())
+    rank = int((sharpe > mine).sum()) + 1
+
+    capped = ""
+    if "at_the_cap" in table.columns:
+        share = float(table["at_the_cap"].loc[nearest])
+        pinned = table.index[table["at_the_cap"] >= 0.99]
+        tail = ""
+        if len(pinned):
+            tail = (
+                f" From a target of <b>{float(min(pinned)):.0%}</b> the position "
+                "is at the cap on virtually every day, and the rule is simply "
+                "buy-and-hold wearing a sizing rule's name - which is what the "
+                "drawdown line flattening onto buy-and-hold's own drawdown, at "
+                "the right of the chart, is showing."
+            )
+        capped = (
+            f"<li><b>On {share:.1%} of days the position is pinned at the "
+            "no-borrowing cap.</b> On those days the rule is not sizing "
+            "anything: it wants more of the asset than it is allowed to hold, "
+            "so it holds all of it and stops responding to the forecast. The "
+            "target was set to this asset's own median volatility, and that is "
+            f"what putting it there does.{tail}</li>"
+        )
+
+    drawdown = ""
+    if "max_drawdown" in table.columns:
+        worst = float(table["max_drawdown"].min())
+        gentlest = float(table["max_drawdown"].max())
+        here = float(table["max_drawdown"].loc[nearest])
+        drawdown = (
+            f"<li><b>Across this grid the worst drawdown runs from {gentlest:.0%} "
+            f"to {worst:.0%}</b>, and at the target in use it is {here:.0%}. That "
+            "is the column the target actually chooses. The Sharpe column moves "
+            f"by {sharpe.max() - sharpe.min():.4f} end to end and is close to "
+            "useless here, because a Sharpe ratio is built to be indifferent to "
+            "how large a position is - which is the one thing this parameter "
+            "sets.</li>"
+        )
+
+    return (
+        "<section><h2>Every volatility target, and why its score cannot pick one</h2>"
+        "<div class='verdict'>"
+        "<b>This one is not a performance setting. It is a dial on how much "
+        "risk to carry</b>, and it was chosen by reading the statistic designed "
+        f"not to see risk. On that statistic it ranks <b>{rank}</b> of "
+        f"{len(table)}."
+        "</div>"
+        + chart
+        + "<ul>"
+        f"<li>The target in use ({nearest:.0%}) scores <b>{mine:.4f}</b>; the "
+        f"best ({best_value:.0%}) scores <b>{best:.4f}</b>. As with the band, "
+        "that gap is not worth acting on - and unlike the band, it would not "
+        "even be the right reason to act.</li>"
+        + capped
+        + drawdown
+        + "</ul>"
+        "<p class='note'>The target did not move either. What it should be "
+        "defended on is the risk level a reader is willing to carry, which is a "
+        "choice rather than a measurement - and the honest version of that "
+        "statement includes the fact that at this setting the rule spends half "
+        "its days holding everything it is allowed to hold.</p></section>"
+    )

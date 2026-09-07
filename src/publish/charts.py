@@ -198,3 +198,61 @@ def band_sweep_chart(frame: pd.DataFrame, adopted: float,
         xaxis={"tickformat": ".0%"},
     )
     return figure
+
+
+def target_sweep_chart(frame: pd.DataFrame, adopted: float,
+                       pinned_from: float | None = None) -> go.Figure:
+    """Sharpe and drawdown against every volatility target, on two axes.
+
+    Two series rather than one, because the argument is a comparison between
+    them. The Sharpe line wanders inside a tenth of a point across a grid that
+    takes the position from a twelfth of the portfolio to nearly all of it; the
+    drawdown line falls from -18% to -83% over the same range. One of those is
+    what the target chooses and the other is what it was chosen on.
+
+    The shaded region is where the position is pinned at the no-borrowing cap
+    on almost every day - past it the rule is buy-and-hold, and the drawdown
+    line flattening onto buy-and-hold's own drawdown is what shows it.
+    """
+    figure = go.Figure()
+
+    if pinned_from is not None:
+        figure.add_vrect(
+            x0=pinned_from, x1=float(frame["target"].max()),
+            fillcolor="rgba(239, 64, 86, 0.10)", line_width=0, layer="below",
+            annotation_text="the rule is buy-and-hold here",
+            annotation_position="top left",
+            annotation_font={"size": 11, "color": "#ef4056"},
+        )
+
+    figure.add_trace(go.Scatter(
+        x=frame["target"], y=frame["sharpe"], mode="lines+markers", name="Sharpe",
+        line={"color": COLORS["car"], "width": 1.6}, marker={"size": 4},
+        hovertemplate="target %{x:.0%}<br>Sharpe %{y:.4f}<extra></extra>",
+    ))
+    figure.add_trace(go.Scatter(
+        x=frame["target"], y=frame["max_drawdown"], mode="lines",
+        name="worst drawdown", yaxis="y2",
+        line={"color": "#ef4056", "width": 1.8, "dash": "dot"},
+        hovertemplate="target %{x:.0%}<br>drawdown %{y:.1%}<extra></extra>",
+    ))
+
+    row = frame.loc[(frame["target"] - adopted).abs().idxmin()]
+    figure.add_trace(go.Scatter(
+        x=[row["target"]], y=[row["sharpe"]], mode="markers+text",
+        showlegend=False, text=["the target in use"], textposition="top center",
+        textfont={"color": "#f7931a", "size": 11},
+        marker={"symbol": "circle-open", "size": 15, "color": "#f7931a",
+                "line": {"width": 2.5}},
+        hovertemplate="in use: target %{x:.0%}<br>Sharpe %{y:.4f}<extra></extra>",
+    ))
+
+    figure.update_layout(
+        height=340, margin={"l": 56, "r": 62, "t": 28, "b": 44},
+        xaxis_title="volatility target", xaxis={"tickformat": ".0%"},
+        yaxis={"title": "Sharpe ratio"},
+        yaxis2={"title": "worst drawdown", "overlaying": "y", "side": "right",
+                "tickformat": ".0%", "showgrid": False},
+        legend={"orientation": "h", "y": -0.22},
+    )
+    return figure

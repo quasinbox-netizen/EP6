@@ -33,8 +33,10 @@ from forecast.ledger import load as load_ledger
 from forecast.ledger import score as score_ledger
 from forecast.ledger import scoreboard as ledger_scoreboard
 from forecast.ledger import verdict as ledger_verdict
-from publish.charts import band_sweep_chart, cycle_clock, range_chart
-from publish.disclosure import corrections_html, provenance_html, sweep_html
+from publish.charts import (band_sweep_chart, cycle_clock, range_chart,
+                            target_sweep_chart)
+from publish.disclosure import (corrections_html, provenance_html,
+                                sweep_html, target_sweep_html)
 from publish.pages import cards as _cards
 from publish.pages import evidence_page, figure_html, today_page
 from publish.pages import table as _table
@@ -206,6 +208,28 @@ def _band_sweep_section(inputs: SiteInputs) -> str:
         "bandsweep",
     )
     return sweep_html(sweep, adopted, chart)
+
+
+def _target_sweep_section(inputs: SiteInputs) -> str:
+    """The volatility-target sweep with its chart, or nothing if never run."""
+    saved = inputs.saved or {}
+    sweep = saved.get("sizing_target_sweep", pd.DataFrame())
+    sizing = saved.get("sizing_today", pd.DataFrame())
+    if sweep.empty or sizing.empty or "target" not in sweep.columns:
+        return ""
+    adopted = sizing.iloc[0].get("target_annual_volatility")
+    if adopted is None or pd.isna(adopted):
+        return ""
+    pinned = (
+        sweep.loc[sweep["at_the_cap"] >= 0.99, "target"]
+        if "at_the_cap" in sweep.columns else pd.Series(dtype=float)
+    )
+    chart = figure_html(
+        target_sweep_chart(sweep, float(adopted),
+                           float(pinned.min()) if len(pinned) else None),
+        "targetsweep",
+    )
+    return target_sweep_html(sweep, float(adopted), chart)
 
 
 def build(destination: Path, dashboard_dir: Path, inputs: SiteInputs) -> list:
@@ -404,6 +428,7 @@ def build(destination: Path, dashboard_dir: Path, inputs: SiteInputs) -> list:
             + provenance_html((inputs.saved or {}).get("sizing_today", pd.DataFrame()),
                               (inputs.saved or {}).get("sizing_comparison", pd.DataFrame()))
             + _band_sweep_section(inputs)
+            + _target_sweep_section(inputs)
             + corrections_html("trader.html")
         )
         written.append(_write(destination / "trader.html",

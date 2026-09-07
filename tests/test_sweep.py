@@ -13,7 +13,7 @@ import pandas as pd
 import pytest
 
 from backtest.engine import BacktestConfig
-from backtest.sweep import DEFAULT_BANDS, band_sweep
+from backtest.sweep import DEFAULT_BANDS, DEFAULT_TARGETS, band_sweep, target_sweep
 
 
 @pytest.fixture(scope="module")
@@ -111,3 +111,71 @@ def test_every_row_differs_by_the_band_and_nothing_else(sweep):
     assert sweep.table.index.is_monotonic_increasing
     assert sweep.table.index.is_unique
     assert sweep.table["days"].nunique() == 1
+
+
+@pytest.fixture(scope="module")
+def volatility(close) -> pd.Series:
+    """A forecast that spends part of the history calm and part of it violent.
+
+    The calm stretch matters: it is where the formula asks for more than the
+    no-borrowing cap allows, which is the regime the target sweep is about.
+    """
+    daily = pd.Series(
+        np.random.default_rng(13).uniform(0.01, 0.06, len(close)), index=close.index)
+    return daily.rolling(10).mean().bfill()
+
+
+@pytest.fixture(scope="module")
+def targets(close, volatility):
+    return target_sweep(close, volatility, BacktestConfig(), adopted=0.60, band=0.30,
+                        targets=tuple(round(t, 4) for t in np.arange(0.10, 2.01, 0.10)))
+
+
+def test_the_target_sweep_records_where_the_position_is_pinned(targets):
+    """The column the site was missing, and the reason this sweep exists.
+
+    A target that spends most days at the no-borrowing cap is not sizing
+    anything on those days - it wants more than it may hold, so it holds
+    everything and stops listening to the forecast. Sharpe cannot show that
+    and drawdown only hints at it; this counts it.
+    """
+    assert "at_the_cap" in targets.table.columns
+    assert targets.at_the_cap is not None
+    assert 0.0 <= targets.at_the_cap <= 1.0
+    # More target means more days wanting more than the cap allows.
+    assert targets.table["at_the_cap"].is_monotonic_increasing
+
+
+def test_a_target_large_enough_becomes_buy_and_hold(targets):
+    """Named, because otherwise the flat right-hand end reads as a result."""
+    assert targets.pinned_from is not None
+    pinned = targets.table.loc[targets.pinned_from]
+
+    assert pinned["at_the_cap"] >= 0.99
+    assert "IS buy-and-hold" in targets.summary()
+
+
+def test_the_band_sweep_has_no_cap_column_and_says_nothing_about_it(sweep):
+    """A band sweep does not vary the cap, so it must not claim to measure it."""
+    assert sweep.at_the_cap is None
+    assert sweep.pinned_from is None
+    assert "no-borrowing cap" not in sweep.summary()
+
+
+def test_the_summary_names_the_parameter_it_swept(sweep, targets):
+    assert "bands from" in sweep.summary()
+    assert "targets from" in targets.summary()
+
+
+def test_the_target_in_use_is_priced_even_off_the_grid(close, volatility):
+    off_grid = target_sweep(close, volatility, BacktestConfig(), adopted=0.63,
+                            band=0.30, targets=(0.30, 0.60, 1.20))
+
+    assert 0.63 in off_grid.table.index
+
+
+def test_the_target_grid_runs_past_both_degenerate_ends():
+    """Stopping at the defensible values would show a curve without its limits."""
+    assert min(DEFAULT_TARGETS) <= 0.10
+    assert max(DEFAULT_TARGETS) >= 2.00
+    assert 0.60 in DEFAULT_TARGETS          # the value in use is always priced

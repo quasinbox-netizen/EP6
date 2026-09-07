@@ -38,6 +38,7 @@ data/processed/**
 # about how the band was chosen. Regenerating it is cheap, but a reader who
 # wants to check the chart should not have to run anything to do it.
 !data/processed/sizing_sweep.csv
+!data/processed/sizing_target_sweep.csv
 .pytest_cache/
 .streamlit/secrets.toml
 *.log

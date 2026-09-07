@@ -16,7 +16,7 @@ import pytest
 
 from publish.disclosure import (
     CORRECTIONS, Correction, corrections_for, corrections_html, provenance_html,
-    sweep_html,
+    sweep_html, target_sweep_html,
 )
 
 
@@ -177,3 +177,56 @@ def test_the_frozen_tail_is_named_as_such(sweep):
 
 def test_no_sweep_no_section():
     assert sweep_html(pd.DataFrame(), adopted=0.30) == ""
+
+
+@pytest.fixture
+def target_grid() -> pd.DataFrame:
+    return pd.DataFrame([
+        {"target": 0.30, "sharpe": 1.2151, "at_the_cap": 0.0136,
+         "max_drawdown": -0.4870, "days": 4035},
+        {"target": 0.60, "sharpe": 1.1316, "at_the_cap": 0.5016,
+         "max_drawdown": -0.6638, "days": 4035},
+        {"target": 1.60, "sharpe": 1.1172, "at_the_cap": 0.9901,
+         "max_drawdown": -0.8319, "days": 4035},
+    ])
+
+
+def test_the_target_section_says_the_score_is_the_wrong_criterion(target_grid):
+    """The band's problem was noise; this one's is a category error.
+
+    Sharpe is built to be indifferent to position size, and position size is
+    the only thing the target sets. Ranking it on Sharpe is not a close call
+    made badly - it is the wrong measurement, and the section has to say so
+    rather than repeat the band's argument.
+    """
+    html = target_sweep_html(target_grid, adopted=0.60)
+
+    assert "dial on how much risk to carry" in html
+    assert "indifferent to how large a position is" in html
+    assert "The target did not move either" in html
+
+
+def test_the_section_publishes_the_share_of_days_at_the_cap(target_grid):
+    """The number that was missing from the site entirely."""
+    html = target_sweep_html(target_grid, adopted=0.60)
+
+    assert "On 50.2% of days the position is pinned" in html
+    assert "From a target of <b>160%</b>" in html
+
+
+def test_the_drawdown_range_is_given_as_what_the_target_chooses(target_grid):
+    html = target_sweep_html(target_grid, adopted=0.60)
+
+    assert "-49% to -83%" in html
+    assert "at the target in use it is -66%" in html
+
+
+def test_a_grid_without_the_cap_column_claims_nothing_about_it(target_grid):
+    html = target_sweep_html(target_grid.drop(columns=["at_the_cap"]), adopted=0.60)
+
+    assert "pinned at the" not in html
+    assert "dial on how much risk to carry" in html      # the rest still stands
+
+
+def test_no_target_sweep_no_section():
+    assert target_sweep_html(pd.DataFrame(), adopted=0.60) == ""
