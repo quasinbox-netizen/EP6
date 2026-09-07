@@ -33,6 +33,9 @@ from forecast.ledger import score as score_ledger
 from forecast.ledger import scoreboard as ledger_scoreboard
 from forecast.ledger import verdict as ledger_verdict
 from publish.charts import cycle_clock, range_chart
+from publish.pages import cards as _cards
+from publish.pages import evidence_page, figure_html, today_page
+from publish.pages import table as _table
 from publish.payloads import desk_payload
 
 PANELS = {
@@ -43,7 +46,13 @@ PANELS = {
 DATA_START, DATA_END = "<!--DATA:START-->", "<!--DATA:END-->"
 PLOTLY = "https://cdn.plot.ly/plotly-2.35.2.min.js"
 
-PAGES = (("index.html", "Now"), ("signals.html", "Signals"), ("receipts.html", "Receipts"))
+PAGES = (
+    ("index.html", "Today"),
+    ("now.html", "Now"),
+    ("evidence.html", "Evidence"),
+    ("signals.html", "Signals"),
+    ("receipts.html", "Receipts"),
+)
 
 HEIGHT_REPORTER = """<script>
   // Embedded in a page elsewhere - tell the host how tall this is, so the
@@ -78,6 +87,9 @@ class SiteInputs:
     range_calibration: pd.DataFrame | None = None
     range_days: int = 30
     ledger: pd.DataFrame | None = None
+    # Saved results, read rather than recomputed: the site must not be able to
+    # publish a number the terminal never printed.
+    saved: dict = None
 
 
 def panel(dashboard_dir: Path, name: str, payload: dict | None = None) -> str:
@@ -92,17 +104,6 @@ def panel(dashboard_dir: Path, name: str, payload: dict | None = None) -> str:
     # A literal </script> inside the JSON would close the data block early.
     return head + json.dumps(payload).replace("</", r"<\/") + tail
 
-
-def figure_html(figure, element_id: str) -> str:
-    """A Plotly figure as a div, with the library loaded once per page."""
-    figure.update_layout(
-        paper_bgcolor="#080b11", plot_bgcolor="#080b11",
-        font={"color": "#c3ccd8", "family": "ui-monospace,Consolas,monospace"},
-    )
-    return figure.to_html(
-        full_html=False, include_plotlyjs=False, div_id=element_id,
-        config={"displayModeBar": False, "responsive": True},
-    )
 
 
 def _nav(current: str) -> str:
@@ -177,19 +178,6 @@ def _shell(title: str, current: str, body: str, *, as_of: str) -> str:
 """
 
 
-def _cards(pairs) -> str:
-    cells = "".join(f"<div class='card'><u>{label}</u><b>{value}</b></div>"
-                    for label, value in pairs)
-    return f"<div class='cards'>{cells}</div>"
-
-
-def _table(frame: pd.DataFrame) -> str:
-    head = "".join(f"<th>{column}</th>" for column in frame.columns)
-    rows = "".join(
-        "<tr>" + "".join(f"<td>{'' if pd.isna(value) else value}</td>" for value in row) + "</tr>"
-        for row in frame.itertuples(index=False)
-    )
-    return f"<div class='wrap'><table><thead><tr>{head}</tr></thead><tbody>{rows}</tbody></table></div>"
 
 
 def build(destination: Path, dashboard_dir: Path, inputs: SiteInputs) -> list:
@@ -205,6 +193,16 @@ def build(destination: Path, dashboard_dir: Path, inputs: SiteInputs) -> list:
     outlook = inputs.outlook
     as_of = f"{outlook.as_of:%Y-%m-%d}"
     written = []
+
+    # --- the practical page ----------------------------------------------
+    # First, because it answers the question a visitor arrives with. The intro
+    # rides on this page only; a reader who came back for the tables should not
+    # have to sit through it again.
+    written.append(_write(
+        destination / "index.html",
+        _shell("BTC Cycle Lab", "Today",
+               panel(dashboard_dir, "intro") + today_page(inputs), as_of=as_of),
+    ))
 
     # --- the board -------------------------------------------------------
     conditional, unconditional = outlook.rates[0]
@@ -303,9 +301,12 @@ def build(destination: Path, dashboard_dir: Path, inputs: SiteInputs) -> list:
         + "<br>Read all of it as description, not as a plan.</div></section>",
     ]
 
-    written.append(_write(destination / "index.html",
-                          _shell("BTC Cycle Lab", "Now",
-                                 panel(dashboard_dir, "intro") + "".join(body), as_of=as_of)))
+    written.append(_write(destination / "now.html",
+                          _shell("BTC Cycle Lab - now", "Now", "".join(body), as_of=as_of)))
+
+    written.append(_write(destination / "evidence.html",
+                          _shell("BTC Cycle Lab - evidence", "Evidence",
+                                 evidence_page(inputs), as_of=as_of)))
 
     # --- the desk --------------------------------------------------------
     desk_body = (

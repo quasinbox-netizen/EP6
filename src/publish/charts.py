@@ -122,3 +122,32 @@ def range_chart(forecast: pd.DataFrame, close: pd.Series, days: int) -> go.Figur
         xaxis={"range": [recent.index[0], target + pd.Timedelta(days=max(4, days // 3))]},
     )
     return figure
+
+
+def car_chart_from_frame(frame: pd.DataFrame, title: str) -> go.Figure:
+    """The event study as saved by `run.py study`, with its interval.
+
+    Takes the CSV rather than the result object: the site reads what the CLI
+    left behind, so publishing cannot quietly recompute a study with different
+    settings from the one the terminal reported.
+    """
+    figure = go.Figure()
+    figure.add_trace(go.Scatter(
+        x=list(frame["offset_days"]) + list(frame["offset_days"])[::-1],
+        y=list(frame["car_ci_high"]) + list(frame["car_ci_low"])[::-1],
+        fill="toself", fillcolor=COLORS["band"], line={"width": 0},
+        hoverinfo="skip", name="95% confidence interval",
+    ))
+    figure.add_trace(go.Scatter(
+        x=frame["offset_days"], y=frame["car"], mode="lines",
+        line={"color": COLORS["car"], "width": 2},
+        name="cumulative abnormal return",
+    ))
+    figure.add_hline(y=0, line_dash="dash", line_color=COLORS["zero"])
+    figure.update_layout(
+        title=title, height=380, hovermode="x unified",
+        xaxis_title="days after the halving", yaxis_title="cumulative abnormal return",
+        yaxis_tickformat=".0%", margin={"l": 60, "r": 20, "t": 46, "b": 46},
+        legend={"orientation": "h", "y": -0.22},
+    )
+    return figure

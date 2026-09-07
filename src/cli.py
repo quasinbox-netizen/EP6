@@ -761,9 +761,20 @@ def cmd_publish(args) -> int:
         "series are licensed for personal use only and are not published here."
     )
 
+    # Read, never recomputed: the site must not be able to publish a number
+    # the terminal never printed.
+    saved = {
+        name: read(f"{name}.csv")
+        for name in ("sizing_today", "backtest_edge", "backtest_comparison",
+                     "event_study_halving", "hypothesis_scan", "forecast_pooled")
+    }
+    saved["range_10"] = read("range_forecast_10d.csv")
+    saved["range_30"] = read("range_forecast_30d.csv")
+
     inputs = SiteInputs(
         outlook=outlook, signals=signals, evidence=evidence, study=study,
         scan=scan, curve_summary=curve_summary, control_note=control_note,
+        saved=saved,
         range_forecast=forecast if not forecast.empty else None,
         range_calibration=calibration if not calibration.empty else None,
         range_days=args.days,

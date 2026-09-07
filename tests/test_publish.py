@@ -91,11 +91,25 @@ def test_the_pages_say_they_are_not_advice(site):
 
 
 def test_the_panels_are_embedded_rather_than_linked(site):
-    """A page that fetched its panel would break the moment it moved."""
-    index = site["text"]["index.html"]
-    assert "btclab-intro" in index      # the intro plays on the front page
-    assert "btclab-meter" in index      # the evidence gauge is inline
+    """A page that fetched its panel would break the moment it moved.
+
+    Each panel sits on the page that needs it: the intro on the way in, the
+    gauge with the cycle board, the desk with the signals. The intro rides on
+    the front page only - a reader who came back for the tables should not sit
+    through it again.
+    """
+    assert "btclab-intro" in site["text"]["index.html"]
+    assert "btclab-intro" not in site["text"]["now.html"]
+    assert "btclab-meter" in site["text"]["now.html"]
     assert "btclab-desk" in site["text"]["signals.html"]
+
+
+def test_the_front_page_answers_the_question_people_arrive_with(site):
+    """"What do I do" belongs first, with the refusal attached to it."""
+    index = site["text"]["index.html"]
+
+    assert "What this tool can tell you about today" in index
+    assert "cannot tell you, and it is not being modest" in index
 
 
 def test_the_desk_keeps_its_live_quote(site):
