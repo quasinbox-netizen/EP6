@@ -1121,11 +1121,24 @@ def main() -> None:
                 st.dataframe(board, width="stretch", hide_index=True)
 
     with tab_forecast:
+        st.subheader("Is this a buy signal? No, and here is the evidence")
+        st.markdown(
+            """
+| the question | the answer here |
+| --- | --- |
+| Which way will the price go? | **Nobody knows.** Five independent checks in this app agree. |
+| When should I get in or out? | **This tool cannot tell you.** Every timing rule it tested was rejected. |
+| How far might the price move? | **Sizing** and the range forecast answer that, and are tested. |
+| How much should I hold? | **Sizing** answers that: it is the one thing here that works. |
+"""
+        )
         st.caption(
-            "Probability that the forward return is positive - not a price "
-            "forecast. The number that matters is whether it beats the "
-            "baselines, especially `always_up`: Bitcoin rose in most historical "
-            "windows, so the reference point is that base rate, not 50%."
+            "Below is the model that tries to answer the first question anyway, "
+            "kept because a failed attempt is a result. It reports the "
+            "probability that the forward return is positive - not a price. The "
+            "number that matters is whether it beats the baselines, especially "
+            "`always_up`: Bitcoin rose in most historical windows, so the "
+            "reference point is that base rate, not 50%."
         )
         # Streamlit renders every tab body on every run, so an unguarded call
         # here would make the whole page wait for 13 model fits before showing
@@ -1186,6 +1199,46 @@ def main() -> None:
                         "Read that probability as decoration. The evaluation "
                         "above says the model has no edge out of sample, so it "
                         "is not evidence about the future."
+                    )
+
+            # What "NO EDGE" looks like from the inside. The verdict alone asks
+            # to be trusted; this makes it checkable.
+            folds = run.folds
+            max_alpha = float(folds["alpha"].max())
+            crushed = int((folds["alpha"] >= max_alpha).sum())
+            constant = int(
+                (folds["accuracy"].round(4) == folds["base_rate"].round(4)).sum()
+            )
+            if crushed or constant:
+                st.subheader("Why it has no edge, rather than just the verdict")
+                st.markdown(
+                    f"""
+The model is a ridge-penalised regression: the penalty decides how much it is
+allowed to lean on its inputs, and each fold picks its own by cross-validation
+on training data alone.
+
+* **{crushed} of {len(folds)} folds picked the strongest penalty available**
+  (α = {max_alpha:,.0f}), which crushes every coefficient towards zero.
+* **{constant} of {len(folds)} folds ended up predicting the same thing every
+  day** — their accuracy equals the base rate exactly, which is what a constant
+  prediction gives.
+
+When the best a model can do with its own features is switch them off, the
+features carry nothing. That is a stronger statement than a p-value: it is the
+model choosing to say nothing rather than being told its answer was noise.
+"""
+                )
+                worst = folds.loc[folds["log_loss"].idxmax()]
+                if float(worst["log_loss"]) > 3:
+                    st.caption(
+                        # The column already reads "fold 1"; prefixing it again
+                        # produced "Fold fold 1".
+                        f"The other extreme is visible too. {str(worst['fold']).capitalize()}"
+                        f" took the weakest penalty "
+                        f"(α = {worst['alpha']:,.0f}) and produced a log loss of "
+                        f"{worst['log_loss']:.1f} with a mean probability of "
+                        f"{worst['mean_probability']:.4f} — confidently wrong. "
+                        "Nothing in between worked, which is the whole finding."
                     )
 
             with st.expander("Per fold"):
