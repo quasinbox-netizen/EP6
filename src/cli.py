@@ -68,7 +68,10 @@ from backtest.sizing import (  # noqa: E402
     realised_volatility,
     volatility_target_position,
 )
+from analysis.evidence import build as build_evidence  # noqa: E402
 from analysis.outlook import base_rates  # noqa: E402
+from publish.site import SiteInputs  # noqa: E402
+from publish.site import build as build_site  # noqa: E402
 from forecast.coverage import (  # noqa: E402
     DEFAULT_REFIT_EVERY as COVERAGE_REFIT_EVERY,
     DEFAULT_WINDOW as COVERAGE_WINDOW,
@@ -90,6 +93,7 @@ from forecast.volatility import fit_garch, price_interval  # noqa: E402
 from ingest.quality import check_macro, check_prices, compare_sources  # noqa: E402
 from pipeline import (  # noqa: E402
     category_event_studies,
+    cycle_outlook,
     control_comparison,
     forecast_report,
     halving_event_study,
@@ -98,6 +102,7 @@ from pipeline import (  # noqa: E402
     out_of_sample_check,
     run_strategies,
     scan_hypotheses,
+    strategy_signals,
     walk_forward_check,
 )
 from storage import connect, read_macro, read_prices, table_summary  # noqa: E402
@@ -697,6 +702,83 @@ def cmd_ledger(args) -> int:
     return 0
 
 
+def cmd_publish(args) -> int:
+    """Build the static site: the reading, without the service.
+
+    Everything the pages show is already computed on this machine, so the
+    published version is a folder of files rather than a Python process on a
+    public port. What it must not contain is the control group: those series
+    come from Yahoo Finance, whose terms forbid redistribution, so the finding
+    from that comparison is published as a sentence and the data behind it
+    stays here.
+    """
+    config = load_config()
+    data = load_lab_data(config)
+    if data.is_empty:
+        print("the database is empty - run `ingest` first")
+        return 1
+
+    processed = _processed_dir(config)
+    destination = Path(args.out) if args.out else config.root / "site"
+    dashboard_dir = config.root / "dashboard"
+
+    print(f"--- building the site from the sample to {data.features.index[-1]:%Y-%m-%d} ---")
+    outlook = cycle_outlook(data, config)
+    signals = strategy_signals(data, config)
+    study = halving_event_study(data, config=config, post=365)
+    scan = scan_hypotheses(data, config=config)
+    oos = out_of_sample_check(data, config=config)
+
+    def read(name):
+        path = processed / name
+        return pd.read_csv(path) if path.exists() else pd.DataFrame()
+
+    curve_summary = read("specification_summary.csv")
+    forecast = read(f"range_forecast_{args.days}d.csv")
+    calibration = read(f"range_calibration_{args.days}d.csv")
+
+    evidence = build_evidence(
+        survivors=int(scan["significant_adjusted"].sum()) if not scan.empty else 0,
+        hypotheses=int(len(scan)),
+        specifications_significant=(
+            float(curve_summary.iloc[0]["n_significant"]) if not curve_summary.empty else 0.0
+        ),
+        specifications_null_mean=(
+            float(curve_summary.iloc[0]["null_significant_mean"])
+            if not curve_summary.empty else 0.0
+        ),
+        halving_p_value=float(study.car_summary["p_value"]),
+        replicated=int(oos["replicated"].sum()) if not oos.empty else 0,
+        replication_attempts=int(len(oos)),
+    )
+
+    # The finding from the control group, without a byte of the series behind it.
+    control_note = (
+        "Against a control group of equities and gold the halving window is not "
+        "distinguishable from the same window on assets no halving touches; the "
+        "series are licensed for personal use only and are not published here."
+    )
+
+    inputs = SiteInputs(
+        outlook=outlook, signals=signals, evidence=evidence, study=study,
+        scan=scan, curve_summary=curve_summary, control_note=control_note,
+        range_forecast=forecast if not forecast.empty else None,
+        range_calibration=calibration if not calibration.empty else None,
+        range_days=args.days,
+        ledger=ledger_load(processed / "predictions.csv"),
+    )
+    written = build_site(destination, dashboard_dir, inputs)
+    for path in written:
+        print(f"  {path.relative_to(config.root)}  {path.stat().st_size / 1024:.0f} kB")
+    print(f"-> {destination}")
+    print(
+        "Upload the contents of that folder to the /btc/ directory of the site. "
+        "No Python runs there: the pages are files, and the only thing they fetch "
+        "at run time is the live BTC quote on the signals page."
+    )
+    return 0
+
+
 def cmd_sizing(args) -> int:
     """How much to hold, from the volatility forecast - never which way.
 
@@ -1289,6 +1371,18 @@ def build_parser() -> argparse.ArgumentParser:
         help="horizon for the base-rate direction call",
     )
     ledger_parser.set_defaults(func=cmd_ledger)
+
+    publish_parser = subparsers.add_parser(
+        "publish", help="build the static site for a web host"
+    )
+    publish_parser.add_argument(
+        "--out", help="destination folder (default: site/ in the repo)"
+    )
+    publish_parser.add_argument(
+        "--days", type=int, default=30,
+        help="which calibrated interval horizon to show (default 30)",
+    )
+    publish_parser.set_defaults(func=cmd_publish)
 
     speccurve = subparsers.add_parser(
         "speccurve",

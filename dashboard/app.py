@@ -33,6 +33,8 @@ from forecast.ledger import score as score_ledger  # noqa: E402
 from forecast.ledger import scoreboard as ledger_scoreboard  # noqa: E402
 from forecast.ledger import verdict as ledger_verdict  # noqa: E402
 from features.halving import CONFIRMED_HALVINGS  # noqa: E402
+from publish.charts import COLORS, cycle_clock, range_chart  # noqa: E402
+from publish.payloads import desk_payload  # noqa: E402
 from pipeline import (  # noqa: E402
     category_event_studies,
     control_comparison,
@@ -64,9 +66,6 @@ DESK_DATA_START, DESK_DATA_END = "<!--DATA:START-->", "<!--DATA:END-->"
 # and a replay of four markers is over before it reads as a sequence. The line
 # is thinned to about 900 points before it reaches the canvas, so the extra
 # history costs drawing time rather than legibility.
-DESK_WINDOW_DAYS = 1825
-
-
 def play_intro() -> None:
     """Drop the intro animation over the whole page, once per session.
 
@@ -131,15 +130,6 @@ LEDGER_DATE_COLUMNS = {
     "as_of": st.column_config.DateColumn("as of", format="YYYY-MM-DD"),
     "target_date": st.column_config.DateColumn("settles on", format="YYYY-MM-DD"),
 }
-
-COLORS = {
-    "price": "#e8a33d",
-    "car": "#4c8bf5",
-    "band": "rgba(76, 139, 245, 0.18)",
-    "halving": "rgba(232, 163, 61, 0.14)",
-    "zero": "#8a8a8a",
-}
-
 
 @st.cache_data(show_spinner="Loading data from the local database...")
 def cached_data():
@@ -326,206 +316,9 @@ def load_range_forecast(_config, days: int):
     return pd.read_csv(forecast), pd.read_csv(calibration)
 
 
-def cycle_clock(paths: dict, days_now: int) -> go.Figure:
-    """Every halving cycle on one dial, normalised to its halving day.
-
-    Polar because the thing being read is a position in a repeating cycle, and
-    a reader should see at a glance that the four laps do not retrace each
-    other. The radius is log-scaled by hand - Plotly has no log radial axis -
-    so a x2 and a x10 are not drawn as if they were a step apart.
-    """
-    figure = go.Figure()
-    ghosts = ["#5c6b80", "#6f7f96", "#8496ad"]
-    ordered = sorted(paths.items())
-
-    for position, (label, series) in enumerate(ordered):
-        current = position == len(ordered) - 1
-        theta = [360.0 * day / 1461.0 for day in series.index]
-        radius = [max(0.0, math.log10(value) + 1.0) if value > 0 else 0.0
-                  for value in series.to_numpy()]
-        figure.add_trace(go.Scatterpolar(
-            r=radius, theta=theta, mode="lines",
-            name=("this cycle" if current else label[:4]),
-            line={"color": COLORS["price"] if current else ghosts[position % len(ghosts)],
-                  "width": 2.6 if current else 1.1},
-            opacity=1.0 if current else 0.55,
-            customdata=[[day, value] for day, value in zip(series.index, series.to_numpy())],
-            hovertemplate="%{customdata[0]:.0f} days after the halving<br>"
-                          "x%{customdata[1]:.2f} of the halving price<extra></extra>",
-        ))
-        if current:
-            figure.add_trace(go.Scatterpolar(
-                r=[radius[-1]], theta=[theta[-1]], mode="markers",
-                marker={"size": 11, "color": COLORS["price"],
-                        "line": {"color": "#0b0f15", "width": 2}},
-                name="today", hoverinfo="skip", showlegend=False,
-            ))
-
-    ticks = [0.5, 1, 2, 5, 10, 20]
-    figure.update_layout(
-        polar={
-            "radialaxis": {
-                "tickvals": [math.log10(t) + 1.0 for t in ticks],
-                "ticktext": [f"x{t:g}" for t in ticks],
-                "angle": 90, "tickfont": {"size": 10}, "gridcolor": "rgba(140,155,175,.18)",
-            },
-            "angularaxis": {
-                "direction": "clockwise", "rotation": 90,
-                "tickvals": [0, 90, 180, 270],
-                "ticktext": ["halving", "1 year", "2 years", "3 years"],
-                "gridcolor": "rgba(140,155,175,.18)",
-            },
-        },
-        height=430, margin={"l": 30, "r": 30, "t": 30, "b": 30},
-        legend={"orientation": "h", "y": -0.08},
-    )
-    return figure
-
-
-def range_chart(forecast: pd.DataFrame, close: pd.Series, days: int) -> go.Figure:
-    """The last months of price, then the calibrated bands at the horizon.
-
-    The bands are drawn only at the horizon, not as a widening cone. The
-    coverage test scored the endpoint and nothing else, so a cone would be
-    drawing three months of confidence that was never checked.
-    """
-    recent = close.iloc[-120:]
-    last_date, last_price = recent.index[-1], float(recent.iloc[-1])
-    target = last_date + pd.Timedelta(days=days)
-
-    figure = go.Figure()
-    figure.add_trace(go.Scatter(
-        x=recent.index, y=recent, mode="lines", name="BTC/USD",
-        line={"color": COLORS["price"], "width": 1.4},
-    ))
-    shades = ["rgba(76,139,245,.45)", "rgba(76,139,245,.28)", "rgba(76,139,245,.16)"]
-    for position, row in enumerate(forecast.sort_values("level").itertuples()):
-        figure.add_trace(go.Scatter(
-            x=[target, target], y=[row.low, row.high], mode="lines",
-            line={"color": shades[position % len(shades)], "width": 12},
-            name=f"{row.level:.0%} interval",
-            hovertemplate=(f"{row.level:.0%} of the time between "
-                           f"{row.low:,.0f} and {row.high:,.0f}<extra></extra>"),
-        ))
-    figure.add_trace(go.Scatter(
-        x=[last_date, target], y=[last_price, last_price], mode="lines",
-        line={"color": COLORS["zero"], "width": 1, "dash": "dot"},
-        name="today's price", hoverinfo="skip",
-    ))
-    figure.update_layout(
-        height=350, margin={"l": 10, "r": 10, "t": 20, "b": 40},
-        hovermode="x unified", yaxis_title="USD",
-        legend={"orientation": "h", "y": -0.28},
-        # The bands are drawn as thick lines, so half their width sits beyond
-        # the horizon date and needs room. Scaled to the horizon rather than
-        # fixed, or a 10-day chart gets the padding of a 365-day one.
-        xaxis={"range": [recent.index[0], target + pd.Timedelta(days=max(4, days // 3))]},
-    )
-    return figure
-
-
 @st.cache_data(show_spinner="Reading the strategy signals...")
 def cached_signals():
     return strategy_signals(cached_data())
-
-
-def desk_payload(bundle: dict) -> dict:
-    """Reshape the signal bundle for the panel. No arithmetic on results.
-
-    Everything here is pixels-and-labels work: cut the window, thin it out so
-    the canvas is not asked to draw 5,000 segments, and translate dates into
-    array positions. Every number passed through is one the pipeline already
-    computed.
-    """
-    close = bundle["price"]
-    window = close.iloc[-DESK_WINDOW_DAYS:]
-    step = max(1, len(window) // 700)
-    shown = window.iloc[::step]
-    if shown.index[-1] != window.index[-1]:  # never drop the latest close
-        shown = pd.concat([shown, window.iloc[[-1]]])
-
-    def slot(timestamp):
-        """Nearest drawn point, or None when the date is off the left edge."""
-        stamp = pd.Timestamp(timestamp)
-        if stamp < shown.index[0]:
-            return None
-        position = int(shown.index.searchsorted(stamp))
-        return min(position, len(shown) - 1)
-
-    strategies = []
-    for item in bundle["strategies"]:
-        signal = item["report"]
-        held = item["positions"].reindex(shown.index).fillna(0.0).abs() > 0
-        holds, start = [], None
-        for i, flag in enumerate(held.tolist()):
-            if flag and start is None:
-                start = i
-            elif not flag and start is not None:
-                holds.append([start, i])
-                start = None
-        if start is not None:
-            holds.append([start, len(held) - 1])
-
-        marks = []
-        for row in signal.trades.itertuples():
-            entry = slot(row.entry_date)
-            if entry is not None:
-                marks.append({"i": entry, "side": "buy"})
-            if not row.open:
-                exit_slot = slot(row.exit_date)
-                if exit_slot is not None:
-                    marks.append({"i": exit_slot, "side": "sell"})
-
-        metrics = signal.metrics
-        strategies.append({
-            "name": signal.name,
-            "side": signal.side,
-            "since": None if signal.since is None else signal.since.strftime("%Y-%m-%d"),
-            "days": signal.days,
-            "unrealized": _clean(signal.unrealized),
-            "trigger": signal.trigger.as_dict(),
-            "metrics": {
-                "sharpe": _clean(metrics.get("sharpe")),
-                "cagr": _clean(metrics.get("cagr")),
-                "maxDrawdown": _clean(metrics.get("max_drawdown")),
-                "totalReturn": _clean(metrics.get("total_return")),
-            },
-            "excessSharpe": _clean(item["excess_sharpe"]),
-            "tradeCount": int(len(signal.trades)),
-            "closedCount": signal.closed_trades,
-            "winRateNet": _clean(signal.win_rate_net),
-            "trades": [
-                {
-                    "in": row.entry_date.strftime("%Y-%m-%d"),
-                    "out": row.exit_date.strftime("%Y-%m-%d"),
-                    "net": _clean(row.return_net),
-                    "open": bool(row.open),
-                }
-                for row in signal.trades.itertuples()
-            ],
-            "marks": marks,
-            "holds": holds,
-        })
-
-    return {
-        "asOf": bundle["as_of"].strftime("%Y-%m-%d"),
-        "sampleDays": int(len(close)),
-        "lastClose": float(close.iloc[-1]),
-        "costRate": float(bundle["cost_rate"]),
-        "price": {
-            "d": [stamp.strftime("%Y-%m-%d") for stamp in shown.index],
-            "c": [round(float(value), 2) for value in shown.tolist()],
-        },
-        "strategies": strategies,
-    }
-
-
-def _clean(value):
-    """JSON has no NaN. Anything unmeasurable becomes null."""
-    if value is None:
-        return None
-    number = float(value)
-    return None if number != number or number in (float("inf"), float("-inf")) else number
 
 
 def render_evidence_meter(payload: dict) -> None:

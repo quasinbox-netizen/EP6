@@ -44,3 +44,6 @@ data/processed/**
 # would be dangling for anyone who clones this.
 .agents/
 .claude/skills/
+
+# The published site is build output; rebuild it with `run.py publish`.
+/site/
