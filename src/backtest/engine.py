@@ -66,6 +66,11 @@ class BacktestResult:
     costs: pd.Series
     metrics: dict = field(default_factory=dict)
     name: str = "strategy"
+    # What rule produced this, in machine-readable form: {"kind": "trend",
+    # "fast": 50, "slow": 200}. The signal desk needs the parameters to say
+    # what would flip the rule, and parsing them back out of `name` would
+    # break the first time someone renames a strategy.
+    meta: dict = field(default_factory=dict)
 
     def summary(self) -> str:
         m = self.metrics
@@ -141,6 +146,7 @@ def run_backtest(
     *,
     name: str = "strategy",
     price_column: str = "close",
+    meta: dict | None = None,
 ) -> BacktestResult:
     """Run a strategy on daily closes.
 
@@ -184,6 +190,7 @@ def run_backtest(
         costs=costs,
         metrics=metrics,
         name=name,
+        meta=dict(meta or {}),
     )
 
 

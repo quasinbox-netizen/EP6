@@ -12,7 +12,9 @@ import pandas as pd
 from analysis.control import compare_with_control, placebo_event_study
 from analysis.correlation import regime_returns
 from analysis.event_study import circular_shift_test, event_study, window_scan
+from analysis.outlook import CycleOutlook, base_rates, current_state, cycle_paths
 from backtest.engine import BacktestConfig, compare, run_backtest
+from backtest.signals import report as signal_report
 from backtest.strategies import buy_and_hold, halving_window, macro_regime, trend_following
 from config import load_config
 from features.build import FeatureInputs, add_forward_returns, build_features
@@ -471,8 +473,10 @@ def run_strategies(data: LabData, config=None) -> tuple[pd.DataFrame, list]:
     close = frame["close"]
     settings = BacktestConfig.from_config(config)
     results = [
-        run_backtest(close, buy_and_hold(close.index), settings, name="buy and hold"),
-        run_backtest(close, trend_following(close), settings, name="trend 50/200"),
+        run_backtest(close, buy_and_hold(close.index), settings, name="buy and hold",
+                     meta={"kind": "baseline"}),
+        run_backtest(close, trend_following(close), settings, name="trend 50/200",
+                     meta={"kind": "trend", "fast": 50, "slow": 200}),
     ]
     for days in config["features"]["halving_windows"]:
         results.append(
@@ -481,6 +485,7 @@ def run_strategies(data: LabData, config=None) -> tuple[pd.DataFrame, list]:
                 halving_window(close.index, days_after=days),
                 settings,
                 name=f"halving +{days}d",
+                meta={"kind": "halving", "days_after": days},
             )
         )
     if "macro_phase" in frame.columns and frame["macro_phase"].notna().any():
@@ -490,9 +495,70 @@ def run_strategies(data: LabData, config=None) -> tuple[pd.DataFrame, list]:
                 macro_regime(frame["macro_phase"]),
                 settings,
                 name="macro: liquidity up, rates down",
+                meta={"kind": "macro"},
             )
         )
     return compare(results), results
+
+
+def cycle_outlook(data: LabData, config=None, horizons=(30, 90, 365)) -> CycleOutlook:
+    """Where the cycle is, and what the sample says about the next N days.
+
+    Descriptive only. The calibrated price interval comes from
+    `forecast/coverage.py` and is quoted separately, because that one has been
+    scored against its own promise and this one has not.
+    """
+    config = config or load_config()
+    features = data.features
+    state = current_state(features)
+    return CycleOutlook(
+        as_of=state["as_of"],
+        last_price=float(features["close"].iloc[-1]),
+        days_since_halving=state["days_since_halving"],
+        cycle_label=state["cycle_label"],
+        trend_label=state["trend_label"],
+        rates=[base_rates(features, horizon) for horizon in horizons],
+        paths=cycle_paths(features["close"]),
+    )
+
+
+def strategy_signals(data: LabData, config=None) -> dict:
+    """What every backtested rule says right now, and what would change it.
+
+    A view function, in the sense that it computes nothing new: the positions
+    come from the same `run_strategies` that fills the backtest tab, so the
+    signal desk and the equity curve can never disagree. What it adds is the
+    reading direction - the trades behind the curve, and the trigger ahead of
+    the last bar.
+    """
+    config = config or load_config()
+    table, results = run_strategies(data, config=config)
+    if not results:
+        return {"as_of": None, "price": pd.DataFrame(), "strategies": []}
+
+    close = data.features["close"]
+    cost_rate = BacktestConfig.from_config(config).cost_rate
+    baseline = next((r for r in results if r.meta.get("kind") == "baseline"), None)
+
+    reports = []
+    for result in results:
+        signal = signal_report(result, close, cost_rate=cost_rate)
+        reports.append({
+            "report": signal,
+            "positions": result.positions,
+            "excess_sharpe": (
+                signal.metrics.get("sharpe", float("nan"))
+                - baseline.metrics.get("sharpe", float("nan"))
+                if baseline is not None else float("nan")
+            ),
+        })
+    return {
+        "as_of": close.index[-1],
+        "price": close,
+        "cost_rate": cost_rate,
+        "table": table,
+        "strategies": reports,
+    }
 
 
 def full_report(config=None) -> dict:

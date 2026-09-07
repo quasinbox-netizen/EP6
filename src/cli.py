@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import argparse
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 
 import pandas as pd
@@ -67,12 +68,23 @@ from backtest.sizing import (  # noqa: E402
     realised_volatility,
     volatility_target_position,
 )
+from analysis.outlook import base_rates  # noqa: E402
 from forecast.coverage import (  # noqa: E402
     DEFAULT_REFIT_EVERY as COVERAGE_REFIT_EVERY,
     DEFAULT_WINDOW as COVERAGE_WINDOW,
     coverage_report,
     rolling_intervals,
+    today_interval,
 )
+from forecast.ledger import (  # noqa: E402
+    append as ledger_append,
+    build_entries,
+    drop_forming_bar,
+    load as ledger_load,
+    score as ledger_score,
+    scoreboard,
+)
+from forecast.ledger import verdict as ledger_verdict  # noqa: E402
 from forecast.coverage import verdict as coverage_verdict  # noqa: E402
 from forecast.volatility import fit_garch, price_interval  # noqa: E402
 from ingest.quality import check_macro, check_prices, compare_sources  # noqa: E402
@@ -517,7 +529,9 @@ def cmd_range(args) -> int:
         )
         return 1
 
-    fit = fit_garch(returns.tail(COVERAGE_WINDOW))
+    # One path to today's interval, shared with the ledger and the dashboard,
+    # so the three cannot quote three slightly different numbers.
+    fit, frame = today_interval(series, args.days, usable, window=COVERAGE_WINDOW)
     print(f"\n--- forecast ---\n{fit.summary()}")
     if not fit.converged:
         print("WARNING: the fit did not converge; treat the interval as indicative.")
@@ -530,9 +544,6 @@ def cmd_range(args) -> int:
     # Only the levels that passed their own coverage test. A level that failed
     # is not a wider version of one that passed - it is a separate claim about
     # the tail, and this data rejects it.
-    frame = price_interval(
-        fit, last_price, args.days, levels=tuple(usable), drift=fit.mean_return
-    )
     print(
         f"\n{symbol} at {last_price:,.0f} on {last_date}. "
         f"Where it may be {args.days} days later:\n"
@@ -564,6 +575,125 @@ def cmd_range(args) -> int:
         "and the lean is small next to the width: the drift moves the centre by a\n"
         "fraction of the interval it sits in."
     )
+    return 0
+
+
+def cmd_ledger(args) -> int:
+    """Write down what the app claims today, and score what has come due.
+
+    Everything else in this project is a backtest, and a backtest is written
+    by someone who has already seen the outcome. This command is the one
+    escape from that: a claim recorded before its window closes cannot be
+    tuned to fit the result afterwards.
+
+    Recording twice on the same data replaces the row rather than adding one -
+    running the command daily should not inflate the record with copies of a
+    forecast that never changed.
+    """
+    config = load_config()
+    symbol = config["price"]["symbol"]
+    priority = config["price"].get("stitch_priority", config["price"]["sources"])
+    with connect(config.db_path) as conn:
+        prices = load_stitched(conn, symbol, priority)
+    if prices.empty:
+        print("no prices in the database - run `ingest` first")
+        return 1
+
+    series = prices.copy()
+    series["date"] = pd.to_datetime(series["date"]).dt.normalize()
+    series = series.drop_duplicates(subset="date", keep="last").set_index("date")["close"]
+    series = series.astype(float).sort_index()
+
+    # Today's daily bar is still forming. A claim anchored to an intraday
+    # price cannot be reproduced tomorrow, and it is not the kind of price the
+    # coverage walk was calibrated on - that walk scored settled closes. Two
+    # runs on the same day produced intervals tens of dollars apart before this
+    # was here, which is exactly the drift a ledger exists to rule out.
+    series, forming = drop_forming_bar(series)
+    if forming is not None:
+        print(f"  ignoring {forming:%Y-%m-%d}: that bar is still forming")
+    if series.empty:
+        print("no settled close to record from")
+        return 1
+
+    processed = _processed_dir(config)
+    ledger_path = processed / "predictions.csv"
+    as_of = series.index[-1]
+    last_price = float(series.iloc[-1])
+    features = None
+
+    if args.record:
+        print(f"--- recording what the app says on {as_of.date()} ---")
+        horizons = args.horizons or sorted(
+            int(path.stem.split("_")[-1][:-1])
+            for path in processed.glob("range_calibration_*d.csv")
+        )
+        for horizon in horizons:
+            calibration_path = processed / f"range_calibration_{horizon}d.csv"
+            if not calibration_path.exists():
+                print(f"  {horizon}d interval: no calibration, nothing recorded")
+                continue
+            calibration = pd.read_csv(calibration_path)
+            usable = [
+                float(level)
+                for level in calibration.loc[calibration["within_tolerance"], "level"]
+            ]
+            if not usable:
+                print(f"  {horizon}d interval: no level kept its promise, nothing recorded")
+                continue
+            fit, frame = today_interval(series, horizon, usable, window=COVERAGE_WINDOW)
+            entries = build_entries(
+                as_of=as_of, price=last_price, horizon=horizon, intervals=frame,
+                note="garch, coverage-verified levels",
+            )
+            ledger_append(ledger_path, entries)
+            quoted = ", ".join(f"{level:.0%}" for level in usable)
+            print(f"  {horizon}d interval: recorded {quoted}")
+
+        features = load_lab_data(config).features
+        conditional, _ = base_rates(features, args.direction_horizon)
+        entries = build_entries(
+            as_of=as_of, price=last_price, horizon=args.direction_horizon,
+            p_up=conditional.share_positive, n_effective=conditional.effective_n,
+            note="conditional base rate",
+        )
+        ledger_append(ledger_path, entries)
+        print(
+            f"  {args.direction_horizon}d direction: p(up) = "
+            f"{conditional.share_positive:.0%} from {conditional.effective_n} "
+            "independent windows"
+        )
+        print(f"-> {ledger_path}")
+
+    ledger = ledger_load(ledger_path)
+    if ledger.empty:
+        print("The ledger is empty. Write the first claim with:")
+        print("    python run.py ledger --record")
+        return 0
+
+    scored = ledger_score(ledger, series)
+    open_claims = int((~scored["matured"].astype(bool)).sum())
+
+    base_rate = None
+    direction = scored[scored["claim"] == "direction"]
+    if not direction.empty:
+        if features is None:
+            features = load_lab_data(config).features
+        # The bar a direction call has to clear is the unconditional base rate,
+        # not a coin flip: this series rose in most windows.
+        base_rate = base_rates(features, int(direction["horizon"].iloc[0]))[1].share_positive
+
+    board = scoreboard(scored, base_rate=base_rate)
+    print(f"--- the ledger: {len(ledger)} claims, {open_claims} still open ---")
+    columns = ["as_of", "horizon", "claim", "level", "low", "high", "p_up",
+               "matured", "realised", "hit"]
+    print(scored.loc[:, columns].tail(12).to_string(index=False))
+
+    if not board.empty:
+        print("--- what has been settled ---")
+        print(board.to_string(index=False))
+        _save(board, config, "prediction_scoreboard.csv")
+    print(ledger_verdict(board, open_claims))
     return 0
 
 
@@ -603,13 +733,29 @@ def cmd_sizing(args) -> int:
         volatility = pd.read_csv(cache, index_col=0, parse_dates=True).iloc[:, 0]
         print(f"Using the cached forecast ({cache.name}); --refresh rebuilds it.")
 
-    window = close.loc[volatility.index[0] :]
+    # The window is where BOTH a price and a forecast exist. A cached forecast
+    # can lag the price data by days, and reindexing onto the full price index
+    # then filled the gap with zeros - turning "no forecast yet" into "hold
+    # nothing", which reads as a decision rather than a gap and crashed the
+    # moment the last price day had no volatility for it.
+    usable = volatility.index.intersection(close.index)
+    if len(usable) == 0:
+        print("the cached volatility does not overlap the price data; use --refresh")
+        return 1
+    window = close.loc[usable.min() : usable.max()]
+    behind = (close.index.max() - usable.max()).days
+    if behind > 0:
+        print(
+            f"NOTE: the cached forecast ends {usable.max().date()}, "
+            f"{behind} day(s) behind the price data.\n"
+            "      Everything below stops there. `--refresh` brings it up to date."
+        )
     aligned = np.log(window).diff().fillna(0.0)
     backtest_config = BacktestConfig()
 
     target = volatility_target_position(
         volatility, target_annual_volatility=args.target
-    ).reindex(window.index).fillna(0.0)
+    ).reindex(window.index).ffill()
 
     runs = [run_backtest(window, pd.Series(1.0, index=window.index),
                          backtest_config, name="buy and hold")]
@@ -659,8 +805,9 @@ def cmd_sizing(args) -> int:
     # history; without this the tool makes a reader compute today's answer by
     # hand from a CSV, which is where mistakes live.
     banded = apply_rebalance_band(target, args.band)
-    today = float(banded.iloc[-1])
-    as_of = banded.index[-1]
+    # The last day that has a real forecast, not merely a price.
+    as_of = usable.max()
+    today = float(banded.loc[as_of])
     price = float(window.loc[as_of])
     forecast = float(volatility.loc[as_of]) * np.sqrt(TRADING_DAYS)
     typical = float((volatility * np.sqrt(TRADING_DAYS)).median())
@@ -1126,6 +1273,22 @@ def build_parser() -> argparse.ArgumentParser:
         help="rebuild the coverage backtest for this horizon (several minutes)",
     )
     range_parser.set_defaults(func=cmd_range)
+
+    ledger_parser = subparsers.add_parser(
+        "ledger", help="record today's forecast and score the ones that came due"
+    )
+    ledger_parser.add_argument(
+        "--record", action="store_true", help="write today's claims into the ledger"
+    )
+    ledger_parser.add_argument(
+        "--horizons", type=int, nargs="*",
+        help="interval horizons to record (default: every calibrated one)",
+    )
+    ledger_parser.add_argument(
+        "--direction-horizon", type=int, default=30,
+        help="horizon for the base-rate direction call",
+    )
+    ledger_parser.set_defaults(func=cmd_ledger)
 
     speccurve = subparsers.add_parser(
         "speccurve",

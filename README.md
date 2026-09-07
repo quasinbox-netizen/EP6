@@ -88,6 +88,7 @@ Then run any of these:
 | `run.py forecast` | directional forecast, scored against three baselines |
 | `run.py range --days 10` | how far the price may move, as a calibrated interval |
 | `run.py sizing` | how much to hold, from the volatility forecast |
+| `run.py ledger --record` | write today's forecast down; without the flag, score the ones that came due |
 | `run.py backtest` | strategies vs buy-and-hold |
 | `run.py all` | everything in sequence |
 | `run.py dashboard` | browser dashboard on port 8511 |

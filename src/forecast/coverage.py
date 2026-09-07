@@ -51,6 +51,7 @@ from scipy import stats
 from forecast.volatility import (
     extend_residual_pool,
     fit_garch,
+    price_interval,
     simulate_horizon,
     update_state,
 )
@@ -186,6 +187,28 @@ def rolling_intervals(
         rows.append(row)
 
     return pd.DataFrame(rows).set_index("date")
+
+
+def today_interval(prices, horizon: int, levels, *, window: int = DEFAULT_WINDOW):
+    """The interval for the most recent close, built the way the walk built its own.
+
+    Everything that quotes a live interval goes through here, so the number on
+    a dashboard, the number in the terminal and the number written into the
+    ledger cannot be three slightly different numbers. The two choices that
+    have to match the calibration are the fitting window and the drift: the
+    walk scored intervals leaning by the trailing mean, and an interval
+    centred differently was never the one that passed.
+
+    Returns (fit, frame) - the caller usually wants to report convergence.
+    """
+    prices = pd.Series(prices).dropna().sort_index().astype(float)
+    returns = np.log(prices).diff().dropna()
+    fit = fit_garch(returns.tail(window))
+    frame = price_interval(
+        fit, float(prices.iloc[-1]), horizon,
+        levels=tuple(levels), drift=fit.mean_return,
+    )
+    return fit, frame
 
 
 def thin_to_independent(frame: pd.DataFrame, horizon: int) -> pd.DataFrame:
