@@ -27,8 +27,9 @@
   letter-spacing:.16em; text-transform:uppercase;
 }
 #btclab-intro .btclab-skip:hover{color:#fff;border-color:rgba(247,147,26,.8)}
+#btclab-intro .btclab-mute{right:86px}
 </style>
-<div id="btclab-intro"><canvas></canvas><button class="btclab-skip" type="button">Skip</button></div>
+<div id="btclab-intro"><canvas></canvas><button class="btclab-skip btclab-mute" type="button">Sound on</button><button class="btclab-skip" type="button">Skip</button></div>
 <script>
 (function () {
   /* An overlay left over from an earlier play would shadow the new one, since
@@ -53,7 +54,8 @@
 
   var canvas = root.querySelector('canvas');
   var ctx = canvas.getContext('2d');
-  var skipBtn = root.querySelector('.btclab-skip');
+  var skipBtn = root.querySelector('.btclab-skip:not(.btclab-mute)');
+  var muteBtn = root.querySelector('.btclab-mute');
   var standalone = !!window.__BTCLAB_STANDALONE__;
   var reduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
@@ -112,12 +114,102 @@
   var shake = 0, flash = null, words = [], puffs = [];
   var dmgSkull = 0, dmgCoin = 0, nextCandle = 0;
 
+  /* ------------------------------------------------------------------ audio */
+  /* Synthesised, not sampled: no files to ship, nothing fetched, works with the
+     page open offline. Two sounds only - the skull laughing and a coin being
+     struck - because the brawl already has plenty going on visually.
+
+     Deliberately quiet. MASTER is the one number to turn if it is still too
+     much; every voice below is scaled by it.
+
+     Browsers refuse to start an AudioContext before the user has interacted
+     with the page, and the intro plays on load, so the first run is usually
+     silent and that is fine - it stays silent rather than erroring. The replay
+     button IS a gesture, so sound reliably arrives there. Reduced-motion also
+     means reduced noise: someone who asked for less movement did not ask for a
+     skull cackling at them. */
+  var MASTER = 0.16;
+  var actx = null, audioDead = false, muted = false;
+  function audio() {
+    if (audioDead || reduced || muted) return null;
+    try {
+      if (!actx) {
+        var Ctor = window.AudioContext || window.webkitAudioContext;
+        if (!Ctor) { audioDead = true; return null; }
+        actx = new Ctor();
+      }
+      if (actx.state === 'suspended') actx.resume();
+      return actx.state === 'running' ? actx : null;
+    } catch (err) { audioDead = true; return null; }
+  }
+
+  /* One burst of filtered noise. The metallic part of a struck coin is noise
+     shaped by a resonant filter, not a tone - a pure sine reads as a doorbell. */
+  function noise(t0, dur, freq, q, peak, type) {
+    var ac = actx, n = Math.max(1, Math.floor(ac.sampleRate * dur));
+    var buf = ac.createBuffer(1, n, ac.sampleRate), data = buf.getChannelData(0);
+    for (var i = 0; i < n; i++) data[i] = (Math.random() * 2 - 1) * (1 - i / n);
+    var src = ac.createBufferSource(); src.buffer = buf;
+    var filt = ac.createBiquadFilter();
+    filt.type = type || 'bandpass'; filt.frequency.value = freq; filt.Q.value = q;
+    var gain = ac.createGain();
+    gain.gain.setValueAtTime(peak * MASTER, t0);
+    gain.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+    src.connect(filt); filt.connect(gain); gain.connect(ac.destination);
+    src.start(t0); src.stop(t0 + dur);
+  }
+
+  function voice(t0, from, to, dur, peak, type) {
+    var ac = actx;
+    var osc = ac.createOscillator(), gain = ac.createGain();
+    osc.type = type || 'sawtooth';
+    osc.frequency.setValueAtTime(from, t0);
+    osc.frequency.exponentialRampToValueAtTime(Math.max(20, to), t0 + dur);
+    gain.gain.setValueAtTime(0.0001, t0);
+    gain.gain.exponentialRampToValueAtTime(peak * MASTER, t0 + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+    osc.connect(gain); gain.connect(ac.destination);
+    osc.start(t0); osc.stop(t0 + dur + 0.02);
+  }
+
+  /* A laugh is pitch dropping in steps, not one long note. Four short syllables
+     descending, each one a little lower and quieter, over a growl an octave
+     down so it reads as a skull rather than a bird. */
+  function skullLaugh() {
+    if (!audio()) return;
+    var t0 = actx.currentTime, i;
+    for (i = 0; i < 4; i++) {
+      var at = t0 + i * 0.135;
+      var base = 190 - i * 22;
+      voice(at, base, base * 0.62, 0.11, 0.5 - i * 0.07, 'sawtooth');
+      voice(at, base / 2, base / 2 * 0.6, 0.13, 0.32 - i * 0.05, 'square');
+      noise(at, 0.09, 320 - i * 30, 3.5, 0.22 - i * 0.03);
+    }
+    voice(t0, 62, 44, 0.62, 0.28, 'triangle');
+  }
+
+  /* Metal struck and shattering: a bright inharmonic cluster - the intervals
+     are deliberately not a chord - plus a noise crack, both decaying fast. */
+  function coinSmash() {
+    if (!audio()) return;
+    var t0 = actx.currentTime;
+    [2090, 3170, 4310, 5720].forEach(function (f, i) {
+      voice(t0 + i * 0.006, f, f * 0.86, 0.26 - i * 0.04, 0.16 - i * 0.03, 'triangle');
+    });
+    noise(t0, 0.13, 3600, 1.1, 0.5, 'highpass');
+    noise(t0 + 0.05, 0.22, 1500, 2.0, 0.2);
+    voice(t0, 150, 60, 0.14, 0.3, 'sine');
+  }
+
   function hit(by) {
     shake = 26;
     var i;
-    if (by === 'coin') { flash = { c: GREEN, a: 0.5 }; for (i = 0; i < 3; i++) pushCandle(1.4, 1.6); dmgSkull++; }
-    if (by === 'skull') { flash = { c: RED, a: 0.5 }; for (i = 0; i < 3; i++) pushCandle(-1.4, 1.6); dmgCoin++; }
-    if (by === 'both') { flash = { c: '#ffffff', a: 0.85 }; pushCandle(-2.2, 2); pushCandle(1.9, 2); dmgSkull++; dmgCoin++; }
+    if (by === 'coin') { flash = { c: GREEN, a: 0.5 }; for (i = 0; i < 3; i++) pushCandle(1.4, 1.6); dmgSkull++; coinSmash(); }
+    if (by === 'skull') { flash = { c: RED, a: 0.5 }; for (i = 0; i < 3; i++) pushCandle(-1.4, 1.6); dmgCoin++; skullLaugh(); }
+    if (by === 'both') {
+      flash = { c: '#ffffff', a: 0.85 }; pushCandle(-2.2, 2); pushCandle(1.9, 2);
+      dmgSkull++; dmgCoin++; coinSmash(); skullLaugh();
+    }
   }
   function say(text, color, lift) {
     words.push({
@@ -564,6 +656,15 @@
 
   root.addEventListener('click', dismiss);
   skipBtn.addEventListener('click', function (e) { e.stopPropagation(); dismiss(); });
+  /* Sound that cannot be turned off is hostile, and the click itself is the
+     gesture browsers wait for - so pressing this to unmute also unblocks the
+     audio context that the autoplay policy had refused to start. */
+  muteBtn.addEventListener('click', function (e) {
+    e.stopPropagation();
+    muted = !muted;
+    muteBtn.textContent = muted ? 'Sound off' : 'Sound on';
+    if (!muted) audio();
+  });
   window.addEventListener('keydown', function () { dismiss(); }, { once: true });
 
   requestAnimationFrame(frame);
