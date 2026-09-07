@@ -209,6 +209,76 @@ def evidence_page(inputs) -> str:
               "</section>"
         )
 
+    sizing = saved.get("sizing_comparison", pd.DataFrame())
+    if not sizing.empty:
+        columns = [
+            column for column in
+            ("strategy", "sharpe", "max_drawdown", "volatility", "turnover_annual",
+             "total_cost", "cagr")
+            if column in sizing.columns
+        ]
+        parts.append(
+            "<section><h2>Sizing: the one part that works</h2>"
+            + table(sizing.loc[:, columns].round(3))
+            + "<p class='note'>Direction is not forecastable here and every other "
+              "section says so. The size of the next move is: volatility clusters, so "
+              "holding target volatility divided by forecast volatility keeps the RISK "
+              "constant rather than the quantity. The rebalance band exists because "
+              "retrading on every wobble in the forecast costs more than the sizing is "
+              "worth.</p></section>"
+        )
+
+    walk = saved.get("walk_forward", pd.DataFrame())
+    if not walk.empty:
+        columns = [
+            column for column in
+            ("hypothesis", "n_folds", "sign_agreement", "sign_p_value",
+             "mean_test_effect", "sign_p_adjusted")
+            if column in walk.columns
+        ]
+        shown = walk.loc[:, columns].sort_values("sign_p_value").head(10).round(4)
+        parts.append(
+            "<section><h2>Does the sign hold up across windows?</h2>"
+            + table(shown)
+            + f"<p class='note'>Each hypothesis re-tested on {int(walk['n_folds'].max())} "
+              "disjoint windows with an embargo between them. An effect that is real "
+              "keeps its sign; one that is an artefact of a particular stretch does not. "
+              "The ten smallest p-values are shown, already corrected.</p></section>"
+        )
+
+    replication = saved.get("out_of_sample", pd.DataFrame())
+    if not replication.empty:
+        columns = [
+            column for column in
+            ("hypothesis", "train_effect", "test_effect", "same_sign",
+             "effect_retained", "replicated")
+            if column in replication.columns
+        ]
+        replicated = int(replication["replicated"].sum())
+        parts.append(
+            "<section><h2>Held out, then checked</h2>"
+            + table(replication.loc[:, columns].head(10).round(4))
+            + f"<p class='note'>Fitted on early cycles, checked on the ones held back. "
+              f"{replicated} of {len(replication)} replicate. A hypothesis that only "
+              "works on the data that suggested it is a description of that data.</p>"
+              "</section>"
+        )
+
+    categories = saved.get("event_study_categories", pd.DataFrame())
+    if not categories.empty:
+        columns = [
+            column for column in
+            ("category", "n", "offset", "car", "ci_low", "ci_high", "p_value")
+            if column in categories.columns
+        ]
+        parts.append(
+            "<section><h2>Other events, same treatment</h2>"
+            + table(categories.loc[:, columns].round(4))
+            + "<p class='note'>Halvings are not the only events in the registry. Every "
+              "category gets the same event study, with the same intervals and the same "
+              "counts - and the counts are what to read first.</p></section>"
+        )
+
     parts.append(
         "<section><h2>The control group</h2><p class='note'>"
         + inputs.control_note

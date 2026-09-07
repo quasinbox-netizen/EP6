@@ -767,8 +767,10 @@ def cmd_publish(args) -> int:
     # the terminal never printed.
     saved = {
         name: read(f"{name}.csv")
-        for name in ("sizing_today", "backtest_edge", "backtest_comparison",
-                     "event_study_halving", "hypothesis_scan", "forecast_pooled")
+        for name in ("sizing_today", "sizing_comparison", "backtest_edge",
+                     "backtest_comparison", "event_study_halving",
+                     "event_study_categories", "hypothesis_scan", "walk_forward",
+                     "out_of_sample", "forecast_pooled")
     }
     saved["range_10"] = read("range_forecast_10d.csv")
     saved["range_30"] = read("range_forecast_30d.csv")
