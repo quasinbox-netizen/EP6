@@ -180,6 +180,148 @@ def load_specification_results(_config):
     return read("specification_curve.csv"), read("specification_summary.csv")
 
 
+def render_today(config) -> None:
+    """The practical page: every answer this tool has, and the one it lacks.
+
+    Written because the honest answers were scattered across seven tabs while
+    the question people arrive with - what do I do - had no page at all. The
+    temptation is to answer it with an entry signal. Everything else in this
+    app exists to show that such a signal is not available in this data, so
+    this page gives the answers that survived testing and states plainly that
+    the timing question did not.
+
+    The rules ARE shown, with their p-values next to them. Hiding them would
+    be its own kind of dishonesty - they are in the app, someone will find
+    them, and a rule seen without its p-value is a rule that looks like advice.
+    """
+    bundle = load_today(config)
+    sizing, edge = bundle["sizing"], bundle["edge"]
+
+    st.subheader("What this tool can tell you about today")
+    if sizing.empty:
+        st.info("Run `run.py sizing` and `run.py range --days 10` first.")
+        return
+
+    row = sizing.iloc[0]
+    st.caption(
+        f"As of {row['as_of']}, price {row['price']:,.0f}. "
+        "Everything here is computed from data up to that date."
+    )
+
+    columns = st.columns(3)
+    columns[0].metric(
+        "How much to hold", f"{row['position']:.2f}",
+        help="Target volatility divided by forecast volatility, after the "
+             "rebalance band. Not a view on direction.",
+    )
+    columns[1].metric(
+        "Forecast volatility", f"{row['forecast_annual_volatility']:.0%}",
+        delta=f"{row['forecast_annual_volatility'] - row['median_annual_volatility']:+.0%} vs median",
+        delta_color="off",
+    )
+    columns[2].metric(
+        "Which way it goes", "Unknown",
+        help="Not a limitation of this build. See the table below.",
+    )
+
+    for horizon, frame in (("10 days", bundle["range_10"]), ("30 days", bundle["range_30"])):
+        if frame.empty:
+            continue
+        best = frame.loc[frame["level"].idxmax()]
+        st.markdown(
+            f"**In {horizon}**, with {best['level']:.0%} probability, between "
+            f"**{best['low']:,.0f}** and **{best['high']:,.0f}** "
+            f"({best['low_pct']:+.1%} / {best['high_pct']:+.1%})."
+        )
+    st.caption(
+        "These intervals passed a coverage test on non-overlapping windows - a "
+        "90% interval really did contain the outcome about 90% of the time. "
+        "Levels that failed are withheld rather than widened."
+    )
+
+    st.subheader("When to get in or out")
+    st.error(
+        "**This tool cannot tell you, and it is not being modest.** Every "
+        "timing rule it tested was rejected, the hypothesis scan finds nothing "
+        "after correction, 160 specifications of the halving question find "
+        "nothing, and the forecast model switches its own features off. An "
+        "entry signal here would be invented."
+    )
+
+    if not edge.empty:
+        display = edge.loc[
+            :, ["strategy", "sharpe", "sharpe_random_timing", "p_value",
+                "p_worst_without_one", "fragile", "survives_correction"]
+        ].copy()
+        # Streamlit draws booleans as checkboxes, and an unticked box is easy
+        # to read as "not filled in yet" rather than "no". `fragile` is the
+        # most important warning in this table, so it says so in words.
+        display["fragile"] = display["fragile"].map(
+            lambda flag: "yes - one trade carries it" if flag else "no"
+        )
+        display["survives_correction"] = display["survives_correction"].map(
+            lambda flag: "yes" if flag else "no"
+        )
+        st.dataframe(
+            display, width="stretch", hide_index=True,
+            column_config={
+                "sharpe_random_timing": st.column_config.NumberColumn(
+                    "sharpe if timed at random", format="%.3f"
+                ),
+                "p_worst_without_one": st.column_config.NumberColumn(
+                    "p without one trade", format="%.3f"
+                ),
+                "p_value": st.column_config.NumberColumn(format="%.3f"),
+                "sharpe": st.column_config.NumberColumn(format="%.3f"),
+            },
+        )
+        st.caption(
+            "Every rule in this app, compared against ITSELF applied at random "
+            "times. `p_value` under 0.05 would mean the timing beat chance; "
+            "`p_worst_without_one` re-runs the test with one trade removed, and "
+            "`survives_correction` accounts for having tried seven rules. "
+            "Nothing survives. `halving +365d` looks significant until you "
+            "notice it is fragile: drop the 2012 halving and its p-value goes "
+            "from 0.013 to 0.166 — one window carried it."
+        )
+
+    st.subheader("So what is this for")
+    st.markdown(
+        """
+Position sizing and the range are real answers, and they are worth having:
+a −66% worst drawdown is survivable where −83% often is not. What they are not
+is a way to earn more — the Sizing tab shows the cost in the CAGR column.
+
+The rest of this app is a machine for rejecting trading ideas before money is
+committed to them. The first idea it rejected was the halving strategy this
+project was built to test.
+"""
+    )
+
+
+@st.cache_data(show_spinner="Reading today's numbers...")
+def load_today(_config):
+    """Everything the tool can honestly say about right now, in one read.
+
+    These live in five files because five commands write them. Collecting them
+    here rather than making a reader open five tabs is the whole point of the
+    page: the answers that exist are worth putting next to each other, and so
+    is the evidence that the missing one is missing.
+    """
+    directory = processed_dir(_config)
+
+    def read(name, **kwargs):
+        path = directory / name
+        return pd.read_csv(path, **kwargs) if path.exists() else pd.DataFrame()
+
+    return {
+        "sizing": read("sizing_today.csv"),
+        "range_10": read("range_forecast_10d.csv"),
+        "range_30": read("range_forecast_30d.csv"),
+        "edge": read("backtest_edge.csv"),
+    }
+
+
 @st.cache_data(show_spinner="Reading the sizing results...")
 def load_sizing_results(_config):
     """Read what `run.py sizing` saved. Never compute it here.
@@ -526,13 +668,17 @@ def main() -> None:
         )
 
     (
-        tab_now, tab_price, tab_study, tab_control, tab_validation, tab_specs,
-        tab_backtest, tab_sizing, tab_signals, tab_forecast, tab_receipts
+        tab_today, tab_now, tab_price, tab_study, tab_control, tab_validation,
+        tab_specs, tab_backtest, tab_sizing, tab_signals, tab_forecast,
+        tab_receipts
     ) = st.tabs(
-        ["Now", "Price and cycles", "Event study", "Control group", "Validation",
-         "Specification curve", "Backtest", "Sizing", "Signal desk", "Forecast",
-         "Receipts"]
+        ["What to do today", "Now", "Price and cycles", "Event study",
+         "Control group", "Validation", "Specification curve", "Backtest",
+         "Sizing", "Signal desk", "Forecast", "Receipts"]
     )
+
+    with tab_today:
+        render_today(config)
 
     with tab_now:
         outlook = cached_outlook()
