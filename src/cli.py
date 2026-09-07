@@ -719,7 +719,9 @@ def cmd_publish(args) -> int:
         return 1
 
     processed = _processed_dir(config)
-    destination = Path(args.out) if args.out else config.root / "site"
+    # Resolved, because a relative --out is written relative to the caller
+    # but reported relative to the repo, and the two are not the same place.
+    destination = Path(args.out).resolve() if args.out else config.root / "site"
     dashboard_dir = config.root / "dashboard"
 
     print(f"--- building the site from the sample to {data.features.index[-1]:%Y-%m-%d} ---")
@@ -769,7 +771,8 @@ def cmd_publish(args) -> int:
     )
     written = build_site(destination, dashboard_dir, inputs)
     for path in written:
-        print(f"  {path.relative_to(config.root)}  {path.stat().st_size / 1024:.0f} kB")
+        shown = path.relative_to(config.root) if path.is_relative_to(config.root) else path
+        print(f"  {shown}  {path.stat().st_size / 1024:.0f} kB")
     print(f"-> {destination}")
     print(
         "Upload the contents of that folder to the /btc/ directory of the site. "

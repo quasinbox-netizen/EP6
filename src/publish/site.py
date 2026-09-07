@@ -45,6 +45,23 @@ PLOTLY = "https://cdn.plot.ly/plotly-2.35.2.min.js"
 
 PAGES = (("index.html", "Now"), ("signals.html", "Signals"), ("receipts.html", "Receipts"))
 
+HEIGHT_REPORTER = """<script>
+  // Embedded in a page elsewhere - tell the host how tall this is, so the
+  // frame can size itself instead of guessing and showing two scrollbars.
+  (function () {
+    function report() {
+      try {
+        parent.postMessage({ btclabHeight: document.documentElement.scrollHeight }, "*");
+      } catch (err) { /* not embedded, or a host that will not listen */ }
+    }
+    window.addEventListener("load", report);
+    window.addEventListener("resize", report);
+    window.setInterval(report, 1500);
+  })();
+</script>"""
+
+
+
 
 @dataclass
 class SiteInputs:
@@ -148,6 +165,7 @@ def _shell(title: str, current: str, body: str, *, as_of: str) -> str:
 <main>
 {body}
 </main>
+{HEIGHT_REPORTER}
 <footer>
   Research output, not advice, and not a signal to act on. Built from the local
   sample by <code>run.py publish</code>. The control-group comparison is
@@ -180,6 +198,9 @@ def build(destination: Path, dashboard_dir: Path, inputs: SiteInputs) -> list:
     if destination.exists():
         shutil.rmtree(destination)
     destination.mkdir(parents=True)
+    # GitHub Pages runs Jekyll unless told not to, and Jekyll drops files it
+    # does not recognise. Nothing here is a Jekyll site.
+    (destination / ".nojekyll").write_text("", encoding="utf-8")
 
     outlook = inputs.outlook
     as_of = f"{outlook.as_of:%Y-%m-%d}"
