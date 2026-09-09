@@ -1,6 +1,51 @@
 {
- "updated": "2026-09-07 18:46:47",
+ "updated": "2026-09-09 14:44:09",
  "observations": [
+  {
+   "timestamp": "2026-09-09 14:44:09",
+   "price": 79110.0,
+   "weight": 0.0,
+   "flip_level": 72377.28,
+   "distance": -0.08511,
+   "state": "armed",
+   "note": "price 79,110 is past 72,377; the next settled close enters"
+  },
+  {
+   "timestamp": "2026-09-07 19:46:45",
+   "price": 79360.51,
+   "weight": 0.0,
+   "flip_level": 72377.28,
+   "distance": -0.08799,
+   "state": "armed",
+   "note": "price 79,361 is past 72,377; the next settled close enters"
+  },
+  {
+   "timestamp": "2026-09-07 19:31:44",
+   "price": 79248.83,
+   "weight": 0.0,
+   "flip_level": 72377.28,
+   "distance": -0.08671,
+   "state": "armed",
+   "note": "price 79,249 is past 72,377; the next settled close enters"
+  },
+  {
+   "timestamp": "2026-09-07 19:16:45",
+   "price": 79175.5,
+   "weight": 0.0,
+   "flip_level": 72377.28,
+   "distance": -0.08586,
+   "state": "armed",
+   "note": "price 79,176 is past 72,377; the next settled close enters"
+  },
+  {
+   "timestamp": "2026-09-07 19:01:45",
+   "price": 79182.01,
+   "weight": 0.0,
+   "flip_level": 72377.28,
+   "distance": -0.08594,
+   "state": "armed",
+   "note": "price 79,182 is past 72,377; the next settled close enters"
+  },
   {
    "timestamp": "2026-09-07 18:46:47",
    "price": 79158.9,
