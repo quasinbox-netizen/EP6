@@ -1,6 +1,15 @@
 {
- "updated": "2026-09-09 14:44:09",
+ "updated": "2026-09-10 13:25:30",
  "observations": [
+  {
+   "timestamp": "2026-09-10 13:25:30",
+   "price": 76862.01,
+   "weight": 0.7871,
+   "flip_level": 46354.8,
+   "distance": -0.39691,
+   "state": "holding",
+   "note": "39.7% from 46,355"
+  },
   {
    "timestamp": "2026-09-09 14:44:09",
    "price": 79110.0,
@@ -138,8 +147,8 @@
   }
  ],
  "rule": "trend 50/200",
- "weight": 0.0,
- "flipLevel": 72377.28333333334,
- "flipText": "flips to long if the next close is above $72,377",
- "asOf": "2026-09-07"
+ "weight": 0.7871223140192071,
+ "flipLevel": 46354.8,
+ "flipText": "flips to flat if the next close is below $46,355",
+ "asOf": "2026-09-09"
 }
