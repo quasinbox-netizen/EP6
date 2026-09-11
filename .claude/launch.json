@@ -10,6 +10,18 @@
         "8511"
       ],
       "port": 8511
+    },
+    {
+      "name": "btc-cycle-lab-site",
+      "runtimeExecutable": "python",
+      "runtimeArgs": [
+        "-m",
+        "http.server",
+        "8512",
+        "--directory",
+        "docs"
+      ],
+      "port": 8512
     }
   ]
 }

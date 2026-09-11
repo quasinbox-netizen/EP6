@@ -41,6 +41,30 @@
 
   var root = document.getElementById('btclab-intro');
   if (!root) return;
+
+  /* Eight and a half seconds of skull, "PUMP!" and "-84%", and it used to run
+     on every single load. A reader who came back for the tables sat through
+     the whole fight again - on a site whose argument is that the fight is
+     unfalsifiable. Once a week per visitor is enough to make the point; after
+     that the page owes them the page.
+
+     Storage can throw rather than return null (a browser set to block site
+     data, a private window in some builds), and a first visit in that state
+     should see the intro rather than an error, so both ends are wrapped. The
+     dashboard is exempt: there it is the whole screen and loops on purpose. */
+  var SEEN_KEY = 'btclab.intro.seen';
+  var SEEN_FOR = 7 * 24 * 60 * 60 * 1000;
+  var standalone = !!window.__BTCLAB_STANDALONE__;
+  if (!standalone) {
+    var last = null;
+    try { last = window.localStorage.getItem(SEEN_KEY); } catch (err) { last = null; }
+    if (last && Date.now() - Number(last) < SEEN_FOR) {
+      if (root.parentNode) { root.parentNode.removeChild(root); }
+      return;
+    }
+    try { window.localStorage.setItem(SEEN_KEY, String(Date.now())); } catch (err) { /* fine */ }
+  }
+
   root.dataset.started = '1';
 
   /* Inside Streamlit this markup arrives inside an element container that the
@@ -56,7 +80,6 @@
   var ctx = canvas.getContext('2d');
   var skipBtn = root.querySelector('.btclab-skip:not(.btclab-mute)');
   var muteBtn = root.querySelector('.btclab-mute');
-  var standalone = !!window.__BTCLAB_STANDALONE__;
   var reduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
   var W = 0, H = 0, DPR = 1;

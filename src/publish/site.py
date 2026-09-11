@@ -41,7 +41,8 @@ from publish.disclosure import (corrections_html, provenance_html,
                                 rank_history_html, sweep_html,
                                 target_sweep_html)
 from publish.pages import cards as _cards
-from publish.pages import evidence_page, figure_html, today_page
+from publish.pages import (agent_in_plain_words, evidence_page, figure_html,
+                           hero, how_far, lede, method, which_way, workings)
 from publish.pages import table as _table
 from publish.payloads import desk_payload
 
@@ -52,12 +53,46 @@ PANELS = {
     "paper": ("paper_desk.html", "<!--PAPER:START-->", "<!--PAPER:END-->"),
     "agent": ("agent_desk.html", "<!--AGENT:START-->", "<!--AGENT:END-->"),
 }
+CHART_FITTER = """<script>
+  // Plotly measures its container at the moment the figure is inserted, and
+  // in a two-column row that moment is before the grid has settled: the first
+  // chart is drawn at the full width of the page, keeps it, and spills over
+  // the chart beside it. `responsive: true` only listens for window resizes,
+  // and there is no window resize on the way in - so watch the containers
+  // instead. The width check is what stops a resize from feeding itself.
+  (function () {
+    var widths = new WeakMap();
+    function fit(node) {
+      if (!window.Plotly || !node || !node.parentElement) { return; }
+      var width = Math.round(node.parentElement.clientWidth);
+      if (!width || widths.get(node) === width) { return; }
+      widths.set(node, width);
+      try { Plotly.Plots.resize(node); } catch (err) { /* not a plot yet */ }
+    }
+    function fitAll() {
+      document.querySelectorAll(".js-plotly-plot").forEach(fit);
+    }
+    window.addEventListener("load", function () {
+      fitAll();
+      if (!window.ResizeObserver) { return; }
+      var observer = new ResizeObserver(function (entries) {
+        entries.forEach(function (entry) {
+          var node = entry.target.querySelector(".js-plotly-plot");
+          if (node) { fit(node); }
+        });
+      });
+      document.querySelectorAll(".js-plotly-plot").forEach(function (node) {
+        if (node.parentElement) { observer.observe(node.parentElement); }
+      });
+    });
+  })();
+</script>"""
 DATA_START, DATA_END = "<!--DATA:START-->", "<!--DATA:END-->"
 PLOTLY = "https://cdn.plot.ly/plotly-2.35.2.min.js"
 
 PAGES = (
     ("index.html", "Today"),
-    ("now.html", "Now"),
+    ("now.html", "The cycle"),
     ("trader.html", "The agent"),
     ("evidence.html", "Evidence"),
     ("signals.html", "Signals"),
@@ -134,36 +169,199 @@ def _shell(title: str, current: str, body: str, *, as_of: str) -> str:
 <title>{title}</title>
 <script src="{PLOTLY}"></script>
 <style>
-  :root{{--bg:#05070a;--panel:#0d1219;--line:#1c2530;--ink:#e7ecf3;--dim:#8b98a9;--gold:#f7931a}}
+  /* One typeface, the reader's own. `-apple-system` resolves to SF Pro on a
+     Mac or an iPhone and to Segoe UI Variable on Windows 11: the look is the
+     system's, which is why it never looks downloaded, and it costs no request
+     and sends nobody's address to a font host. Monospace survives only inside
+     <code>. Everything else - headings, tables, the big figures - is the sans
+     with tabular numerals, so columns still line up on the decimal point.
+
+     Size and weight do the sorting the old page asked colour to do: a finding
+     is 21px, a caveat 15px and folded away, and the space between sections is
+     wide enough that a reader can tell where one answer ends. */
+  :root{{--bg:#000308;--panel:#101219;--raise:#171a22;--line:#252935;
+    --ink:#f4f6f9;--soft:#c3cad6;--dim:#8f99a8;--gold:#f7931a;--up:#2fcf83;--down:#ff5a5f;
+    --sans:-apple-system,BlinkMacSystemFont,"SF Pro Text","SF Pro Display",
+      "Segoe UI Variable Text","Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+    --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    --r:16px}}
   *{{box-sizing:border-box}}
   body{{margin:0;background:var(--bg);color:var(--ink);
-    font:14px/1.6 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}}
-  header{{padding:22px 24px 0;max-width:1180px;margin:0 auto}}
-  header h1{{margin:0;font-size:26px;letter-spacing:.02em}}
-  header p{{margin:6px 0 0;color:var(--dim);font-size:12.5px;max-width:70ch}}
-  nav{{margin:16px 0 0;display:flex;gap:6px;flex-wrap:wrap}}
-  nav a{{padding:6px 12px;border:1px solid var(--line);border-radius:999px;
-    color:var(--dim);text-decoration:none;font-size:12px}}
-  nav a.on{{background:var(--gold);border-color:var(--gold);color:#06090d;font-weight:700}}
-  nav a:hover{{color:var(--ink)}}
-  main{{max-width:1180px;margin:0 auto;padding:18px 24px 40px}}
-  section{{margin:26px 0}}
-  h2{{font-size:16px;letter-spacing:.04em;margin:0 0 10px;color:var(--ink)}}
-  .grid{{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:18px}}
-  .cards{{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px}}
-  .card{{border:1px solid var(--line);border-radius:8px;background:var(--panel);padding:11px 13px}}
-  .card u{{display:block;text-decoration:none;color:var(--dim);font-size:10px;
-    letter-spacing:.14em;text-transform:uppercase}}
-  .card b{{font-size:21px;font-weight:600}}
-  table{{width:100%;border-collapse:collapse;font-size:12.5px}}
-  th,td{{text-align:left;padding:6px 10px;border-bottom:1px solid var(--line)}}
-  th{{color:var(--dim);font-weight:600;font-size:10.5px;letter-spacing:.1em;text-transform:uppercase}}
-  .wrap{{overflow-x:auto;border:1px solid var(--line);border-radius:8px;background:var(--panel)}}
-  .note{{color:var(--dim);font-size:11.5px;margin-top:8px;max-width:80ch}}
-  .verdict{{border:1px solid #5c2230;border-left-width:3px;border-radius:8px;
-    background:#180d11;padding:12px 14px;color:#f3c9cf;font-size:12.5px}}
-  footer{{max-width:1180px;margin:0 auto;padding:0 24px 40px;color:var(--dim);font-size:11px}}
+    font:17px/1.6 var(--sans);letter-spacing:-.011em;
+    -webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;
+    -webkit-text-size-adjust:100%}}
+  code{{font-family:var(--mono);font-size:.88em;color:var(--soft)}}
+  a{{color:var(--gold);text-decoration:none}}
+  a:hover{{text-decoration:underline}}
+  header{{padding:44px 24px 0;max-width:1100px;margin:0 auto}}
+  header h1{{margin:0;font-size:40px;font-weight:700;letter-spacing:-.024em;line-height:1.08}}
+  header p{{margin:14px 0 0;color:var(--dim);font-size:17px;max-width:60ch;
+    letter-spacing:-.01em}}
+  nav{{margin:26px 0 0;display:flex;gap:7px;flex-wrap:wrap}}
+  nav a{{padding:8px 16px;border-radius:999px;background:var(--panel);
+    color:var(--soft);font-size:15px;font-weight:500;letter-spacing:-.01em;
+    border:1px solid transparent;text-decoration:none}}
+  nav a:hover{{background:var(--raise);color:var(--ink);text-decoration:none}}
+  nav a.on{{background:var(--gold);color:#0a0600;font-weight:600}}
+  main{{max-width:1100px;margin:0 auto;padding:0 24px 40px}}
+  section{{margin:0;padding:56px 0 8px;border-top:1px solid var(--line)}}
+  main>section:first-child{{border-top:0;padding-top:34px}}
+  h2{{font-size:28px;font-weight:700;letter-spacing:-.021em;line-height:1.2;
+    margin:0 0 18px}}
+  main p{{max-width:64ch}}
+  .lede{{font-size:21px;line-height:1.45;letter-spacing:-.015em;color:var(--soft);
+    margin:18px 0 0;max-width:60ch}}
+  .lede b{{color:var(--ink);font-weight:600}}
+  /* min-width:0 is load-bearing. A grid track is minmax(auto,1fr), and `auto`
+     resolves to min-content - so a Plotly SVG that renders wide pushes its own
+     column wider than the page and takes the neighbouring chart with it. */
+  .grid{{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:26px}}
+  .grid>div{{min-width:0}}
+  .grid>div>h2{{margin-top:0}}
+  .js-plotly-plot,.plot-container{{max-width:100%}}
+  .js-plotly-plot{{border-radius:var(--r);overflow:hidden;margin-top:22px}}
+
+  .cards{{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px}}
+  .card{{border-radius:var(--r);background:var(--panel);padding:16px 18px 18px}}
+  .card u{{display:block;text-decoration:none;color:var(--dim);font-size:12px;
+    font-weight:600;letter-spacing:.055em;text-transform:uppercase}}
+  .card b{{display:block;margin-top:7px;font-size:32px;font-weight:600;
+    letter-spacing:-.026em;line-height:1.12;font-variant-numeric:tabular-nums}}
+  .hero .cards{{margin-bottom:22px}}
+  .hero .card b{{font-size:34px}}
+
+  /* Where the price can be, as a bar rather than a sentence with four numbers
+     in it. The marker is today; the bar is the calibrated interval. */
+  .ranges{{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));
+    gap:16px;margin-top:26px}}
+  .range{{background:var(--panel);border-radius:var(--r);padding:18px 20px 20px}}
+  .range-top{{display:flex;justify-content:space-between;align-items:baseline;gap:12px}}
+  .range-top b{{font-size:19px;font-weight:600;letter-spacing:-.016em}}
+  .range-top span{{color:var(--dim);font-size:13px}}
+  .range-bar{{position:relative;height:10px;border-radius:999px;margin:18px 0 12px;
+    background:linear-gradient(90deg,rgba(76,139,245,.30),rgba(76,139,245,.62),
+      rgba(76,139,245,.30))}}
+  .range-bar i{{position:absolute;top:-5px;width:3px;height:20px;border-radius:2px;
+    background:var(--gold);transform:translateX(-1.5px);
+    box-shadow:0 0 0 3px rgba(0,3,8,.85)}}
+  .range-ends{{display:flex;justify-content:space-between;
+    font-variant-numeric:tabular-nums;font-size:17px;font-weight:600;
+    letter-spacing:-.018em}}
+  .range-ends u{{display:block;text-decoration:none;color:var(--dim);font-size:12.5px;
+    font-weight:500;letter-spacing:0}}
+  .range-ends span:last-child{{text-align:right}}
+
+  /* The rest of the site, as doors rather than as a row of tabs nobody read. */
+  .doors{{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));
+    gap:12px;margin-top:24px}}
+  .door{{display:block;background:var(--panel);border-radius:var(--r);padding:18px 20px;
+    color:var(--ink);text-decoration:none;border:1px solid transparent}}
+  .door:hover{{background:var(--raise);border-color:var(--line);text-decoration:none}}
+  .door b{{display:block;font-size:19px;font-weight:600;letter-spacing:-.016em}}
+  .door span{{display:block;margin-top:6px;color:var(--dim);font-size:14.5px;
+    line-height:1.45}}
+
+  table{{width:100%;border-collapse:collapse;font-size:15px;
+    font-variant-numeric:tabular-nums;letter-spacing:-.008em}}
+  th,td{{text-align:left;padding:12px 16px;border-bottom:1px solid var(--line);
+    white-space:nowrap;vertical-align:baseline}}
+  tbody tr:last-child td{{border-bottom:0}}
+  tbody tr:hover td{{background:var(--raise)}}
+  th{{color:var(--dim);font-weight:600;font-size:12px;letter-spacing:.05em;
+    text-transform:uppercase;white-space:normal}}
+  th abbr{{text-decoration:none;border-bottom:1px dotted #5b6675;cursor:help}}
+  td.num,th.num,td.flag,th.flag{{text-align:right}}
+  td.key{{color:var(--ink);font-weight:600;white-space:normal}}
+  td.txt{{white-space:normal;font-size:15px;color:var(--dim);min-width:26ch}}
+  /* Deliberately not green and red. "Rests on one trade: yes" and "survives
+     correction: yes" want opposite colours, so a palette that means good and
+     bad would lie in one column to be readable in the other. Weight carries
+     the presence instead. */
+  td .yes{{font-style:normal;font-weight:700;color:var(--ink)}}
+  td .no{{font-style:normal;color:#71808f}}
+  th.mark{{color:var(--gold)}}
+  th.mark,td.mark{{background:rgba(247,147,26,.055)}}
+  /* A table wider than its box gets a shadow at the edge it can scroll to,
+     and loses it when it cannot. Pure CSS: the covering gradients scroll with
+     the content, the shadows do not, so the shadow shows only once there is
+     something past the edge. */
+  .wrap{{overflow-x:auto;border-radius:var(--r);margin-top:22px;
+    background:
+      linear-gradient(to right,var(--panel) 30%,rgba(16,18,25,0)) left center,
+      linear-gradient(to left,var(--panel) 30%,rgba(16,18,25,0)) right center,
+      radial-gradient(farthest-side at 0 50%,rgba(0,0,0,.7),rgba(0,0,0,0)) left center,
+      radial-gradient(farthest-side at 100% 50%,rgba(0,0,0,.7),rgba(0,0,0,0)) right center,
+      var(--panel);
+    background-repeat:no-repeat;
+    background-size:44px 100%,44px 100%,16px 100%,16px 100%,100% 100%;
+    background-attachment:local,local,scroll,scroll,local}}
+
+  .note{{color:var(--dim);font-size:15px;line-height:1.6;margin-top:14px;max-width:66ch}}
+  details.method{{margin-top:20px;border-radius:var(--r);background:var(--panel)}}
+  details.method>summary{{cursor:pointer;padding:14px 18px;color:var(--soft);
+    font-size:14px;font-weight:600;letter-spacing:-.006em;list-style:none}}
+  details.method>summary::-webkit-details-marker{{display:none}}
+  details.method>summary::before{{content:"+";color:var(--gold);margin-right:10px;
+    font-weight:700}}
+  details.method[open]>summary::before{{content:"\\2013"}}
+  details.method>summary:hover{{color:var(--ink)}}
+  details.method[open]>summary{{border-bottom:1px solid var(--line)}}
+  details.method .note{{margin:0;padding:16px 18px;max-width:70ch}}
+
+  .verdict{{border-radius:var(--r);background:#1b0f13;padding:20px 22px;
+    color:#f8dade;font-size:18px;line-height:1.5;letter-spacing:-.012em;max-width:68ch;
+    border:1px solid #4a1f28}}
+  .verdict b{{color:#fff;font-weight:600}}
+
+  /* Four sentences, one per line, each one a whole thought. Nothing about the
+     robot's position needs a table or a chart to be said. */
+  .steps{{list-style:none;margin:24px 0 0;padding:0;max-width:66ch}}
+  .steps li{{position:relative;padding:14px 0 14px 26px;font-size:17px;line-height:1.55;
+    border-bottom:1px solid var(--line);color:var(--soft)}}
+  .steps li:last-child{{border-bottom:0}}
+  .steps li::before{{content:"";position:absolute;left:2px;top:23px;width:7px;height:7px;
+    border-radius:50%;background:var(--gold)}}
+  .steps b{{color:var(--ink);font-weight:600}}
+
+  footer{{max-width:1100px;margin:0 auto;padding:28px 24px 48px;color:var(--dim);
+    font-size:13.5px;line-height:1.6;border-top:1px solid var(--line)}}
   footer a{{color:var(--dim)}}
+
+  /* On a phone every one of these tables ran off the side of the screen with
+     nothing to say so. A row becomes a card, and each cell carries the column
+     name it was read under. */
+  @media (max-width:640px){{
+    header{{padding:30px 18px 0}}
+    header h1{{font-size:32px}}
+    header p{{font-size:16px}}
+    main,footer{{padding-left:18px;padding-right:18px}}
+    section{{padding-top:40px}}
+    h2{{font-size:23px}}
+    .lede{{font-size:19px}}
+    /* Two across rather than four stacked: a phone screen of one number per
+       scroll is a worse summary than a 2x2 a reader takes in at once. */
+    .cards{{grid-template-columns:1fr 1fr;gap:10px}}
+    .card{{padding:14px 15px 15px}}
+    .card u{{font-size:11px;letter-spacing:.045em}}
+    .card b,.hero .card b{{font-size:23px;letter-spacing:-.02em}}
+    .verdict{{font-size:17px;padding:18px}}
+    .wrap{{border-radius:0;background:none;overflow:visible}}
+    table,tbody,tr,td{{display:block;width:auto}}
+    thead{{display:none}}
+    tr{{border-radius:var(--r);background:var(--panel);padding:4px 16px;margin:0 0 12px}}
+    td{{display:flex;justify-content:space-between;align-items:baseline;gap:16px;
+      padding:9px 0;border-bottom:1px solid var(--line);white-space:normal;
+      text-align:right;line-height:1.45}}
+    td:last-child{{border-bottom:0}}
+    td::before{{content:attr(data-label);color:var(--dim);font-size:12px;
+      font-weight:500;letter-spacing:.02em;text-transform:uppercase;text-align:left;
+      flex:0 0 auto;max-width:50%;line-height:1.45}}
+    td.key{{color:var(--gold);font-weight:700;font-size:17px;text-align:left;
+      padding:14px 0 11px}}
+    td.key::before{{display:none}}
+    td.mark{{background:none}}
+    td.txt{{min-width:0}}
+  }}
 </style>
 </head>
 <body>
@@ -177,6 +375,7 @@ def _shell(title: str, current: str, body: str, *, as_of: str) -> str:
 <main>
 {body}
 </main>
+{CHART_FITTER}
 {HEIGHT_REPORTER}
 <footer>
   Research output, not advice, and not a signal to act on. Built from the local
@@ -246,6 +445,56 @@ def _rank_history_section(inputs: SiteInputs) -> str:
     return rank_history_html(history, chart, minimum=MIN_RANK_OBSERVATIONS)
 
 
+def _track_record(scored: pd.DataFrame, *, base_rate: float | None) -> str:
+    """The claims written before the outcome, counted on the front page.
+
+    Everything else on this site is a backtest, written by someone who had
+    already seen the answer, and every page says so. The ledger is the one
+    exception, and it was the last tab: a reader could leave without ever
+    learning that the site writes its forecasts down in advance and scores
+    them when the window closes. That is the only part of it that can ever
+    become evidence, so it belongs where it can be seen.
+
+    The verdict line comes from `forecast.ledger`, not from here. It is phrased
+    so a thin record cannot be read as a good one - under twenty settled claims
+    it refuses to give a score at all - and rewriting that sentence for a
+    summary card is exactly how a summary starts flattering its own data.
+    """
+    if scored.empty:
+        return ""
+    matured = scored["matured"].astype(bool)
+    settled, open_claims = int(matured.sum()), int((~matured).sum())
+    board = ledger_scoreboard(scored, base_rate=base_rate)
+
+    pending = pd.to_datetime(scored.loc[~matured, "target_date"])
+    when = f"{pending.min():%d %b %Y}" if len(pending) else "-"
+    kept = "-"
+    if not board.empty:
+        intervals = board[board["claim"] == "interval"]
+        if len(intervals):
+            within = int((intervals["delivered"] >= intervals["promised"] - 0.1).sum())
+            kept = f"{within} of {len(intervals)}"
+
+    return (
+        "<section><h2>Written down before the outcome</h2>"
+        + lede("Every other page here is a backtest, scored by someone who had "
+               "already seen the answer. <b>This one is not.</b> The claims are "
+               "recorded while the window is still open, and settled when it "
+               "closes.")
+        + _cards([
+            ("Claims recorded", f"{len(scored):,}"),
+            ("Settled so far", f"{settled:,}"),
+            ("Next one settles" if open_claims else "All settled", when),
+            ("Levels that kept their promise", kept),
+        ])
+        + f"<div class='verdict' style='margin-top:20px'>"
+          f"{ledger_verdict(board, open_claims)}</div>"
+        + "<p class='note'>Every claim, with the day it was written and the day "
+          "it settles, is on <a href='receipts.html'>the receipts page</a>.</p>"
+        + "</section>"
+    )
+
+
 def build(destination: Path, dashboard_dir: Path, inputs: SiteInputs) -> list:
     """Write the site. Returns the paths written."""
     destination = Path(destination)
@@ -264,6 +513,14 @@ def build(destination: Path, dashboard_dir: Path, inputs: SiteInputs) -> list:
     outlook = inputs.outlook
     as_of = f"{outlook.as_of:%Y-%m-%d}"
     written = []
+    conditional, unconditional = outlook.rates[0]
+
+    # Scored once and read twice: the front page carries the count, the
+    # receipts page carries the claims. Two calls would be two chances for the
+    # summary and the detail to disagree about how many have settled.
+    ledger = inputs.ledger if inputs.ledger is not None else pd.DataFrame()
+    scored = (score_ledger(ledger, inputs.signals["price"])
+              if not ledger.empty else pd.DataFrame())
 
     # --- the practical page ----------------------------------------------
     # First, because it answers the question a visitor arrives with. The intro
@@ -272,11 +529,19 @@ def build(destination: Path, dashboard_dir: Path, inputs: SiteInputs) -> list:
     written.append(_write(
         destination / "index.html",
         _shell("BTC Cycle Lab", "Today",
-               panel(dashboard_dir, "intro") + today_page(inputs), as_of=as_of),
+               panel(dashboard_dir, "intro")
+               + hero(inputs)
+               + which_way(inputs)
+               + how_far(inputs)
+               + _track_record(scored, base_rate=unconditional.share_positive)
+               + agent_in_plain_words(inputs)
+               + "<section><h2>How much has actually survived the tests</h2>"
+               + panel(dashboard_dir, "meter", inputs.evidence.as_dict())
+               + "</section>"
+               + workings(), as_of=as_of),
     ))
 
     # --- the board -------------------------------------------------------
-    conditional, unconditional = outlook.rates[0]
     body = [
         "<section>",
         f"<h2>{outlook.days_since_halving} days after the last halving</h2>",
@@ -293,9 +558,12 @@ def build(destination: Path, dashboard_dir: Path, inputs: SiteInputs) -> list:
         "<section class='grid'>",
         "<div><h2>The cycle, four laps on one dial</h2>"
         + figure_html(cycle_clock(outlook.paths, outlook.days_since_halving), "clock")
-        + "<p class='note'>Each lap starts at its own halving, drawn as a multiple of "
-          "the price on that day. The shape they share is why people believe in the "
-          "cycle; the distance between them is why four of them cannot prove it.</p></div>",
+        + lede("The shape the laps share is why people believe in the cycle; the "
+               "distance between them is why <b>four of them cannot prove it</b>.")
+        + method("How the dial is drawn",
+                 "Each lap starts at its own halving, drawn as a multiple of the "
+                 "price on that day.")
+        + "</div>",
     ]
 
     if inputs.range_forecast is not None and not inputs.range_forecast.empty:
@@ -311,32 +579,40 @@ def build(destination: Path, dashboard_dir: Path, inputs: SiteInputs) -> list:
             "<div><h2>Where the price may be</h2>"
             + figure_html(range_chart(inputs.range_forecast, inputs.signals["price"],
                                       inputs.range_days), "range")
-            + f"<p class='note'>{inputs.range_days}-day interval from the volatility "
-              f"model, drawn only at the horizon it was scored at. Levels shown "
-              f"({quoted}) kept their promise in a walk-forward coverage test{withheld}. "
-              "It says how far, never which way.</p></div>"
+            + lede("It says <b>how far</b>, never which way.")
+            + method(
+                "Which levels are drawn, and which are not",
+                f"{inputs.range_days}-day interval from the volatility model, drawn "
+                f"only at the horizon it was scored at. Levels shown ({quoted}) kept "
+                f"their promise in a walk-forward coverage test{withheld}.",
+            )
+            + "</div>"
         )
     body.append("</section>")
 
     rates = pd.DataFrame([
         {
             "horizon": f"{matched.horizon}d",
-            "median %, days like today": round(100 * matched.median, 1),
-            "positive %, days like today": round(100 * matched.share_positive),
-            "independent windows": matched.effective_n,
-            "median %, every day": round(100 * whole.median, 1),
-            "positive %, every day": round(100 * whole.share_positive),
+            "median_matched": round(100 * matched.median, 1),
+            "positive_matched": round(100 * matched.share_positive),
+            "independent_windows": matched.effective_n,
+            "median_all": round(100 * whole.median, 1),
+            "positive_all": round(100 * whole.share_positive),
             "quotable": "yes" if matched.usable else "no - too few windows",
         }
         for matched, whole in outlook.rates
     ])
     body += [
         "<section><h2>What usually happened from days like today</h2>",
-        _table(rates),
-        "<p class='note'>Matched days are not observations: consecutive days share "
-        "almost all of their forward window, so only non-overlapping ones are counted. "
-        "The long-horizon rows are the ones that look most impressive and rest on the "
-        "fewest.</p></section>",
+        lede("The long-horizon rows are the ones that look most impressive and "
+             "<b>rest on the fewest windows</b>."),
+        _table(rates, highlight="independent_windows"),
+        method(
+            "Why the window count is the column to read",
+            "Matched days are not observations: consecutive days share almost all "
+            "of their forward window, so only non-overlapping ones are counted.",
+        ),
+        "</section>",
     ]
 
     rules = pd.DataFrame([
@@ -366,14 +642,16 @@ def build(destination: Path, dashboard_dir: Path, inputs: SiteInputs) -> list:
     verdict_lines.append(inputs.control_note)
     body += [
         "<section><h2>What the rules say, and what the tests say</h2>",
-        _table(rules),
-        "<div class='verdict' style='margin-top:14px'>"
+        lede("Where each rule stands today, and underneath it what the tests did "
+             "to the rules themselves."),
+        _table(rules, highlight="position"),
+        "<div class='verdict' style='margin-top:16px'>"
         + "<br>".join(verdict_lines)
         + "<br>Read all of it as description, not as a plan.</div></section>",
     ]
 
     written.append(_write(destination / "now.html",
-                          _shell("BTC Cycle Lab - now", "Now", "".join(body), as_of=as_of)))
+                          _shell("BTC Cycle Lab - the cycle", "The cycle", "".join(body), as_of=as_of)))
 
     # --- the paper portfolio ---------------------------------------------
     if inputs.paper:
@@ -423,22 +701,30 @@ def build(destination: Path, dashboard_dir: Path, inputs: SiteInputs) -> list:
         trader_body = (
             "<section><h2>What the agent is doing right now</h2>"
             + panel(dashboard_dir, "agent")
-            + "<p class='note'>It looks at the price every fifteen minutes and writes "
-              "down what it sees, whether or not anything happens. The position "
-              "changes only when a daily bar settles: the rule was tested on daily "
-              "closes, and acting on an intraday tick would be an untested rule "
-              "borrowing a tested one's credibility.</p></section>"
+            + method(
+                "Why it watches often and acts rarely",
+                "It looks at the price every fifteen minutes and writes down what "
+                "it sees, whether or not anything happens. The position changes "
+                "only when a daily bar settles: the rule was tested on daily "
+                "closes, and acting on an intraday tick would be an untested rule "
+                "borrowing a tested one's credibility.",
+            )
+            + "</section>"
             + "<section><h2>A virtual portfolio, in public</h2>"
             + panel(dashboard_dir, "paper", inputs.paper["payload"])
             + "</section><section><h2>Against simply holding</h2>"
             + chart
-            + "<p class='note'>Virtual money, started on the last halving - a date "
-              "fixed by the subject rather than chosen after seeing the curve. "
-              "Direction comes from the 50/200 crossover, which this project shows "
-              "has no demonstrated edge; size comes from the volatility forecast, "
-              "which does. Costs are charged on every change. The dotted line is "
-              "what doing nothing would have earned, and it is the only benchmark "
-              "that matters.</p></section>"
+            + lede("The dotted line is what doing nothing would have earned, and "
+                   "it is <b>the only benchmark that matters</b>.")
+            + method(
+                "What the portfolio is made of",
+                "Virtual money, started on the last halving - a date fixed by the "
+                "subject rather than chosen after seeing the curve. Direction comes "
+                "from the 50/200 crossover, which this project shows has no "
+                "demonstrated edge; size comes from the volatility forecast, which "
+                "does. Costs are charged on every change.",
+            )
+            + "</section>"
             + provenance_html((inputs.saved or {}).get("sizing_today", pd.DataFrame()),
                               (inputs.saved or {}).get("sizing_comparison", pd.DataFrame()))
             + _band_sweep_section(inputs)
@@ -460,20 +746,24 @@ def build(destination: Path, dashboard_dir: Path, inputs: SiteInputs) -> list:
         + "<div style='height:640px'>"
         + panel(dashboard_dir, "desk", desk_payload(inputs.signals))
         + "</div>"
-        "<p class='note'>The live quote comes from Binance and is used only for the "
-        "distance to a trigger; every statistic on the panel is from the local "
-        "sample. Turn sound on to hear entries and exits during a replay.</p></section>"
+        + method(
+            "Where the numbers on the panel come from",
+            "The live quote comes from Binance and is used only for the distance "
+            "to a trigger; every statistic on the panel is from the local sample. "
+            "Turn sound on to hear entries and exits during a replay.",
+        )
+        + "</section>"
     )
     written.append(_write(destination / "signals.html",
                           _shell("BTC Cycle Lab - signals", "Signals", desk_body, as_of=as_of)))
 
     # --- the receipts ----------------------------------------------------
-    ledger = inputs.ledger if inputs.ledger is not None else pd.DataFrame()
-    if ledger.empty:
+    # `scored` was built once at the top: the count on the front page and the
+    # rows here have to come from the same scoring pass.
+    if scored.empty:
         receipts = ("<section><h2>Receipts</h2><p class='note'>No claim has been "
                     "recorded yet.</p></section>")
     else:
-        scored = score_ledger(ledger, inputs.signals["price"])
         open_claims = int((~scored["matured"].astype(bool)).sum())
         board = ledger_scoreboard(scored, base_rate=unconditional.share_positive)
         shown = scored.assign(
@@ -483,12 +773,13 @@ def build(destination: Path, dashboard_dir: Path, inputs: SiteInputs) -> list:
                   "p_up", "matured", "realised"]].round(4)
         receipts = (
             "<section><h2>Receipts</h2>"
-            "<p class='note'>Every other page is a backtest, written by someone who had "
-            "already seen the outcome. This one is the exception: claims recorded before "
-            "their window closed, scored when it closes.</p>"
-            f"<div class='verdict' style='margin:14px 0'>{ledger_verdict(board, open_claims)}</div>"
-            + _table(shown)
-            + ("" if board.empty else "<h2 style='margin-top:22px'>Settled</h2>"
+            + lede("Every other page is a backtest, written by someone who had "
+                   "already seen the outcome. <b>This one is the exception</b>: "
+                   "claims recorded before their window closed, scored when it closes.")
+            + f"<div class='verdict' style='margin:16px 0'>"
+              f"{ledger_verdict(board, open_claims)}</div>"
+            + _table(shown, highlight="realised")
+            + ("" if board.empty else "<h2 style='margin-top:26px'>Settled</h2>"
                + _table(board.round(3)))
             + "</section>"
         )

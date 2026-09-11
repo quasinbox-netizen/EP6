@@ -6,79 +6,115 @@
 <title>BTC Cycle Lab</title>
 <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
 <style>
-  /* Two typefaces, and the split between them carries the whole page.
-     Everything used to be monospace at 14px - the findings, the tables, the
-     methodology, the licence footnote - so nothing on the page said what to
-     read first, and a reader who wanted the answer had to read all of it.
-     Figures stay monospace, because columns of numbers have to line up.
-     Sentences move to the reading face, because sentences are read, not
-     scanned. Size does the rest of the work: a finding is 17px, a caveat 14,
-     and a caveat is folded away besides. */
-  :root{--bg:#05070a;--panel:#0d1219;--line:#1c2530;--ink:#e7ecf3;--dim:#93a1b2;--gold:#f7931a;
-    --prose:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  /* One typeface, the reader's own. `-apple-system` resolves to SF Pro on a
+     Mac or an iPhone and to Segoe UI Variable on Windows 11: the look is the
+     system's, which is why it never looks downloaded, and it costs no request
+     and sends nobody's address to a font host. Monospace survives only inside
+     <code>. Everything else - headings, tables, the big figures - is the sans
+     with tabular numerals, so columns still line up on the decimal point.
+
+     Size and weight do the sorting the old page asked colour to do: a finding
+     is 21px, a caveat 15px and folded away, and the space between sections is
+     wide enough that a reader can tell where one answer ends. */
+  :root{--bg:#000308;--panel:#101219;--raise:#171a22;--line:#252935;
+    --ink:#f4f6f9;--soft:#c3cad6;--dim:#8f99a8;--gold:#f7931a;--up:#2fcf83;--down:#ff5a5f;
+    --sans:-apple-system,BlinkMacSystemFont,"SF Pro Text","SF Pro Display",
+      "Segoe UI Variable Text","Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
     --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
-    --figure:tabular-nums}
+    --r:16px}
   *{box-sizing:border-box}
   body{margin:0;background:var(--bg);color:var(--ink);
-    font:16px/1.65 var(--prose);-webkit-text-size-adjust:100%}
-  code{font-family:var(--mono);font-size:.92em;color:var(--ink)}
-  a{color:var(--gold)}
-  header{padding:26px 24px 0;max-width:1180px;margin:0 auto}
-  header h1{margin:0;font:700 29px/1.15 var(--mono);letter-spacing:.01em}
-  header p{margin:9px 0 0;color:var(--dim);font-size:14.5px;max-width:66ch}
-  nav{margin:18px 0 0;display:flex;gap:6px;flex-wrap:wrap}
-  nav a{padding:7px 14px;border:1px solid var(--line);border-radius:999px;
-    color:var(--dim);text-decoration:none;font:13px/1 var(--mono)}
-  nav a.on{background:var(--gold);border-color:var(--gold);color:#06090d;font-weight:700}
-  nav a:hover{color:var(--ink);border-color:#33404f}
-  main{max-width:1180px;margin:0 auto;padding:6px 24px 40px}
-  section{margin:0;padding:32px 0 8px;border-top:1px solid var(--line)}
-  main>section:first-child{border-top:0;padding-top:22px}
-  h2{font:700 20px/1.35 var(--mono);letter-spacing:.01em;margin:0 0 14px;color:var(--ink)}
-  main p{max-width:70ch}
-  .lede{font-size:17px;line-height:1.55;margin:0 0 16px;max-width:66ch;color:#dbe3ec}
-  .lede b{color:#fff}
-  /* Four sentences, one per line, each one a whole thought. Nothing about the
-     robot's position needs a table or a chart to be said. */
-  .steps{list-style:none;margin:16px 0 0;padding:0;max-width:72ch}
-  .steps li{position:relative;padding:11px 0 11px 30px;font-size:16px;line-height:1.6;
-    border-bottom:1px solid var(--line)}
-  .steps li:last-child{border-bottom:0}
-  .steps li::before{content:"";position:absolute;left:6px;top:20px;width:7px;height:7px;
-    border-radius:50%;background:var(--gold)}
-  .steps b{color:#fff}
+    font:17px/1.6 var(--sans);letter-spacing:-.011em;
+    -webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;
+    -webkit-text-size-adjust:100%}
+  code{font-family:var(--mono);font-size:.88em;color:var(--soft)}
+  a{color:var(--gold);text-decoration:none}
+  a:hover{text-decoration:underline}
+  header{padding:44px 24px 0;max-width:1100px;margin:0 auto}
+  header h1{margin:0;font-size:40px;font-weight:700;letter-spacing:-.024em;line-height:1.08}
+  header p{margin:14px 0 0;color:var(--dim);font-size:17px;max-width:60ch;
+    letter-spacing:-.01em}
+  nav{margin:26px 0 0;display:flex;gap:7px;flex-wrap:wrap}
+  nav a{padding:8px 16px;border-radius:999px;background:var(--panel);
+    color:var(--soft);font-size:15px;font-weight:500;letter-spacing:-.01em;
+    border:1px solid transparent;text-decoration:none}
+  nav a:hover{background:var(--raise);color:var(--ink);text-decoration:none}
+  nav a.on{background:var(--gold);color:#0a0600;font-weight:600}
+  main{max-width:1100px;margin:0 auto;padding:0 24px 40px}
+  section{margin:0;padding:56px 0 8px;border-top:1px solid var(--line)}
+  main>section:first-child{border-top:0;padding-top:34px}
+  h2{font-size:28px;font-weight:700;letter-spacing:-.021em;line-height:1.2;
+    margin:0 0 18px}
+  main p{max-width:64ch}
+  .lede{font-size:21px;line-height:1.45;letter-spacing:-.015em;color:var(--soft);
+    margin:18px 0 0;max-width:60ch}
+  .lede b{color:var(--ink);font-weight:600}
   /* min-width:0 is load-bearing. A grid track is minmax(auto,1fr), and `auto`
      resolves to min-content - so a Plotly SVG that renders wide pushes its own
      column wider than the page and takes the neighbouring chart with it. */
-  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:22px}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:26px}
   .grid>div{min-width:0}
   .grid>div>h2{margin-top:0}
   .js-plotly-plot,.plot-container{max-width:100%}
-  .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px}
-  .card{border:1px solid var(--line);border-radius:8px;background:var(--panel);padding:12px 14px}
-  .card u{display:block;text-decoration:none;color:var(--dim);font:600 11px/1.4 var(--mono);
-    letter-spacing:.13em;text-transform:uppercase}
-  .card b{display:block;margin-top:3px;font:600 24px/1.2 var(--mono);
-    font-variant-numeric:var(--figure)}
-  table{width:100%;border-collapse:collapse;font:13.5px/1.5 var(--mono);
-    font-variant-numeric:var(--figure)}
-  th,td{text-align:left;padding:9px 13px;border-bottom:1px solid var(--line);
+  .js-plotly-plot{border-radius:var(--r);overflow:hidden;margin-top:22px}
+
+  .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px}
+  .card{border-radius:var(--r);background:var(--panel);padding:16px 18px 18px}
+  .card u{display:block;text-decoration:none;color:var(--dim);font-size:12px;
+    font-weight:600;letter-spacing:.055em;text-transform:uppercase}
+  .card b{display:block;margin-top:7px;font-size:32px;font-weight:600;
+    letter-spacing:-.026em;line-height:1.12;font-variant-numeric:tabular-nums}
+  .hero .cards{margin-bottom:22px}
+  .hero .card b{font-size:34px}
+
+  /* Where the price can be, as a bar rather than a sentence with four numbers
+     in it. The marker is today; the bar is the calibrated interval. */
+  .ranges{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));
+    gap:16px;margin-top:26px}
+  .range{background:var(--panel);border-radius:var(--r);padding:18px 20px 20px}
+  .range-top{display:flex;justify-content:space-between;align-items:baseline;gap:12px}
+  .range-top b{font-size:19px;font-weight:600;letter-spacing:-.016em}
+  .range-top span{color:var(--dim);font-size:13px}
+  .range-bar{position:relative;height:10px;border-radius:999px;margin:18px 0 12px;
+    background:linear-gradient(90deg,rgba(76,139,245,.30),rgba(76,139,245,.62),
+      rgba(76,139,245,.30))}
+  .range-bar i{position:absolute;top:-5px;width:3px;height:20px;border-radius:2px;
+    background:var(--gold);transform:translateX(-1.5px);
+    box-shadow:0 0 0 3px rgba(0,3,8,.85)}
+  .range-ends{display:flex;justify-content:space-between;
+    font-variant-numeric:tabular-nums;font-size:17px;font-weight:600;
+    letter-spacing:-.018em}
+  .range-ends u{display:block;text-decoration:none;color:var(--dim);font-size:12.5px;
+    font-weight:500;letter-spacing:0}
+  .range-ends span:last-child{text-align:right}
+
+  /* The rest of the site, as doors rather than as a row of tabs nobody read. */
+  .doors{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));
+    gap:12px;margin-top:24px}
+  .door{display:block;background:var(--panel);border-radius:var(--r);padding:18px 20px;
+    color:var(--ink);text-decoration:none;border:1px solid transparent}
+  .door:hover{background:var(--raise);border-color:var(--line);text-decoration:none}
+  .door b{display:block;font-size:19px;font-weight:600;letter-spacing:-.016em}
+  .door span{display:block;margin-top:6px;color:var(--dim);font-size:14.5px;
+    line-height:1.45}
+
+  table{width:100%;border-collapse:collapse;font-size:15px;
+    font-variant-numeric:tabular-nums;letter-spacing:-.008em}
+  th,td{text-align:left;padding:12px 16px;border-bottom:1px solid var(--line);
     white-space:nowrap;vertical-align:baseline}
   tbody tr:last-child td{border-bottom:0}
-  tbody tr:hover td{background:#111a25}
-  th{color:var(--dim);font-weight:600;font-size:11px;letter-spacing:.07em;
+  tbody tr:hover td{background:var(--raise)}
+  th{color:var(--dim);font-weight:600;font-size:12px;letter-spacing:.05em;
     text-transform:uppercase;white-space:normal}
-  th abbr{text-decoration:none;border-bottom:1px dotted #58657a;cursor:help}
-  td.num,th.num{text-align:right}
-  td.flag,th.flag{text-align:right}
-  td.key{color:#fff;white-space:normal}
-  td.txt{white-space:normal;font-family:var(--prose);font-size:14px;color:var(--dim);
-    min-width:26ch}
+  th abbr{text-decoration:none;border-bottom:1px dotted #5b6675;cursor:help}
+  td.num,th.num,td.flag,th.flag{text-align:right}
+  td.key{color:var(--ink);font-weight:600;white-space:normal}
+  td.txt{white-space:normal;font-size:15px;color:var(--dim);min-width:26ch}
   /* Deliberately not green and red. "Rests on one trade: yes" and "survives
      correction: yes" want opposite colours, so a palette that means good and
      bad would lie in one column to be readable in the other. Weight carries
      the presence instead. */
-  td .yes{font-style:normal;font-weight:700;color:#fff}
+  td .yes{font-style:normal;font-weight:700;color:var(--ink)}
   td .no{font-style:normal;color:#71808f}
   th.mark{color:var(--gold)}
   th.mark,td.mark{background:rgba(247,147,26,.055)}
@@ -86,58 +122,79 @@
      and loses it when it cannot. Pure CSS: the covering gradients scroll with
      the content, the shadows do not, so the shadow shows only once there is
      something past the edge. */
-  .wrap{overflow-x:auto;border:1px solid var(--line);border-radius:8px;
+  .wrap{overflow-x:auto;border-radius:var(--r);margin-top:22px;
     background:
-      linear-gradient(to right,var(--panel) 30%,rgba(13,18,25,0)) left center,
-      linear-gradient(to left,var(--panel) 30%,rgba(13,18,25,0)) right center,
+      linear-gradient(to right,var(--panel) 30%,rgba(16,18,25,0)) left center,
+      linear-gradient(to left,var(--panel) 30%,rgba(16,18,25,0)) right center,
       radial-gradient(farthest-side at 0 50%,rgba(0,0,0,.7),rgba(0,0,0,0)) left center,
       radial-gradient(farthest-side at 100% 50%,rgba(0,0,0,.7),rgba(0,0,0,0)) right center,
       var(--panel);
     background-repeat:no-repeat;
     background-size:44px 100%,44px 100%,16px 100%,16px 100%,100% 100%;
     background-attachment:local,local,scroll,scroll,local}
-  .note{color:var(--dim);font-size:14px;line-height:1.6;margin-top:10px;max-width:70ch}
-  details.method{margin-top:14px;border:1px solid var(--line);border-radius:8px;
-    background:#080c12}
-  details.method>summary{cursor:pointer;padding:10px 14px;color:var(--dim);
-    font:600 11.5px/1.4 var(--mono);letter-spacing:.11em;text-transform:uppercase;
-    list-style:none}
+
+  .note{color:var(--dim);font-size:15px;line-height:1.6;margin-top:14px;max-width:66ch}
+  details.method{margin-top:20px;border-radius:var(--r);background:var(--panel)}
+  details.method>summary{cursor:pointer;padding:14px 18px;color:var(--soft);
+    font-size:14px;font-weight:600;letter-spacing:-.006em;list-style:none}
   details.method>summary::-webkit-details-marker{display:none}
-  details.method>summary::before{content:"+";color:var(--gold);margin-right:9px;
+  details.method>summary::before{content:"+";color:var(--gold);margin-right:10px;
     font-weight:700}
   details.method[open]>summary::before{content:"\2013"}
   details.method>summary:hover{color:var(--ink)}
   details.method[open]>summary{border-bottom:1px solid var(--line)}
-  details.method .note{margin:0;padding:12px 14px;max-width:72ch}
-  .verdict{border:1px solid #5c2230;border-left-width:3px;border-radius:8px;
-    background:#180d11;padding:14px 17px;color:#f6d3d8;font-size:15px;line-height:1.55;
-    max-width:74ch}
-  footer{max-width:1180px;margin:0 auto;padding:0 24px 40px;color:var(--dim);
-    font-size:12.5px;line-height:1.6}
+  details.method .note{margin:0;padding:16px 18px;max-width:70ch}
+
+  .verdict{border-radius:var(--r);background:#1b0f13;padding:20px 22px;
+    color:#f8dade;font-size:18px;line-height:1.5;letter-spacing:-.012em;max-width:68ch;
+    border:1px solid #4a1f28}
+  .verdict b{color:#fff;font-weight:600}
+
+  /* Four sentences, one per line, each one a whole thought. Nothing about the
+     robot's position needs a table or a chart to be said. */
+  .steps{list-style:none;margin:24px 0 0;padding:0;max-width:66ch}
+  .steps li{position:relative;padding:14px 0 14px 26px;font-size:17px;line-height:1.55;
+    border-bottom:1px solid var(--line);color:var(--soft)}
+  .steps li:last-child{border-bottom:0}
+  .steps li::before{content:"";position:absolute;left:2px;top:23px;width:7px;height:7px;
+    border-radius:50%;background:var(--gold)}
+  .steps b{color:var(--ink);font-weight:600}
+
+  footer{max-width:1100px;margin:0 auto;padding:28px 24px 48px;color:var(--dim);
+    font-size:13.5px;line-height:1.6;border-top:1px solid var(--line)}
   footer a{color:var(--dim)}
+
   /* On a phone every one of these tables ran off the side of the screen with
      nothing to say so. A row becomes a card, and each cell carries the column
      name it was read under. */
   @media (max-width:640px){
-    body{font-size:15.5px}
-    header,main,footer{padding-left:16px;padding-right:16px}
-    header h1{font-size:24px}
-    h2{font-size:18px}
-    .lede{font-size:16px}
-    .wrap{border:0;background:none;overflow:visible}
+    header{padding:30px 18px 0}
+    header h1{font-size:32px}
+    header p{font-size:16px}
+    main,footer{padding-left:18px;padding-right:18px}
+    section{padding-top:40px}
+    h2{font-size:23px}
+    .lede{font-size:19px}
+    /* Two across rather than four stacked: a phone screen of one number per
+       scroll is a worse summary than a 2x2 a reader takes in at once. */
+    .cards{grid-template-columns:1fr 1fr;gap:10px}
+    .card{padding:14px 15px 15px}
+    .card u{font-size:11px;letter-spacing:.045em}
+    .card b,.hero .card b{font-size:23px;letter-spacing:-.02em}
+    .verdict{font-size:17px;padding:18px}
+    .wrap{border-radius:0;background:none;overflow:visible}
     table,tbody,tr,td{display:block;width:auto}
     thead{display:none}
-    tr{border:1px solid var(--line);border-radius:8px;background:var(--panel);
-      padding:2px 13px;margin:0 0 10px}
+    tr{border-radius:var(--r);background:var(--panel);padding:4px 16px;margin:0 0 12px}
     td{display:flex;justify-content:space-between;align-items:baseline;gap:16px;
-      padding:6px 0;border-bottom:1px solid #131b25;white-space:normal;text-align:right;
-      line-height:1.45}
+      padding:9px 0;border-bottom:1px solid var(--line);white-space:normal;
+      text-align:right;line-height:1.45}
     td:last-child{border-bottom:0}
-    td::before{content:attr(data-label);color:var(--dim);font-size:10.5px;
-      letter-spacing:.07em;text-transform:uppercase;text-align:left;flex:0 0 auto;
-      max-width:50%;line-height:1.45}
-    td.key{color:var(--gold);font-weight:700;font-size:14.5px;text-align:left;
-      padding:11px 0 9px;border-bottom:1px solid var(--line)}
+    td::before{content:attr(data-label);color:var(--dim);font-size:12px;
+      font-weight:500;letter-spacing:.02em;text-transform:uppercase;text-align:left;
+      flex:0 0 auto;max-width:50%;line-height:1.45}
+    td.key{color:var(--gold);font-weight:700;font-size:17px;text-align:left;
+      padding:14px 0 11px}
     td.key::before{display:none}
     td.mark{background:none}
     td.txt{min-width:0}
@@ -150,7 +207,7 @@
   <p>Whether the halving cycle and macro events explain anything in the price of
   BTC. Every result carries a confidence interval and a count of observations;
   without those it is not a result. Sample to 2026-09-11.</p>
-  <nav><a href="index.html" class="on">Today</a><a href="now.html">Now</a><a href="trader.html">The agent</a><a href="evidence.html">Evidence</a><a href="signals.html">Signals</a><a href="receipts.html">Receipts</a></nav>
+  <nav><a href="index.html" class="on">Today</a><a href="now.html">The cycle</a><a href="trader.html">The agent</a><a href="evidence.html">Evidence</a><a href="signals.html">Signals</a><a href="receipts.html">Receipts</a></nav>
 </header>
 <main>
 
@@ -186,6 +243,30 @@
 
   var root = document.getElementById('btclab-intro');
   if (!root) return;
+
+  /* Eight and a half seconds of skull, "PUMP!" and "-84%", and it used to run
+     on every single load. A reader who came back for the tables sat through
+     the whole fight again - on a site whose argument is that the fight is
+     unfalsifiable. Once a week per visitor is enough to make the point; after
+     that the page owes them the page.
+
+     Storage can throw rather than return null (a browser set to block site
+     data, a private window in some builds), and a first visit in that state
+     should see the intro rather than an error, so both ends are wrapped. The
+     dashboard is exempt: there it is the whole screen and loops on purpose. */
+  var SEEN_KEY = 'btclab.intro.seen';
+  var SEEN_FOR = 7 * 24 * 60 * 60 * 1000;
+  var standalone = !!window.__BTCLAB_STANDALONE__;
+  if (!standalone) {
+    var last = null;
+    try { last = window.localStorage.getItem(SEEN_KEY); } catch (err) { last = null; }
+    if (last && Date.now() - Number(last) < SEEN_FOR) {
+      if (root.parentNode) { root.parentNode.removeChild(root); }
+      return;
+    }
+    try { window.localStorage.setItem(SEEN_KEY, String(Date.now())); } catch (err) { /* fine */ }
+  }
+
   root.dataset.started = '1';
 
   /* Inside Streamlit this markup arrives inside an element container that the
@@ -201,7 +282,6 @@
   var ctx = canvas.getContext('2d');
   var skipBtn = root.querySelector('.btclab-skip:not(.btclab-mute)');
   var muteBtn = root.querySelector('.btclab-mute');
-  var standalone = !!window.__BTCLAB_STANDALONE__;
   var reduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
   var W = 0, H = 0, DPR = 1;
@@ -820,7 +900,259 @@
   };
 })();
 </script>
-<section><h2>What the robot is doing with its own money</h2><p class='lede'>A machine on this site runs a pretend portfolio in the open. Here is what it holds, and what would make it act next.</p><div class='cards'><div class='card'><u>Right now</u><b>Holding bitcoin</b></div><div class='card'><u>Of the money, in bitcoin</u><b>79%</b></div><div class='card'><u>It sells below</u><b>$22,843</b></div><div class='card'><u>Since it started</u><b>-8.8%</b></div></div><ul class='steps'><li><b>Right now it owns bitcoin.</b> 79% of its money is in bitcoin, and the rest is sitting in cash.</li><li><b>Last time it acted</b> was 2026-09-08: it put its cash into bitcoin, at $78,456, going from 0% in bitcoin to 79%.</li><li><b>Next it sells</b>, and it sells on the day the price closes below $22,843. Until that day it does nothing at all.</li><li><b>The score so far.</b> It began with $10,000 on 2024-04-20 and has $9,124 today (-8.8%). Someone who bought once on that same day and never touched it again would have $11,882 (+18.8%).</li></ul><div class='verdict'><b>Please do not copy it.</b> It follows one simple rule - buy when the 50-day average price crosses above the 200-day one, sell when it crosses back. This project tested that rule and <b>could not show it beats buying on dates picked out of a hat</b>. The robot is here so you can watch a rule fail in public, with the dates written down in advance. It is not here to be followed, and nothing on this site is advice.</div><details class='method'><summary>The small print behind those four sentences</summary><div class='note'>The buy and sell prices above are the direction rule flipping. How much it holds is a separate decision made by the volatility forecast, so the size of the position can change on a day when the rule itself says nothing. Fees and slippage are charged on every change. <a href='trader.html'>The agent page</a> shows every trade and the curve behind them.</div></details></section><section><h2>What this tool can tell you about today</h2><p class='note'>As of 2026-09-11, price 77,163. Everything here is computed from data up to that date.</p><div class='cards'><div class='card'><u>How much to hold</u><b>0.79</b></div><div class='card'><u>Forecast volatility</u><b>45%</b></div><div class='card'><u>Which way it goes</u><b>Unknown</b></div></div><p class='lede'>It says <b>how much</b> to hold, never which way - volatility is the one thing in this project that is forecastable.</p><details class='method'><summary>How the position is worked out</summary><div class='note'>The position is target volatility divided by forecast volatility, after a rebalance band. Both the target and the band were chosen on this history rather than brought in from outside it; <a href='trader.html'>the agent page says how</a>.</div></details><p>In <b>10 days</b>, with 90% probability, between <b>70,906</b> and <b>94,942</b> (-12.7% / +16.9%).</p><p>In <b>30 days</b>, with 95% probability, between <b>60,434</b> and <b>115,848</b> (-25.6% / +42.6%).</p><details class='method'><summary>How the intervals were checked</summary><div class='note'>These intervals passed a coverage test on non-overlapping windows: a 90% interval really did contain the outcome about 90% of the time. Levels that failed are withheld rather than quietly widened.</div></details></section><section><h2>When to get in or out</h2><div class='verdict'><b>This tool cannot tell you, and it is not being modest.</b> Every timing rule it tested was rejected, the hypothesis scan finds nothing after correction, 160 specifications of the halving question find nothing, and the forecast model loses to its own baselines. An entry signal here would be invented.</div><div class='wrap'><table><thead><tr><th class="key">rule</th><th class="num"><abbr title="Return per unit of volatility, annualised. Higher is better, and on its own it proves nothing.">Sharpe</abbr></th><th class="num"><abbr title="The same rule entered on randomly chosen dates. This, not zero, is the bar the real timing has to clear.">Sharpe, random dates</abbr></th><th class="num"><abbr title="How often chance alone produces a result at least this good. Below 0.05 is the usual bar.">p</abbr></th><th class="num"><abbr title="The same test re-run with the single best trade dropped. A result that rests on one trade shows itself here.">p, best trade removed</abbr></th><th class="flag"><abbr title="Whether removing a single trade destroys the result.">rests on one trade</abbr></th><th class="flag mark"><abbr title="Whether it still holds once every rule that was tried at all is counted.">survives correction</abbr></th></tr></thead><tbody><tr><td class="key" data-label="rule">buy and hold</td><td class="num" data-label="Sharpe">0.711</td><td class="num" data-label="Sharpe, random dates">0.716</td><td class="num" data-label="p">0.955</td><td class="num" data-label="p, best trade removed">0.930</td><td class="flag" data-label="rests on one trade"><i class="no">no</i></td><td class="flag mark" data-label="survives correction"><i class="no">no</i></td></tr><tr><td class="key" data-label="rule">trend 50/200</td><td class="num" data-label="Sharpe">0.900</td><td class="num" data-label="Sharpe, random dates">0.556</td><td class="num" data-label="p">0.194</td><td class="num" data-label="p, best trade removed">0.285</td><td class="flag" data-label="rests on one trade"><i class="no">no</i></td><td class="flag mark" data-label="survives correction"><i class="no">no</i></td></tr><tr><td class="key" data-label="rule">halving +30d</td><td class="num" data-label="Sharpe">0.090</td><td class="num" data-label="Sharpe, random dates">0.135</td><td class="num" data-label="p">0.538</td><td class="num" data-label="p, best trade removed">0.581</td><td class="flag" data-label="rests on one trade"><i class="no">no</i></td><td class="flag mark" data-label="survives correction"><i class="no">no</i></td></tr><tr><td class="key" data-label="rule">halving +90d</td><td class="num" data-label="Sharpe">0.705</td><td class="num" data-label="Sharpe, random dates">0.188</td><td class="num" data-label="p">0.088</td><td class="num" data-label="p, best trade removed">0.525</td><td class="flag" data-label="rests on one trade"><i class="no">no</i></td><td class="flag mark" data-label="survives correction"><i class="no">no</i></td></tr><tr><td class="key" data-label="rule">halving +180d</td><td class="num" data-label="Sharpe">0.667</td><td class="num" data-label="Sharpe, random dates">0.233</td><td class="num" data-label="p">0.194</td><td class="num" data-label="p, best trade removed">0.347</td><td class="flag" data-label="rests on one trade"><i class="no">no</i></td><td class="flag mark" data-label="survives correction"><i class="no">no</i></td></tr><tr><td class="key" data-label="rule">halving +365d</td><td class="num" data-label="Sharpe">1.176</td><td class="num" data-label="Sharpe, random dates">0.342</td><td class="num" data-label="p">0.013</td><td class="num" data-label="p, best trade removed">0.166</td><td class="flag" data-label="rests on one trade"><i class="yes">yes</i></td><td class="flag mark" data-label="survives correction"><i class="no">no</i></td></tr><tr><td class="key" data-label="rule">macro: liquidity up, rates down</td><td class="num" data-label="Sharpe">0.318</td><td class="num" data-label="Sharpe, random dates">0.224</td><td class="num" data-label="p">0.394</td><td class="num" data-label="p, best trade removed">0.647</td><td class="flag" data-label="rests on one trade"><i class="no">no</i></td><td class="flag mark" data-label="survives correction"><i class="no">no</i></td></tr></tbody></table></div><details class='method'><summary>How each rule was tested</summary><div class='note'>Every rule is compared against ITSELF applied at random times, so the bar is its own random-timing Sharpe rather than zero. A p under 0.05 would mean the timing beat chance. <b>p, best trade removed</b> re-runs the test with one trade dropped, and <b>survives correction</b> accounts for having tried several rules at once. Nothing survives. Hover a column heading for what it measures.</div></details></section>
+<section class='hero'><div class='cards'><div class='card'><u>Trend, measured today</u><b>Up</b></div><div class='card'><u>Price</u><b>$77,163</b></div><div class='card'><u>The robot</u><b>Holding</b></div><div class='card'><u>Sells if tomorrow closes below</u><b>$22,843</b></div></div><div style="height:430px; width:100%;">                            <div id="tape" class="plotly-graph-div" style="height:100%; width:100%;"></div>            <script>                window.PLOTLYENV=window.PLOTLYENV || {};                                if (document.getElementById("tape")) {                    Plotly.newPlot(                        "tape",                        [{"hovertemplate":"%{x|%d %b %Y}\u003cbr\u003e$%{y:,.0f}\u003cextra\u003e\u003c\u002fextra\u003e","line":{"color":"#e8a33d","width":2},"mode":"lines","name":"BTC\u002fUSD","x":["2024-09-12T00:00:00.000000","2024-09-13T00:00:00.000000","2024-09-14T00:00:00.000000","2024-09-15T00:00:00.000000","2024-09-16T00:00:00.000000","2024-09-17T00:00:00.000000","2024-09-18T00:00:00.000000","2024-09-19T00:00:00.000000","2024-09-20T00:00:00.000000","2024-09-21T00:00:00.000000","2024-09-22T00:00:00.000000","2024-09-23T00:00:00.000000","2024-09-24T00:00:00.000000","2024-09-25T00:00:00.000000","2024-09-26T00:00:00.000000","2024-09-27T00:00:00.000000","2024-09-28T00:00:00.000000","2024-09-29T00:00:00.000000","2024-09-30T00:00:00.000000","2024-10-01T00:00:00.000000","2024-10-02T00:00:00.000000","2024-10-03T00:00:00.000000","2024-10-04T00:00:00.000000","2024-10-05T00:00:00.000000","2024-10-06T00:00:00.000000","2024-10-07T00:00:00.000000","2024-10-08T00:00:00.000000","2024-10-09T00:00:00.000000","2024-10-10T00:00:00.000000","2024-10-11T00:00:00.000000","2024-10-12T00:00:00.000000","2024-10-13T00:00:00.000000","2024-10-14T00:00:00.000000","2024-10-15T00:00:00.000000","2024-10-16T00:00:00.000000","2024-10-17T00:00:00.000000","2024-10-18T00:00:00.000000","2024-10-19T00:00:00.000000","2024-10-20T00:00:00.000000","2024-10-21T00:00:00.000000","2024-10-22T00:00:00.000000","2024-10-23T00:00:00.000000","2024-10-24T00:00:00.000000","2024-10-25T00:00:00.000000","2024-10-26T00:00:00.000000","2024-10-27T00:00:00.000000","2024-10-28T00:00:00.000000","2024-10-29T00:00:00.000000","2024-10-30T00:00:00.000000","2024-10-31T00:00:00.000000","2024-11-01T00:00:00.000000","2024-11-02T00:00:00.000000","2024-11-03T00:00:00.000000","2024-11-04T00:00:00.000000","2024-11-05T00:00:00.000000","2024-11-06T00:00:00.000000","2024-11-07T00:00:00.000000","2024-11-08T00:00:00.000000","2024-11-09T00:00:00.000000","2024-11-10T00:00:00.000000","2024-11-11T00:00:00.000000","2024-11-12T00:00:00.000000","2024-11-13T00:00:00.000000","2024-11-14T00:00:00.000000","2024-11-15T00:00:00.000000","2024-11-16T00:00:00.000000","2024-11-17T00:00:00.000000","2024-11-18T00:00:00.000000","2024-11-19T00:00:00.000000","2024-11-20T00:00:00.000000","2024-11-21T00:00:00.000000","2024-11-22T00:00:00.000000","2024-11-23T00:00:00.000000","2024-11-24T00:00:00.000000","2024-11-25T00:00:00.000000","2024-11-26T00:00:00.000000","2024-11-27T00:00:00.000000","2024-11-28T00:00:00.000000","2024-11-29T00:00:00.000000","2024-11-30T00:00:00.000000","2024-12-01T00:00:00.000000","2024-12-02T00:00:00.000000","2024-12-03T00:00:00.000000","2024-12-04T00:00:00.000000","2024-12-05T00:00:00.000000","2024-12-06T00:00:00.000000","2024-12-07T00:00:00.000000","2024-12-08T00:00:00.000000","2024-12-09T00:00:00.000000","2024-12-10T00:00:00.000000","2024-12-11T00:00:00.000000","2024-12-12T00:00:00.000000","2024-12-13T00:00:00.000000","2024-12-14T00:00:00.000000","2024-12-15T00:00:00.000000","2024-12-16T00:00:00.000000","2024-12-17T00:00:00.000000","2024-12-18T00:00:00.000000","2024-12-19T00:00:00.000000","2024-12-20T00:00:00.000000","2024-12-21T00:00:00.000000","2024-12-22T00:00:00.000000","2024-12-23T00:00:00.000000","2024-12-24T00:00:00.000000","2024-12-25T00:00:00.000000","2024-12-26T00:00:00.000000","2024-12-27T00:00:00.000000","2024-12-28T00:00:00.000000","2024-12-29T00:00:00.000000","2024-12-30T00:00:00.000000","2024-12-31T00:00:00.000000","2025-01-01T00:00:00.000000","2025-01-02T00:00:00.000000","2025-01-03T00:00:00.000000","2025-01-04T00:00:00.000000","2025-01-05T00:00:00.000000","2025-01-06T00:00:00.000000","2025-01-07T00:00:00.000000","2025-01-08T00:00:00.000000","2025-01-09T00:00:00.000000","2025-01-10T00:00:00.000000","2025-01-11T00:00:00.000000","2025-01-12T00:00:00.000000","2025-01-13T00:00:00.000000","2025-01-14T00:00:00.000000","2025-01-15T00:00:00.000000","2025-01-16T00:00:00.000000","2025-01-17T00:00:00.000000","2025-01-18T00:00:00.000000","2025-01-19T00:00:00.000000","2025-01-20T00:00:00.000000","2025-01-21T00:00:00.000000","2025-01-22T00:00:00.000000","2025-01-23T00:00:00.000000","2025-01-24T00:00:00.000000","2025-01-25T00:00:00.000000","2025-01-26T00:00:00.000000","2025-01-27T00:00:00.000000","2025-01-28T00:00:00.000000","2025-01-29T00:00:00.000000","2025-01-30T00:00:00.000000","2025-01-31T00:00:00.000000","2025-02-01T00:00:00.000000","2025-02-02T00:00:00.000000","2025-02-03T00:00:00.000000","2025-02-04T00:00:00.000000","2025-02-05T00:00:00.000000","2025-02-06T00:00:00.000000","2025-02-07T00:00:00.000000","2025-02-08T00:00:00.000000","2025-02-09T00:00:00.000000","2025-02-10T00:00:00.000000","2025-02-11T00:00:00.000000","2025-02-12T00:00:00.000000","2025-02-13T00:00:00.000000","2025-02-14T00:00:00.000000","2025-02-15T00:00:00.000000","2025-02-16T00:00:00.000000","2025-02-17T00:00:00.000000","2025-02-18T00:00:00.000000","2025-02-19T00:00:00.000000","2025-02-20T00:00:00.000000","2025-02-21T00:00:00.000000","2025-02-22T00:00:00.000000","2025-02-23T00:00:00.000000","2025-02-24T00:00:00.000000","2025-02-25T00:00:00.000000","2025-02-26T00:00:00.000000","2025-02-27T00:00:00.000000","2025-02-28T00:00:00.000000","2025-03-01T00:00:00.000000","2025-03-02T00:00:00.000000","2025-03-03T00:00:00.000000","2025-03-04T00:00:00.000000","2025-03-05T00:00:00.000000","2025-03-06T00:00:00.000000","2025-03-07T00:00:00.000000","2025-03-08T00:00:00.000000","2025-03-09T00:00:00.000000","2025-03-10T00:00:00.000000","2025-03-11T00:00:00.000000","2025-03-12T00:00:00.000000","2025-03-13T00:00:00.000000","2025-03-14T00:00:00.000000","2025-03-15T00:00:00.000000","2025-03-16T00:00:00.000000","2025-03-17T00:00:00.000000","2025-03-18T00:00:00.000000","2025-03-19T00:00:00.000000","2025-03-20T00:00:00.000000","2025-03-21T00:00:00.000000","2025-03-22T00:00:00.000000","2025-03-23T00:00:00.000000","2025-03-24T00:00:00.000000","2025-03-25T00:00:00.000000","2025-03-26T00:00:00.000000","2025-03-27T00:00:00.000000","2025-03-28T00:00:00.000000","2025-03-29T00:00:00.000000","2025-03-30T00:00:00.000000","2025-03-31T00:00:00.000000","2025-04-01T00:00:00.000000","2025-04-02T00:00:00.000000","2025-04-03T00:00:00.000000","2025-04-04T00:00:00.000000","2025-04-05T00:00:00.000000","2025-04-06T00:00:00.000000","2025-04-07T00:00:00.000000","2025-04-08T00:00:00.000000","2025-04-09T00:00:00.000000","2025-04-10T00:00:00.000000","2025-04-11T00:00:00.000000","2025-04-12T00:00:00.000000","2025-04-13T00:00:00.000000","2025-04-14T00:00:00.000000","2025-04-15T00:00:00.000000","2025-04-16T00:00:00.000000","2025-04-17T00:00:00.000000","2025-04-18T00:00:00.000000","2025-04-19T00:00:00.000000","2025-04-20T00:00:00.000000","2025-04-21T00:00:00.000000","2025-04-22T00:00:00.000000","2025-04-23T00:00:00.000000","2025-04-24T00:00:00.000000","2025-04-25T00:00:00.000000","2025-04-26T00:00:00.000000","2025-04-27T00:00:00.000000","2025-04-28T00:00:00.000000","2025-04-29T00:00:00.000000","2025-04-30T00:00:00.000000","2025-05-01T00:00:00.000000","2025-05-02T00:00:00.000000","2025-05-03T00:00:00.000000","2025-05-04T00:00:00.000000","2025-05-05T00:00:00.000000","2025-05-06T00:00:00.000000","2025-05-07T00:00:00.000000","2025-05-08T00:00:00.000000","2025-05-09T00:00:00.000000","2025-05-10T00:00:00.000000","2025-05-11T00:00:00.000000","2025-05-12T00:00:00.000000","2025-05-13T00:00:00.000000","2025-05-14T00:00:00.000000","2025-05-15T00:00:00.000000","2025-05-16T00:00:00.000000","2025-05-17T00:00:00.000000","2025-05-18T00:00:00.000000","2025-05-19T00:00:00.000000","2025-05-20T00:00:00.000000","2025-05-21T00:00:00.000000","2025-05-22T00:00:00.000000","2025-05-23T00:00:00.000000","2025-05-24T00:00:00.000000","2025-05-25T00:00:00.000000","2025-05-26T00:00:00.000000","2025-05-27T00:00:00.000000","2025-05-28T00:00:00.000000","2025-05-29T00:00:00.000000","2025-05-30T00:00:00.000000","2025-05-31T00:00:00.000000","2025-06-01T00:00:00.000000","2025-06-02T00:00:00.000000","2025-06-03T00:00:00.000000","2025-06-04T00:00:00.000000","2025-06-05T00:00:00.000000","2025-06-06T00:00:00.000000","2025-06-07T00:00:00.000000","2025-06-08T00:00:00.000000","2025-06-09T00:00:00.000000","2025-06-10T00:00:00.000000","2025-06-11T00:00:00.000000","2025-06-12T00:00:00.000000","2025-06-13T00:00:00.000000","2025-06-14T00:00:00.000000","2025-06-15T00:00:00.000000","2025-06-16T00:00:00.000000","2025-06-17T00:00:00.000000","2025-06-18T00:00:00.000000","2025-06-19T00:00:00.000000","2025-06-20T00:00:00.000000","2025-06-21T00:00:00.000000","2025-06-22T00:00:00.000000","2025-06-23T00:00:00.000000","2025-06-24T00:00:00.000000","2025-06-25T00:00:00.000000","2025-06-26T00:00:00.000000","2025-06-27T00:00:00.000000","2025-06-28T00:00:00.000000","2025-06-29T00:00:00.000000","2025-06-30T00:00:00.000000","2025-07-01T00:00:00.000000","2025-07-02T00:00:00.000000","2025-07-03T00:00:00.000000","2025-07-04T00:00:00.000000","2025-07-05T00:00:00.000000","2025-07-06T00:00:00.000000","2025-07-07T00:00:00.000000","2025-07-08T00:00:00.000000","2025-07-09T00:00:00.000000","2025-07-10T00:00:00.000000","2025-07-11T00:00:00.000000","2025-07-12T00:00:00.000000","2025-07-13T00:00:00.000000","2025-07-14T00:00:00.000000","2025-07-15T00:00:00.000000","2025-07-16T00:00:00.000000","2025-07-17T00:00:00.000000","2025-07-18T00:00:00.000000","2025-07-19T00:00:00.000000","2025-07-20T00:00:00.000000","2025-07-21T00:00:00.000000","2025-07-22T00:00:00.000000","2025-07-23T00:00:00.000000","2025-07-24T00:00:00.000000","2025-07-25T00:00:00.000000","2025-07-26T00:00:00.000000","2025-07-27T00:00:00.000000","2025-07-28T00:00:00.000000","2025-07-29T00:00:00.000000","2025-07-30T00:00:00.000000","2025-07-31T00:00:00.000000","2025-08-01T00:00:00.000000","2025-08-02T00:00:00.000000","2025-08-03T00:00:00.000000","2025-08-04T00:00:00.000000","2025-08-05T00:00:00.000000","2025-08-06T00:00:00.000000","2025-08-07T00:00:00.000000","2025-08-08T00:00:00.000000","2025-08-09T00:00:00.000000","2025-08-10T00:00:00.000000","2025-08-11T00:00:00.000000","2025-08-12T00:00:00.000000","2025-08-13T00:00:00.000000","2025-08-14T00:00:00.000000","2025-08-15T00:00:00.000000","2025-08-16T00:00:00.000000","2025-08-17T00:00:00.000000","2025-08-18T00:00:00.000000","2025-08-19T00:00:00.000000","2025-08-20T00:00:00.000000","2025-08-21T00:00:00.000000","2025-08-22T00:00:00.000000","2025-08-23T00:00:00.000000","2025-08-24T00:00:00.000000","2025-08-25T00:00:00.000000","2025-08-26T00:00:00.000000","2025-08-27T00:00:00.000000","2025-08-28T00:00:00.000000","2025-08-29T00:00:00.000000","2025-08-30T00:00:00.000000","2025-08-31T00:00:00.000000","2025-09-01T00:00:00.000000","2025-09-02T00:00:00.000000","2025-09-03T00:00:00.000000","2025-09-04T00:00:00.000000","2025-09-05T00:00:00.000000","2025-09-06T00:00:00.000000","2025-09-07T00:00:00.000000","2025-09-08T00:00:00.000000","2025-09-09T00:00:00.000000","2025-09-10T00:00:00.000000","2025-09-11T00:00:00.000000","2025-09-12T00:00:00.000000","2025-09-13T00:00:00.000000","2025-09-14T00:00:00.000000","2025-09-15T00:00:00.000000","2025-09-16T00:00:00.000000","2025-09-17T00:00:00.000000","2025-09-18T00:00:00.000000","2025-09-19T00:00:00.000000","2025-09-20T00:00:00.000000","2025-09-21T00:00:00.000000","2025-09-22T00:00:00.000000","2025-09-23T00:00:00.000000","2025-09-24T00:00:00.000000","2025-09-25T00:00:00.000000","2025-09-26T00:00:00.000000","2025-09-27T00:00:00.000000","2025-09-28T00:00:00.000000","2025-09-29T00:00:00.000000","2025-09-30T00:00:00.000000","2025-10-01T00:00:00.000000","2025-10-02T00:00:00.000000","2025-10-03T00:00:00.000000","2025-10-04T00:00:00.000000","2025-10-05T00:00:00.000000","2025-10-06T00:00:00.000000","2025-10-07T00:00:00.000000","2025-10-08T00:00:00.000000","2025-10-09T00:00:00.000000","2025-10-10T00:00:00.000000","2025-10-11T00:00:00.000000","2025-10-12T00:00:00.000000","2025-10-13T00:00:00.000000","2025-10-14T00:00:00.000000","2025-10-15T00:00:00.000000","2025-10-16T00:00:00.000000","2025-10-17T00:00:00.000000","2025-10-18T00:00:00.000000","2025-10-19T00:00:00.000000","2025-10-20T00:00:00.000000","2025-10-21T00:00:00.000000","2025-10-22T00:00:00.000000","2025-10-23T00:00:00.000000","2025-10-24T00:00:00.000000","2025-10-25T00:00:00.000000","2025-10-26T00:00:00.000000","2025-10-27T00:00:00.000000","2025-10-28T00:00:00.000000","2025-10-29T00:00:00.000000","2025-10-30T00:00:00.000000","2025-10-31T00:00:00.000000","2025-11-01T00:00:00.000000","2025-11-02T00:00:00.000000","2025-11-03T00:00:00.000000","2025-11-04T00:00:00.000000","2025-11-05T00:00:00.000000","2025-11-06T00:00:00.000000","2025-11-07T00:00:00.000000","2025-11-08T00:00:00.000000","2025-11-09T00:00:00.000000","2025-11-10T00:00:00.000000","2025-11-11T00:00:00.000000","2025-11-12T00:00:00.000000","2025-11-13T00:00:00.000000","2025-11-14T00:00:00.000000","2025-11-15T00:00:00.000000","2025-11-16T00:00:00.000000","2025-11-17T00:00:00.000000","2025-11-18T00:00:00.000000","2025-11-19T00:00:00.000000","2025-11-20T00:00:00.000000","2025-11-21T00:00:00.000000","2025-11-22T00:00:00.000000","2025-11-23T00:00:00.000000","2025-11-24T00:00:00.000000","2025-11-25T00:00:00.000000","2025-11-26T00:00:00.000000","2025-11-27T00:00:00.000000","2025-11-28T00:00:00.000000","2025-11-29T00:00:00.000000","2025-11-30T00:00:00.000000","2025-12-01T00:00:00.000000","2025-12-02T00:00:00.000000","2025-12-03T00:00:00.000000","2025-12-04T00:00:00.000000","2025-12-05T00:00:00.000000","2025-12-06T00:00:00.000000","2025-12-07T00:00:00.000000","2025-12-08T00:00:00.000000","2025-12-09T00:00:00.000000","2025-12-10T00:00:00.000000","2025-12-11T00:00:00.000000","2025-12-12T00:00:00.000000","2025-12-13T00:00:00.000000","2025-12-14T00:00:00.000000","2025-12-15T00:00:00.000000","2025-12-16T00:00:00.000000","2025-12-17T00:00:00.000000","2025-12-18T00:00:00.000000","2025-12-19T00:00:00.000000","2025-12-20T00:00:00.000000","2025-12-21T00:00:00.000000","2025-12-22T00:00:00.000000","2025-12-23T00:00:00.000000","2025-12-24T00:00:00.000000","2025-12-25T00:00:00.000000","2025-12-26T00:00:00.000000","2025-12-27T00:00:00.000000","2025-12-28T00:00:00.000000","2025-12-29T00:00:00.000000","2025-12-30T00:00:00.000000","2025-12-31T00:00:00.000000","2026-01-01T00:00:00.000000","2026-01-02T00:00:00.000000","2026-01-03T00:00:00.000000","2026-01-04T00:00:00.000000","2026-01-05T00:00:00.000000","2026-01-06T00:00:00.000000","2026-01-07T00:00:00.000000","2026-01-08T00:00:00.000000","2026-01-09T00:00:00.000000","2026-01-10T00:00:00.000000","2026-01-11T00:00:00.000000","2026-01-12T00:00:00.000000","2026-01-13T00:00:00.000000","2026-01-14T00:00:00.000000","2026-01-15T00:00:00.000000","2026-01-16T00:00:00.000000","2026-01-17T00:00:00.000000","2026-01-18T00:00:00.000000","2026-01-19T00:00:00.000000","2026-01-20T00:00:00.000000","2026-01-21T00:00:00.000000","2026-01-22T00:00:00.000000","2026-01-23T00:00:00.000000","2026-01-24T00:00:00.000000","2026-01-25T00:00:00.000000","2026-01-26T00:00:00.000000","2026-01-27T00:00:00.000000","2026-01-28T00:00:00.000000","2026-01-29T00:00:00.000000","2026-01-30T00:00:00.000000","2026-01-31T00:00:00.000000","2026-02-01T00:00:00.000000","2026-02-02T00:00:00.000000","2026-02-03T00:00:00.000000","2026-02-04T00:00:00.000000","2026-02-05T00:00:00.000000","2026-02-06T00:00:00.000000","2026-02-07T00:00:00.000000","2026-02-08T00:00:00.000000","2026-02-09T00:00:00.000000","2026-02-10T00:00:00.000000","2026-02-11T00:00:00.000000","2026-02-12T00:00:00.000000","2026-02-13T00:00:00.000000","2026-02-14T00:00:00.000000","2026-02-15T00:00:00.000000","2026-02-16T00:00:00.000000","2026-02-17T00:00:00.000000","2026-02-18T00:00:00.000000","2026-02-19T00:00:00.000000","2026-02-20T00:00:00.000000","2026-02-21T00:00:00.000000","2026-02-22T00:00:00.000000","2026-02-23T00:00:00.000000","2026-02-24T00:00:00.000000","2026-02-25T00:00:00.000000","2026-02-26T00:00:00.000000","2026-02-27T00:00:00.000000","2026-02-28T00:00:00.000000","2026-03-01T00:00:00.000000","2026-03-02T00:00:00.000000","2026-03-03T00:00:00.000000","2026-03-04T00:00:00.000000","2026-03-05T00:00:00.000000","2026-03-06T00:00:00.000000","2026-03-07T00:00:00.000000","2026-03-08T00:00:00.000000","2026-03-09T00:00:00.000000","2026-03-10T00:00:00.000000","2026-03-11T00:00:00.000000","2026-03-12T00:00:00.000000","2026-03-13T00:00:00.000000","2026-03-14T00:00:00.000000","2026-03-15T00:00:00.000000","2026-03-16T00:00:00.000000","2026-03-17T00:00:00.000000","2026-03-18T00:00:00.000000","2026-03-19T00:00:00.000000","2026-03-20T00:00:00.000000","2026-03-21T00:00:00.000000","2026-03-22T00:00:00.000000","2026-03-23T00:00:00.000000","2026-03-24T00:00:00.000000","2026-03-25T00:00:00.000000","2026-03-26T00:00:00.000000","2026-03-27T00:00:00.000000","2026-03-28T00:00:00.000000","2026-03-29T00:00:00.000000","2026-03-30T00:00:00.000000","2026-03-31T00:00:00.000000","2026-04-01T00:00:00.000000","2026-04-02T00:00:00.000000","2026-04-03T00:00:00.000000","2026-04-04T00:00:00.000000","2026-04-05T00:00:00.000000","2026-04-06T00:00:00.000000","2026-04-07T00:00:00.000000","2026-04-08T00:00:00.000000","2026-04-09T00:00:00.000000","2026-04-10T00:00:00.000000","2026-04-11T00:00:00.000000","2026-04-12T00:00:00.000000","2026-04-13T00:00:00.000000","2026-04-14T00:00:00.000000","2026-04-15T00:00:00.000000","2026-04-16T00:00:00.000000","2026-04-17T00:00:00.000000","2026-04-18T00:00:00.000000","2026-04-19T00:00:00.000000","2026-04-20T00:00:00.000000","2026-04-21T00:00:00.000000","2026-04-22T00:00:00.000000","2026-04-23T00:00:00.000000","2026-04-24T00:00:00.000000","2026-04-25T00:00:00.000000","2026-04-26T00:00:00.000000","2026-04-27T00:00:00.000000","2026-04-28T00:00:00.000000","2026-04-29T00:00:00.000000","2026-04-30T00:00:00.000000","2026-05-01T00:00:00.000000","2026-05-02T00:00:00.000000","2026-05-03T00:00:00.000000","2026-05-04T00:00:00.000000","2026-05-05T00:00:00.000000","2026-05-06T00:00:00.000000","2026-05-07T00:00:00.000000","2026-05-08T00:00:00.000000","2026-05-09T00:00:00.000000","2026-05-10T00:00:00.000000","2026-05-11T00:00:00.000000","2026-05-12T00:00:00.000000","2026-05-13T00:00:00.000000","2026-05-14T00:00:00.000000","2026-05-15T00:00:00.000000","2026-05-16T00:00:00.000000","2026-05-17T00:00:00.000000","2026-05-18T00:00:00.000000","2026-05-19T00:00:00.000000","2026-05-20T00:00:00.000000","2026-05-21T00:00:00.000000","2026-05-22T00:00:00.000000","2026-05-23T00:00:00.000000","2026-05-24T00:00:00.000000","2026-05-25T00:00:00.000000","2026-05-26T00:00:00.000000","2026-05-27T00:00:00.000000","2026-05-28T00:00:00.000000","2026-05-29T00:00:00.000000","2026-05-30T00:00:00.000000","2026-05-31T00:00:00.000000","2026-06-01T00:00:00.000000","2026-06-02T00:00:00.000000","2026-06-03T00:00:00.000000","2026-06-04T00:00:00.000000","2026-06-05T00:00:00.000000","2026-06-06T00:00:00.000000","2026-06-07T00:00:00.000000","2026-06-08T00:00:00.000000","2026-06-09T00:00:00.000000","2026-06-10T00:00:00.000000","2026-06-11T00:00:00.000000","2026-06-12T00:00:00.000000","2026-06-13T00:00:00.000000","2026-06-14T00:00:00.000000","2026-06-15T00:00:00.000000","2026-06-16T00:00:00.000000","2026-06-17T00:00:00.000000","2026-06-18T00:00:00.000000","2026-06-19T00:00:00.000000","2026-06-20T00:00:00.000000","2026-06-21T00:00:00.000000","2026-06-22T00:00:00.000000","2026-06-23T00:00:00.000000","2026-06-24T00:00:00.000000","2026-06-25T00:00:00.000000","2026-06-26T00:00:00.000000","2026-06-27T00:00:00.000000","2026-06-28T00:00:00.000000","2026-06-29T00:00:00.000000","2026-06-30T00:00:00.000000","2026-07-01T00:00:00.000000","2026-07-02T00:00:00.000000","2026-07-03T00:00:00.000000","2026-07-04T00:00:00.000000","2026-07-05T00:00:00.000000","2026-07-06T00:00:00.000000","2026-07-07T00:00:00.000000","2026-07-08T00:00:00.000000","2026-07-09T00:00:00.000000","2026-07-10T00:00:00.000000","2026-07-11T00:00:00.000000","2026-07-12T00:00:00.000000","2026-07-13T00:00:00.000000","2026-07-14T00:00:00.000000","2026-07-15T00:00:00.000000","2026-07-16T00:00:00.000000","2026-07-17T00:00:00.000000","2026-07-18T00:00:00.000000","2026-07-19T00:00:00.000000","2026-07-20T00:00:00.000000","2026-07-21T00:00:00.000000","2026-07-22T00:00:00.000000","2026-07-23T00:00:00.000000","2026-07-24T00:00:00.000000","2026-07-25T00:00:00.000000","2026-07-26T00:00:00.000000","2026-07-27T00:00:00.000000","2026-07-28T00:00:00.000000","2026-07-29T00:00:00.000000","2026-07-30T00:00:00.000000","2026-07-31T00:00:00.000000","2026-08-01T00:00:00.000000","2026-08-02T00:00:00.000000","2026-08-03T00:00:00.000000","2026-08-04T00:00:00.000000","2026-08-05T00:00:00.000000","2026-08-06T00:00:00.000000","2026-08-07T00:00:00.000000","2026-08-08T00:00:00.000000","2026-08-09T00:00:00.000000","2026-08-10T00:00:00.000000","2026-08-11T00:00:00.000000","2026-08-12T00:00:00.000000","2026-08-13T00:00:00.000000","2026-08-14T00:00:00.000000","2026-08-15T00:00:00.000000","2026-08-16T00:00:00.000000","2026-08-17T00:00:00.000000","2026-08-18T00:00:00.000000","2026-08-19T00:00:00.000000","2026-08-20T00:00:00.000000","2026-08-21T00:00:00.000000","2026-08-22T00:00:00.000000","2026-08-23T00:00:00.000000","2026-08-24T00:00:00.000000","2026-08-25T00:00:00.000000","2026-08-26T00:00:00.000000","2026-08-27T00:00:00.000000","2026-08-28T00:00:00.000000","2026-08-29T00:00:00.000000","2026-08-30T00:00:00.000000","2026-08-31T00:00:00.000000","2026-09-01T00:00:00.000000","2026-09-02T00:00:00.000000","2026-09-03T00:00:00.000000","2026-09-04T00:00:00.000000","2026-09-05T00:00:00.000000","2026-09-06T00:00:00.000000","2026-09-07T00:00:00.000000","2026-09-08T00:00:00.000000","2026-09-09T00:00:00.000000","2026-09-10T00:00:00.000000","2026-09-11T00:00:00.000000"],"y":{"dtype":"f8","bdata":"16NwPYpi7EAAAAAAQIrtQFyPwvUgS+1AAAAAAIDf7EDhehSuv2zsQOF6FK4\u002fc+1A4XoUrv8n7kDhehSuf7zuQJqZmZkh3O5AhetRuJ7u7kAfhetRWAvvQOF6FK5\u002f7e5AZmZmZtZg70AfhetRANbuQOF6FK6\u002f0u9AMzMzM58O8EAAAAAAIBTwQI\u002fC9SggBPBAFK5H4fLr7kBcj8L1uLDtQFyPwvUone1AhetRuBaq7UAAAAAAwFDuQAAAAABATe5A7FG4Hn2s7kAAAAAAAGLuQOF6FK4PWu5APQrXo4Cb7UCuR+F6zHTtQAAAAACAie5ApHA9Csfc7kA9CtejwLLuQHE9Ctc\u002fIvBA16NwPSJg8ECPwvUoQILwQK5H4XrcdfBAAAAAAMC08EAAAAAAoLHwQHE9Ctd\u002f2vBAAAAAABhz8EAAAAAAIHbwQGZmZmbKRvBArkfhemSm8EB7FK5HpUjwQI\u002fC9ShMYfBAMzMzM1ub8EDD9ShcoxTxQIXrUbgGwvFAcT0K14up8UCPwvUoQCnxQI\u002fC9SiA9\u002fBAcT0K1+vv8EBxPQrXf8rwQI\u002fC9SigkPBAj8L1KMDv8EBxPQrXP3PyQNejcD0ehfJArkfhetyt8kDD9ShcV7jyQI\u002fC9Sggn\u002fNAcT0K13+k9UCPwvUoAHn1QDMzMzNzEPZACtejcNlR9UDsUbgegTn2QIXrUbiuHfZAcT0K1\u002f\u002fv9UB7FK5HARb2QD0K16NsifZAXI\u002fC9egE90C4HoXr0QD4QAAAAADAJPhAZmZmZobY90A9CtejwOb3QI\u002fC9SggtfZA9ihcj9Jz9kApXI\u002fCcWf3QOF6FK6\u002fWfdAAAAAAEDL90BxPQrXf4n3QBSuR+ESuvdAuB6F6wlm90CkcD0Km2b3QOxRuB61EfhASOF6FBqr90AK16NwzVn4QHE9Ctd\u002fX\u002fhACtejcFmv+EBSuB6Fx7\u002f3QAAAAAAQlfdAAAAAAFCw+EA9CtejRGr4QAAAAAAEw\u002fhAAAAAAMDC+EBxPQrX\u002f4D5QPYoXI+q5PlAcT0K11vp+UCPwvUowHb4QClcj8Jdy\u002fdApHA9Ctfg90BxPQrXv8D3QB+F61EkPfdAUrgehRcq90B7FK5HeRb4QJqZmZlZRvhAmpmZmfli90CuR+F6sAX3QAAAAABARPdAMzMzM6Pi9kDNzMzMgKf2QAAAAACA2PZAPQrXo\u002fwX90A9CtejjK33QBSuR+Hi9\u002fdAAAAAAMj690ApXI\u002fCuQP4QJqZmZm59fhAKVyPwqmr90ApXI\u002fCSTX3QHE9CteHmPZAKVyPwmEg90BxPQrXfxj3QFyPwvUQFfdAmpmZmYEU90ApXI\u002fCDZP3QJqZmZkVifhAzczMzDRp+EDhehSu12j5QOF6FK7DhvlA7FG4Hjm9+ECPwvUoQPf4QOxRuB796flA9ihcj6pR+UAK16NwZV75QAAAAABomvlAmpmZma2S+UAAAAAAwA35QHsUrkct7PhAH4XrUXi9+EBxPQrXU1P5QKRwPQovkflAXI\u002fC9dgB+UBmZmZmupH4QArXo3BJ2vdAH4XrUQi9+EBI4XoUMt73QBSuR+FGlvdAmpmZmaWS90DNzMzMrI\u002f3QHE9CtfLi\u002fdAAAAAAOyM90DsUbgebcn3QDMzMzMjYvdAcT0K19\u002fk90DXo3A9Apb3QOF6FK7HzfdA9ihcjxrS90C4HoXrYXf3QAAAAABAYvdAcT0K13tb90C4HoXrRZj3QAAAAAAQAPhA4XoUrl9790CPwvUocJL3QAAAAAAggPdASOF6FA5a9kBmZmZmhqb1QArXo3ChkfRAexSuR0mu9ECkcD0K35f0QK5H4XoIA\u002fVAAAAAAOAD90ApXI\u002fCyQz1QOF6FK4fT\u002fVAj8L1KOAe9kDXo3A9vvT1QAAAAAAcMfVAMzMzM+cM9UC4HoXr5bXzQClcj8I9MPNAcT0K108\u002f9EC4HoXrAW70QK5H4Xq8zfNAMzMzM\u002fOA9ECkcD0KJ5f0QK5H4XroKPRArkfheqCC9ECuR+F6sDH0QKRwPQrfM\u002fVA16NwPfaP9EA9CtejjIf0QArXo3AJePRAAAAAACgE9UD2KFyPolz1QLgehesNVvVAhetRuNI39UCPwvUoAEz1QEjhehSGnPRAPQrXo4gt9EBxPQrXXx30QI\u002fC9ShgJ\u002fRACtejcGXK9EA9CtejRCX0QArXo3DRUPRAuB6F6x179EBxPQrXH2X0QAAAAADgJfNAcT0K17NT80CF61G4JqLyQFK4HoVzK\u002fRAzczMzHRv80AK16Nw\u002fV30QGZmZmbO0fRAAAAAAABz9EB7FK5H+ab0QHE9Cte\u002fa\u002fRASOF6FOaD9ED2KFyPPr30QKRwPQqrn\u002fRAj8L1KFDF9EBxPQrXs8v0QOF6FK7DXfVAcT0K1y\u002fQ9kB7FK5Hsd\u002f2QFK4HoXH8fZAFK5H4eoa90AAAAAAQBr3QM3MzMxU4\u002fZAFK5H4TIy90DsUbgeDQP3QAAAAADA\u002ffZA9ihcj56O90DXo3A9cqf3QIXrUbgGZ\u002fdAuB6F61kE90AUrkfh2iD3QB+F61EgpPdAAAAAAGiw90CamZmZ2TX5QHE9Cte\u002fI\u002flArkfhepiW+UAAAAAAYGv5QOxRuB51GPlAUrgehXtq+UDsUbgePUX5QMP1KFw7VflAZmZmZn5C+UBmZmZmai35QI\u002fC9Shk\u002fflAcT0K11vG+UBxPQrXHxb6QHE9Cte\u002fxPpAw\u002fUoXANF+0DNzMzMZDP6QPYoXI8eT\u002fpApHA9CsOc+kA9CtejrLf6QIXrUbiimPpArkfhelxQ+kAAAAAAXMf5QOF6FK4XY\u002flASOF6FP6I+UAUrkfhrsr5QHE9Ctcf2PlA16NwPQ66+UApXI\u002fCjY\u002f5QBSuR+FKyPhApHA9Cgd2+UBmZmZmAsX5QAAAAABg0PlAH4XrUXDr+kDXo3A9Juz6QLgehetRhvpA4XoUrnvM+UAK16NwKeX5QNejcD1qvPlAj8L1KKDH+UCuR+F6qBL6QIXrUbhyhvlArkfhemyb+UAK16NwKY35QHE9CtcfOPlAj8L1KIDu+EC4HoXrPab4QBSuR+Fet\u002flAAAAAADDm+UB7FK5HyTT6QFyPwvUwHPpACtejcHki+kA9CtejDDL6QBSuR+FOdPpAAAAAAKgo+kDXo3A9Es35QJqZmZkZk\u002fpArkfhegzB+kBxPQrXA136QLgehethavpACtejcD2p+kCkcD0Kb276QOF6FK6vl\u002fpAcT0K1x8o+0AAAAAAoFL8QPYoXI96sfxAAAAAAMCq\u002fEDXo3A96hL9QBSuR+ESQv1ACtejcOG\u002f\u002fEAUrkfhZvb8QFyPwvWYGP1ACtejcE3K\u002fEAAAAAAAMX8QLgehesRofxAKVyPwkWo\u002fECF61G4Jkn9QHE9Ctc\u002f\u002fvxAcT0K10\u002fk\u002fEBcj8L15Lb8QHE9Ctf\u002fyfxAzczMzHgn\u002fUDsUbge5dL8QI\u002fC9Sjsy\u002fxAzczMzATF\u002fEB7FK5HQUP8QBSuR+EeqftAmpmZmSV6+0DNzMzMDOL7QK5H4XrwFvxAAAAAABzd+0AfhetRBBP8QI\u002fC9SgArvxAcT0K1yt8\u002fEAAAAAA5G78QI\u002fC9SjgH\u002f1AAAAAAOD5\u002fEB7FK5HYVT9QBSuR+GmGv5ACtejcHHh\u002fEDNzMzM4KX8QPYoXI9KqPxAj8L1KNCp\u002fEDNzMzMMGD8QKRwPQqPjvtAcT0K1\u002fPl+0AAAAAAQHf7QHE9Ctd\u002fjPxAzczMzOAu\u002fEAK16NwWbX7QOF6FK7\u002f4fpAUrgehTNJ+0CPwvUo4Cn7QGZmZmZue\u002ftAZmZmZpZ1+kB7FK5HBZH6QJqZmZllbfpAhetRuFar+kCPwvUogCj7QMP1KFybRftAuB6F660I+0BxPQrXPwT7QFK4HoW\u002f5vpACtejcBUi+0DhehSuE1z7QNejcD2mO\u002ftAAAAAAIDS+0CkcD0KqzH8QIXrUbjWU\u002fxAPQrXo+RM\u002fECPwvUoQCT8QMP1KFxbKfxAw\u002fUoXE+D\u002fEAK16Nw+W38QK5H4XoYlfxASOF6FAY7\u002fEBI4XoUWj78QD0K16MEIvxAcT0K16+A+0DNzMzM7Ff7QAAAAACwqftAcT0K1yec+kDD9Shct8T6QJqZmZk9xPpAMzMzMz9i+0DD9Shcf+j7QBSuR+EO2PtAcT0K1y\u002f0\u002fECamZmZFW39QAAAAACA1\u002f1AAAAAAHDh\u002fUBcj8L1pCX+QD0K16Mob\u002f5AMzMzM0+f\u002fUAAAAAAoBr+QGZmZmbms\u002f1AAAAAAGiI+0BmZmZmRgP7QM3MzMzsEPxAAAAAAOAd\u002fEDXo3A9Qpj7QK5H4Xq0CvtArkfheiRq+kAUrkfh+vv5QI\u002fC9SgQK\u002fpArkfheiyG+kAK16NwQfz6QIXrUbiacPpApHA9CvdC+kAUrkfh4t\u002f6QNejcD3OGftAH4XrUeRB+0BmZmZm9vf7QGZmZma62\u002ftAMzMzMyeQ+0A9CtejVNz6QEjhehQucvpAj8L1KIDC+kCamZmZIeH6QBSuR+HK\u002fPpAPQrXo3AF+kBSuB6Fk8f4QPYoXI\u002fSXPlAPQrXoyC++EB7FK5HsTr5QKRwPQqP+vhAw\u002fUoXC+R+UBI4XoUsuH5QHE9CtcvKflAuB6F62XR+EAfhetRwFb4QAAAAAAgGPdAcT0K18NW90CkcD0KVwP3QNejcD1yg\u002fZAexSuRw2y9kDD9ShcL1r2QOF6FK7TJvVAFK5H4ZbI9EBxPQrXO7D0QAAAAADgMvVAj8L1KMCO9UDD9Shcn1T1QB+F61FAF\u002fZAMzMzM19M9kAzMzMzqzD2QKRwPQonK\u002fZAAAAAAIAP9kCPwvUo4BD1QEjhehTeSPZAMzMzM1\u002fP9kBcj8L14Hr2QD0K16Mgz\u002fVAPQrXo0zJ9UBcj8L1tBH2QArXo3ClIPZAzczMzGyg9kC4HoXr9Xb2QEjhehQWlvZAhetRuMYJ9kCPwvUoAAj2QIXrUbjChvVAexSuRwEa9UCF61G4dnP1QFK4HoUzDvVA9ihcj8bg9ECkcD0Kj4T1QGZmZmaOkvVAKVyPwi2l9UA9CtejzKL1QAAAAADgW\u002fVAMzMzM1dn9UAfhetRlEv1QFyPwvWYVPVAj8L1KFB09UDD9ShcC3n1QEjhehRSTPVAcT0K11ea9UBSuB6FA2b1QD0K16NwsPVASOF6FLL49UCPwvUoQCD2QOF6FK6bWPZAw\u002fUoXDvq9kBSuB6FP+P2QPYoXI9CTvZAcT0K17899kCuR+F6FCH2QDMzMzOLGPZAZmZmZlo49kAzMzMzA0r2QAAAAABgS\u002fdArkfhenyr90DNzMzMTFf3QKRwPQrvU\u002fdAH4XrUbw690DXo3A9kt72QAAAAABwnfZA9ihcj7qW9UDhehSu69b1QIXrUbh63fVAj8L1KATg9UAK16Nwlcj1QClcj8LlKPVAexSuR7GR9UAAAAAAIMr1QHE9Ctc\u002fzfVA9ihcj6Kq9EBxPQrXR5L0QArXo3BROfNAw\u002fUoXIPK8kApXI\u002fCKTnzQMP1KFyjf\u002fJAexSuR93c8UBSuB6Fu7fuQI\u002fC9ShEO\u002fFASOF6FJbq8EBI4XoUpivxQAAAAACgH\u002fFAPQrXo5TO8EAfhetRqGDwQIXrUbgCLvBAw\u002fUoXF\u002fP8EAzMzMz7wvxQHsUrkcJzvBAFK5H4cbR8EAfhetR+HrwQAAAAADQOfBA4XoUrrtb8ECPwvUoQJvwQBSuR+F+mPBAZmZmZraD8EA9CtejAJLvQM3MzMxER+9APQrXo0CZ8EAUrkfh0nnwQJqZmZkBFfBAj8L1KNRZ8EBSuB6FBw\u002fwQFyPwvXgzfBAAAAAACCv8EAfhetRrL3xQFK4HoWrTvFAH4XrUSCh8ED2KFyP7mvwQDMzMzMzG\u002fBA9ihcjwK18EBI4XoUyhPxQClcj8L9IvFACtejcNU48UAAAAAAIFHxQDMzMzO\u002fYvFAcT0K1\u002fPG8UCF61G4SkjyQClcj8JVC\u002fJAPQrXo+hk8UAAAAAAoBLxQOF6FK7rNvFAuB6F62HT8EAAAAAAMJHwQDMzMzOnT\u002fFAcT0K18s58UCuR+F6iGrxQFyPwvVEzfBArkfhenQ28ECuR+F6kDTwQBSuR+GuHfBAuB6F69VO8EDhehSux6vwQIXrUbgeofBAcT0K119V8EDNzMzMRFnwQIXrUbhGbvBAFK5H4aLa8ED2KFyPWs\u002fwQFK4HoVDj\u002fFAFK5H4d5Z8UBSuB6Fv4bxQDMzMzMr0PFA9ihcjzLV8UDhehSuT0XxQHE9CtcfK\u002fJAzczMzDgZ8kBxPQrXn0PyQD0K16MkWfJAAAAAAADR8kCPwvUovHryQD0K16OcBPJAUrgehQ+E8kBmZmZmAqPyQOF6FK4jFvNA4XoUrhcb80BI4XoU0ufyQAAAAACQ8\u002fJAzczMzBg080DsUbgetePyQB+F61Fso\u002fJAAAAAAECA8kDsUbgeqaPyQEjhehRyGfNAmpmZme0180DsUbgeiS7zQI\u002fC9ShQf\u002fNAH4XrUZjA80CPwvUocOLzQAAAAABgiPNAhetRuBKU80BmZmZmZrLzQOxRuB4hEvRAZmZmZhr180BSuB6Fh6fzQClcj8IZXfNAcT0K1x\u002fM80DD9Shck1DzQM3MzMxAFPNAhetRuBrp8kC4HoXrnczyQClcj8IlwvJA4XoUrgPv8kAfhetR+PLyQAAAAAA4cfJAj8L1KAC98kDD9Shcj9DyQI\u002fC9Sig4PJAj8L1KKCJ8kDNzMzMFC3yQI\u002fC9SgY+fFArkfhekzv8UBI4XoUxgnyQNejcD2m\u002fPFAZmZmZg5v8UB7FK5HjUzwQAAAAADYUe9A4XoUrr8x70CkcD0KD9DtQHE9CteTuu1AH4XrUYDs7kDhehSuv83uQAAAAABAJO5A4XoUrt8I7kDhehSuPxHvQB+F61GAC+9AH4XrUUB570AzMzMzJw3wQHE9CteLMfBAj8L1KLAI8EDNzMzMrH\u002fvQB+F61HAve5A7FG4Hv0G70AfhetRQGXvQOF6FK7\u002f6e5AH4XrUYBC70DXo3A90qHuQOF6FK6\u002f0u1AAAAAAEAy7UA9CtejKFjtQAAAAACgT+1AH4XrUSAX7UCF61G4hmztQIXrUbgWoOxAAAAAAABP7UAAAAAAAA\u002fuQB+F61Hoju5AH4XrUQDV7kAAAAAAQBTvQD0K16NARe9A4XoUrn\u002fw7kAAAAAAQGruQAAAAADA3+5ApHA9CjdU70AAAAAAYCnvQAAAAACAJO9APQrXo9Bv7kDD9Shcf8LvQFyPwvWInu9AZmZmZsYq70AK16NwdTfvQKRwPQpHqO9AexSuR1Ga70AfhetR8NzvQPYoXI\u002fCP\u002fBAcT0K1yck8ECkcD0KX8nvQOF6FK5\u002fUe9AAAAAAOBu70DhehSu\u002f+7vQFK4HoV7Ie9AAAAAAGA170Bcj8L1CD7vQD0K16OAoe9Aj8L1KPy07kCuR+F69KzuQAAAAABACu9AAAAAAAAE70C4HoXrUU3vQMP1KFwnk+9AUrgehXNo70BI4XoUZrPvQDMzMzNTuO9AFK5H4bKw70AfhetRQDzvQAAAAAAADu9A4XoUrv\u002f+7kBSuB6FWwDvQLgehetxyO5AH4XrUcDN7kAAAAAAgLbuQDMzMzODgu9ACtejcK2a70A9CtejbO3wQGZmZmYS1PFArkfheiAg80AUrkfhLtHyQAAAAABg+vJAAAAAAAxJ80DXo3A9sizzQAAAAAD8SvNAexSuR5mX80C4HoXrXQHzQAAAAABgGfNAAAAAACD38kA9CtejVC\u002fzQAAAAADw5\u002fJAj8L1KMDh8kC4HoXrZdfzQB+F61HMcvNAAAAAAHx980B7FK5HXZ3zQI\u002fC9SiAUPNAzczMzHwn80AUrkfhJh7zQFK4HoWLsfJAMzMzM7fW8kA="},"type":"scatter"},{"hovertemplate":"in 30 days, 95% of the time between $60,434 and $115,848\u003cextra\u003e\u003c\u002fextra\u003e","line":{"color":"rgba(76,139,245,.55)","width":14},"mode":"lines","name":"in 30 days, 95% of the time","x":["2026-10-11T00:00:00","2026-10-11T00:00:00"],"y":[60434.22660068202,115848.43890768276],"type":"scatter"},{"hovertemplate":"bought %{x|%d %b %Y}\u003cbr\u003e$%{y:,.0f}\u003cextra\u003e\u003c\u002fextra\u003e","marker":{"color":"#2fcf83","line":{"color":"#07080b","width":2},"size":15,"symbol":"triangle-up"},"mode":"markers","name":"bought","x":["2024-04-20T00:00:00","2024-10-28T00:00:00","2025-05-22T00:00:00","2026-09-08T00:00:00"],"y":[64940.59,69962.21,111696.21,78455.8],"type":"scatter"},{"hovertemplate":"sold %{x|%d %b %Y}\u003cbr\u003e$%{y:,.0f}\u003cextra\u003e\u003c\u002fextra\u003e","marker":{"color":"#ff5a5f","line":{"color":"#07080b","width":2},"size":15,"symbol":"triangle-down"},"mode":"markers","name":"sold","x":["2024-08-10T00:00:00","2025-04-07T00:00:00","2025-11-16T00:00:00"],"y":[60923.51,79163.24,94261.44],"type":"scatter"},{"hovertemplate":"sells if tomorrow closes below $22,843\u003cbr\u003ethis level moves every day\u003cextra\u003e\u003c\u002fextra\u003e","line":{"color":"#ff5a5f","dash":"dash","width":1.6},"mode":"lines","name":"if tomorrow closes below $22,843, it sells","x":["2026-08-16T00:00:00","2026-10-11T00:00:00"],"y":[22842.85,22842.85],"type":"scatter"}],                        {"template":{"data":{"histogram2dcontour":[{"type":"histogram2dcontour","colorbar":{"outlinewidth":0,"ticks":""},"colorscale":[[0.0,"#0d0887"],[0.1111111111111111,"#46039f"],[0.2222222222222222,"#7201a8"],[0.3333333333333333,"#9c179e"],[0.4444444444444444,"#bd3786"],[0.5555555555555556,"#d8576b"],[0.6666666666666666,"#ed7953"],[0.7777777777777778,"#fb9f3a"],[0.8888888888888888,"#fdca26"],[1.0,"#f0f921"]]}],"choropleth":[{"type":"choropleth","colorbar":{"outlinewidth":0,"ticks":""}}],"histogram2d":[{"type":"histogram2d","colorbar":{"outlinewidth":0,"ticks":""},"colorscale":[[0.0,"#0d0887"],[0.1111111111111111,"#46039f"],[0.2222222222222222,"#7201a8"],[0.3333333333333333,"#9c179e"],[0.4444444444444444,"#bd3786"],[0.5555555555555556,"#d8576b"],[0.6666666666666666,"#ed7953"],[0.7777777777777778,"#fb9f3a"],[0.8888888888888888,"#fdca26"],[1.0,"#f0f921"]]}],"heatmap":[{"type":"heatmap","colorbar":{"outlinewidth":0,"ticks":""},"colorscale":[[0.0,"#0d0887"],[0.1111111111111111,"#46039f"],[0.2222222222222222,"#7201a8"],[0.3333333333333333,"#9c179e"],[0.4444444444444444,"#bd3786"],[0.5555555555555556,"#d8576b"],[0.6666666666666666,"#ed7953"],[0.7777777777777778,"#fb9f3a"],[0.8888888888888888,"#fdca26"],[1.0,"#f0f921"]]}],"contourcarpet":[{"type":"contourcarpet","colorbar":{"outlinewidth":0,"ticks":""}}],"contour":[{"type":"contour","colorbar":{"outlinewidth":0,"ticks":""},"colorscale":[[0.0,"#0d0887"],[0.1111111111111111,"#46039f"],[0.2222222222222222,"#7201a8"],[0.3333333333333333,"#9c179e"],[0.4444444444444444,"#bd3786"],[0.5555555555555556,"#d8576b"],[0.6666666666666666,"#ed7953"],[0.7777777777777778,"#fb9f3a"],[0.8888888888888888,"#fdca26"],[1.0,"#f0f921"]]}],"surface":[{"type":"surface","colorbar":{"outlinewidth":0,"ticks":""},"colorscale":[[0.0,"#0d0887"],[0.1111111111111111,"#46039f"],[0.2222222222222222,"#7201a8"],[0.3333333333333333,"#9c179e"],[0.4444444444444444,"#bd3786"],[0.5555555555555556,"#d8576b"],[0.6666666666666666,"#ed7953"],[0.7777777777777778,"#fb9f3a"],[0.8888888888888888,"#fdca26"],[1.0,"#f0f921"]]}],"mesh3d":[{"type":"mesh3d","colorbar":{"outlinewidth":0,"ticks":""}}],"scatter":[{"fillpattern":{"fillmode":"overlay","size":10,"solidity":0.2},"type":"scatter"}],"parcoords":[{"type":"parcoords","line":{"colorbar":{"outlinewidth":0,"ticks":""}}}],"scatterpolargl":[{"type":"scatterpolargl","marker":{"colorbar":{"outlinewidth":0,"ticks":""}}}],"bar":[{"error_x":{"color":"#2a3f5f"},"error_y":{"color":"#2a3f5f"},"marker":{"line":{"color":"#E5ECF6","width":0.5},"pattern":{"fillmode":"overlay","size":10,"solidity":0.2}},"type":"bar"}],"scattergeo":[{"type":"scattergeo","marker":{"colorbar":{"outlinewidth":0,"ticks":""}}}],"scatterpolar":[{"type":"scatterpolar","marker":{"colorbar":{"outlinewidth":0,"ticks":""}}}],"histogram":[{"marker":{"pattern":{"fillmode":"overlay","size":10,"solidity":0.2}},"type":"histogram"}],"scattergl":[{"type":"scattergl","marker":{"colorbar":{"outlinewidth":0,"ticks":""}}}],"scatter3d":[{"type":"scatter3d","line":{"colorbar":{"outlinewidth":0,"ticks":""}},"marker":{"colorbar":{"outlinewidth":0,"ticks":""}}}],"scattermap":[{"type":"scattermap","marker":{"colorbar":{"outlinewidth":0,"ticks":""}}}],"scatterternary":[{"type":"scatterternary","marker":{"colorbar":{"outlinewidth":0,"ticks":""}}}],"scattercarpet":[{"type":"scattercarpet","marker":{"colorbar":{"outlinewidth":0,"ticks":""}}}],"carpet":[{"aaxis":{"endlinecolor":"#2a3f5f","gridcolor":"white","linecolor":"white","minorgridcolor":"white","startlinecolor":"#2a3f5f"},"baxis":{"endlinecolor":"#2a3f5f","gridcolor":"white","linecolor":"white","minorgridcolor":"white","startlinecolor":"#2a3f5f"},"type":"carpet"}],"table":[{"cells":{"fill":{"color":"#EBF0F8"},"line":{"color":"white"}},"header":{"fill":{"color":"#C8D4E3"},"line":{"color":"white"}},"type":"table"}],"barpolar":[{"marker":{"line":{"color":"#E5ECF6","width":0.5},"pattern":{"fillmode":"overlay","size":10,"solidity":0.2}},"type":"barpolar"}],"pie":[{"automargin":true,"type":"pie"}]},"layout":{"autotypenumbers":"strict","colorway":["#636efa","#EF553B","#00cc96","#ab63fa","#FFA15A","#19d3f3","#FF6692","#B6E880","#FF97FF","#FECB52"],"font":{"color":"#2a3f5f"},"hovermode":"closest","hoverlabel":{"align":"left"},"paper_bgcolor":"white","plot_bgcolor":"#E5ECF6","polar":{"bgcolor":"#E5ECF6","angularaxis":{"gridcolor":"white","linecolor":"white","ticks":""},"radialaxis":{"gridcolor":"white","linecolor":"white","ticks":""}},"ternary":{"bgcolor":"#E5ECF6","aaxis":{"gridcolor":"white","linecolor":"white","ticks":""},"baxis":{"gridcolor":"white","linecolor":"white","ticks":""},"caxis":{"gridcolor":"white","linecolor":"white","ticks":""}},"coloraxis":{"colorbar":{"outlinewidth":0,"ticks":""}},"colorscale":{"sequential":[[0.0,"#0d0887"],[0.1111111111111111,"#46039f"],[0.2222222222222222,"#7201a8"],[0.3333333333333333,"#9c179e"],[0.4444444444444444,"#bd3786"],[0.5555555555555556,"#d8576b"],[0.6666666666666666,"#ed7953"],[0.7777777777777778,"#fb9f3a"],[0.8888888888888888,"#fdca26"],[1.0,"#f0f921"]],"sequentialminus":[[0.0,"#0d0887"],[0.1111111111111111,"#46039f"],[0.2222222222222222,"#7201a8"],[0.3333333333333333,"#9c179e"],[0.4444444444444444,"#bd3786"],[0.5555555555555556,"#d8576b"],[0.6666666666666666,"#ed7953"],[0.7777777777777778,"#fb9f3a"],[0.8888888888888888,"#fdca26"],[1.0,"#f0f921"]],"diverging":[[0,"#8e0152"],[0.1,"#c51b7d"],[0.2,"#de77ae"],[0.3,"#f1b6da"],[0.4,"#fde0ef"],[0.5,"#f7f7f7"],[0.6,"#e6f5d0"],[0.7,"#b8e186"],[0.8,"#7fbc41"],[0.9,"#4d9221"],[1,"#276419"]]},"xaxis":{"gridcolor":"white","linecolor":"white","ticks":"","title":{"standoff":15},"zerolinecolor":"white","automargin":true,"zerolinewidth":2},"yaxis":{"gridcolor":"white","linecolor":"white","ticks":"","title":{"standoff":15},"zerolinecolor":"white","automargin":true,"zerolinewidth":2},"scene":{"xaxis":{"backgroundcolor":"#E5ECF6","gridcolor":"white","linecolor":"white","showbackground":true,"ticks":"","zerolinecolor":"white","gridwidth":2},"yaxis":{"backgroundcolor":"#E5ECF6","gridcolor":"white","linecolor":"white","showbackground":true,"ticks":"","zerolinecolor":"white","gridwidth":2},"zaxis":{"backgroundcolor":"#E5ECF6","gridcolor":"white","linecolor":"white","showbackground":true,"ticks":"","zerolinecolor":"white","gridwidth":2}},"shapedefaults":{"line":{"color":"#2a3f5f"}},"annotationdefaults":{"arrowcolor":"#2a3f5f","arrowhead":0,"arrowwidth":1},"geo":{"bgcolor":"white","landcolor":"#E5ECF6","subunitcolor":"white","showland":true,"showlakes":true,"lakecolor":"white"},"title":{"x":0.05}}},"margin":{"l":8,"r":8,"t":14,"b":34},"yaxis":{"title":{},"tickprefix":"$","tickformat":",.0f","gridcolor":"rgba(255,255,255,.055)","zeroline":false,"automargin":true,"zerolinecolor":"#39414f","linecolor":"#39414f"},"xaxis":{"gridcolor":"rgba(255,255,255,.055)","showline":false,"range":["2024-09-12T00:00:00","2026-10-21T00:00:00"],"zerolinecolor":"#39414f","linecolor":"#39414f"},"legend":{"orientation":"h","y":-0.14,"x":0},"height":430,"hovermode":"x unified","showlegend":true,"font":{"color":"#c3cad6","size":13,"family":"-apple-system,BlinkMacSystemFont,\"SF Pro Text\",\"Segoe UI Variable Text\",\"Segoe UI\",Roboto,\"Helvetica Neue\",Arial,sans-serif"},"paper_bgcolor":"#101219","plot_bgcolor":"#101219"},                        {"displayModeBar": false, "responsive": true}                    )                };            </script>        </div><p class='lede'><b>Green is where it bought. Red is where it sold.</b> The short red dash at the right is tomorrow's sell level - good for one close and no further, because it moves as the averages move. Nothing here runs past today except the blue bar, and that bar is how far the price can travel in 30 days, not which way.</p></section><section><h2>Which way next?</h2><div class='verdict'><b>Nobody here can tell you, and this page is the reason.</b> Every timing rule on this site was tested and rejected. An arrow pointing up or down would be invented.</div><div style="height:400px; width:100%;">                            <div id="edge" class="plotly-graph-div" style="height:100%; width:100%;"></div>            <script>                window.PLOTLYENV=window.PLOTLYENV || {};                                if (document.getElementById("edge")) {                    Plotly.newPlot(                        "edge",                        [{"hovertemplate":"random dates: %{x:.2f}\u003cextra\u003e\u003c\u002fextra\u003e","marker":{"color":"#3d4756"},"name":"the same rule, random dates","orientation":"h","x":{"dtype":"f8","bdata":"V78Q+WA5wT9eC9LEPKzMP8OWPrbC080\u002f0+EaZNASyD+JUsRqVu3mPwcGmpgIyeE\u002fNvGZnYDc1T8="},"y":["halving +30d","macro: liquidity up, rates down","halving +180d","halving +90d","buy and hold","trend 50\u002f200","halving +365d"],"type":"bar"},{"hovertemplate":"the rule: %{x:.2f}\u003cextra\u003e\u003c\u002fextra\u003e","marker":{"color":"#e8a33d"},"name":"the rule as written","orientation":"h","x":{"dtype":"f8","bdata":"BlMI0VMYtz8xW\u002fW5QlbUP9wrupWmV+U\u002fQOAoaFiL5j9ovUpKMMHmPzHbjTR1zOw\u002fGwlafWrQ8j8="},"y":["halving +30d","macro: liquidity up, rates down","halving +180d","halving +90d","buy and hold","trend 50\u002f200","halving +365d"],"type":"bar"}],                        {"template":{"data":{"histogram2dcontour":[{"type":"histogram2dcontour","colorbar":{"outlinewidth":0,"ticks":""},"colorscale":[[0.0,"#0d0887"],[0.1111111111111111,"#46039f"],[0.2222222222222222,"#7201a8"],[0.3333333333333333,"#9c179e"],[0.4444444444444444,"#bd3786"],[0.5555555555555556,"#d8576b"],[0.6666666666666666,"#ed7953"],[0.7777777777777778,"#fb9f3a"],[0.8888888888888888,"#fdca26"],[1.0,"#f0f921"]]}],"choropleth":[{"type":"choropleth","colorbar":{"outlinewidth":0,"ticks":""}}],"histogram2d":[{"type":"histogram2d","colorbar":{"outlinewidth":0,"ticks":""},"colorscale":[[0.0,"#0d0887"],[0.1111111111111111,"#46039f"],[0.2222222222222222,"#7201a8"],[0.3333333333333333,"#9c179e"],[0.4444444444444444,"#bd3786"],[0.5555555555555556,"#d8576b"],[0.6666666666666666,"#ed7953"],[0.7777777777777778,"#fb9f3a"],[0.8888888888888888,"#fdca26"],[1.0,"#f0f921"]]}],"heatmap":[{"type":"heatmap","colorbar":{"outlinewidth":0,"ticks":""},"colorscale":[[0.0,"#0d0887"],[0.1111111111111111,"#46039f"],[0.2222222222222222,"#7201a8"],[0.3333333333333333,"#9c179e"],[0.4444444444444444,"#bd3786"],[0.5555555555555556,"#d8576b"],[0.6666666666666666,"#ed7953"],[0.7777777777777778,"#fb9f3a"],[0.8888888888888888,"#fdca26"],[1.0,"#f0f921"]]}],"contourcarpet":[{"type":"contourcarpet","colorbar":{"outlinewidth":0,"ticks":""}}],"contour":[{"type":"contour","colorbar":{"outlinewidth":0,"ticks":""},"colorscale":[[0.0,"#0d0887"],[0.1111111111111111,"#46039f"],[0.2222222222222222,"#7201a8"],[0.3333333333333333,"#9c179e"],[0.4444444444444444,"#bd3786"],[0.5555555555555556,"#d8576b"],[0.6666666666666666,"#ed7953"],[0.7777777777777778,"#fb9f3a"],[0.8888888888888888,"#fdca26"],[1.0,"#f0f921"]]}],"surface":[{"type":"surface","colorbar":{"outlinewidth":0,"ticks":""},"colorscale":[[0.0,"#0d0887"],[0.1111111111111111,"#46039f"],[0.2222222222222222,"#7201a8"],[0.3333333333333333,"#9c179e"],[0.4444444444444444,"#bd3786"],[0.5555555555555556,"#d8576b"],[0.6666666666666666,"#ed7953"],[0.7777777777777778,"#fb9f3a"],[0.8888888888888888,"#fdca26"],[1.0,"#f0f921"]]}],"mesh3d":[{"type":"mesh3d","colorbar":{"outlinewidth":0,"ticks":""}}],"scatter":[{"fillpattern":{"fillmode":"overlay","size":10,"solidity":0.2},"type":"scatter"}],"parcoords":[{"type":"parcoords","line":{"colorbar":{"outlinewidth":0,"ticks":""}}}],"scatterpolargl":[{"type":"scatterpolargl","marker":{"colorbar":{"outlinewidth":0,"ticks":""}}}],"bar":[{"error_x":{"color":"#2a3f5f"},"error_y":{"color":"#2a3f5f"},"marker":{"line":{"color":"#E5ECF6","width":0.5},"pattern":{"fillmode":"overlay","size":10,"solidity":0.2}},"type":"bar"}],"scattergeo":[{"type":"scattergeo","marker":{"colorbar":{"outlinewidth":0,"ticks":""}}}],"scatterpolar":[{"type":"scatterpolar","marker":{"colorbar":{"outlinewidth":0,"ticks":""}}}],"histogram":[{"marker":{"pattern":{"fillmode":"overlay","size":10,"solidity":0.2}},"type":"histogram"}],"scattergl":[{"type":"scattergl","marker":{"colorbar":{"outlinewidth":0,"ticks":""}}}],"scatter3d":[{"type":"scatter3d","line":{"colorbar":{"outlinewidth":0,"ticks":""}},"marker":{"colorbar":{"outlinewidth":0,"ticks":""}}}],"scattermap":[{"type":"scattermap","marker":{"colorbar":{"outlinewidth":0,"ticks":""}}}],"scatterternary":[{"type":"scatterternary","marker":{"colorbar":{"outlinewidth":0,"ticks":""}}}],"scattercarpet":[{"type":"scattercarpet","marker":{"colorbar":{"outlinewidth":0,"ticks":""}}}],"carpet":[{"aaxis":{"endlinecolor":"#2a3f5f","gridcolor":"white","linecolor":"white","minorgridcolor":"white","startlinecolor":"#2a3f5f"},"baxis":{"endlinecolor":"#2a3f5f","gridcolor":"white","linecolor":"white","minorgridcolor":"white","startlinecolor":"#2a3f5f"},"type":"carpet"}],"table":[{"cells":{"fill":{"color":"#EBF0F8"},"line":{"color":"white"}},"header":{"fill":{"color":"#C8D4E3"},"line":{"color":"white"}},"type":"table"}],"barpolar":[{"marker":{"line":{"color":"#E5ECF6","width":0.5},"pattern":{"fillmode":"overlay","size":10,"solidity":0.2}},"type":"barpolar"}],"pie":[{"automargin":true,"type":"pie"}]},"layout":{"autotypenumbers":"strict","colorway":["#636efa","#EF553B","#00cc96","#ab63fa","#FFA15A","#19d3f3","#FF6692","#B6E880","#FF97FF","#FECB52"],"font":{"color":"#2a3f5f"},"hovermode":"closest","hoverlabel":{"align":"left"},"paper_bgcolor":"white","plot_bgcolor":"#E5ECF6","polar":{"bgcolor":"#E5ECF6","angularaxis":{"gridcolor":"white","linecolor":"white","ticks":""},"radialaxis":{"gridcolor":"white","linecolor":"white","ticks":""}},"ternary":{"bgcolor":"#E5ECF6","aaxis":{"gridcolor":"white","linecolor":"white","ticks":""},"baxis":{"gridcolor":"white","linecolor":"white","ticks":""},"caxis":{"gridcolor":"white","linecolor":"white","ticks":""}},"coloraxis":{"colorbar":{"outlinewidth":0,"ticks":""}},"colorscale":{"sequential":[[0.0,"#0d0887"],[0.1111111111111111,"#46039f"],[0.2222222222222222,"#7201a8"],[0.3333333333333333,"#9c179e"],[0.4444444444444444,"#bd3786"],[0.5555555555555556,"#d8576b"],[0.6666666666666666,"#ed7953"],[0.7777777777777778,"#fb9f3a"],[0.8888888888888888,"#fdca26"],[1.0,"#f0f921"]],"sequentialminus":[[0.0,"#0d0887"],[0.1111111111111111,"#46039f"],[0.2222222222222222,"#7201a8"],[0.3333333333333333,"#9c179e"],[0.4444444444444444,"#bd3786"],[0.5555555555555556,"#d8576b"],[0.6666666666666666,"#ed7953"],[0.7777777777777778,"#fb9f3a"],[0.8888888888888888,"#fdca26"],[1.0,"#f0f921"]],"diverging":[[0,"#8e0152"],[0.1,"#c51b7d"],[0.2,"#de77ae"],[0.3,"#f1b6da"],[0.4,"#fde0ef"],[0.5,"#f7f7f7"],[0.6,"#e6f5d0"],[0.7,"#b8e186"],[0.8,"#7fbc41"],[0.9,"#4d9221"],[1,"#276419"]]},"xaxis":{"gridcolor":"white","linecolor":"white","ticks":"","title":{"standoff":15},"zerolinecolor":"white","automargin":true,"zerolinewidth":2},"yaxis":{"gridcolor":"white","linecolor":"white","ticks":"","title":{"standoff":15},"zerolinecolor":"white","automargin":true,"zerolinewidth":2},"scene":{"xaxis":{"backgroundcolor":"#E5ECF6","gridcolor":"white","linecolor":"white","showbackground":true,"ticks":"","zerolinecolor":"white","gridwidth":2},"yaxis":{"backgroundcolor":"#E5ECF6","gridcolor":"white","linecolor":"white","showbackground":true,"ticks":"","zerolinecolor":"white","gridwidth":2},"zaxis":{"backgroundcolor":"#E5ECF6","gridcolor":"white","linecolor":"white","showbackground":true,"ticks":"","zerolinecolor":"white","gridwidth":2}},"shapedefaults":{"line":{"color":"#2a3f5f"}},"annotationdefaults":{"arrowcolor":"#2a3f5f","arrowhead":0,"arrowwidth":1},"geo":{"bgcolor":"white","landcolor":"#E5ECF6","subunitcolor":"white","showland":true,"showlakes":true,"lakecolor":"white"},"title":{"x":0.05}}},"margin":{"l":230,"r":18,"t":10,"b":34},"xaxis":{"title":{},"gridcolor":"rgba(255,255,255,.055)","zeroline":false,"zerolinecolor":"#39414f","linecolor":"#39414f"},"yaxis":{"gridcolor":"rgba(255,255,255,.055)","automargin":true,"zerolinecolor":"#39414f","linecolor":"#39414f"},"legend":{"orientation":"h","y":-0.12,"x":0},"barmode":"group","bargap":0.32,"bargroupgap":0.08,"height":400,"hovermode":"y unified","font":{"color":"#c3cad6","size":13,"family":"-apple-system,BlinkMacSystemFont,\"SF Pro Text\",\"Segoe UI Variable Text\",\"Segoe UI\",Roboto,\"Helvetica Neue\",Arial,sans-serif"},"paper_bgcolor":"#101219","plot_bgcolor":"#101219"},                        {"displayModeBar": false, "responsive": true}                    )                };            </script>        </div><p class='lede'>Gold is each rule as written. Grey is <b>the same rule entered on dates picked out of a hat</b>. A rule worth having would leave its own grey bar behind.</p><p class='lede'><b>One bar does leave its grey behind: halving +365d.</b> It is also the one the tests throw out. Drop its single best trade and its p-value goes from 0.013 to 0.17. That is what the rest of this site is for.</p><p class='note'>The p-values behind the picture, and the test that drops the best trade to see what is left, are on <a href='evidence.html'>the evidence page</a>.</p></section><section><h2>How far, though - that it can say</h2><p class='lede'>Volatility is the one thing on this site that is forecastable. The marker is today's price; the bar is where it can be.</p><div class='ranges'><div class='range'><div class='range-top'><b>In 10 days</b><span>90% of the time</span></div><div class='range-bar'><i style='left:26.0%'></i></div><div class='range-ends'><span><u>-13%</u>$70,906</span><span><u>+17%</u>$94,942</span></div></div><div class='range'><div class='range-top'><b>In 30 days</b><span>95% of the time</span></div><div class='range-bar'><i style='left:30.2%'></i></div><div class='range-ends'><span><u>-26%</u>$60,434</span><span><u>+43%</u>$115,848</span></div></div></div><details class='method'><summary>How the intervals were checked</summary><div class='note'>Each level passed a coverage test on non-overlapping windows: a 90% interval really did contain the outcome about 90% of the time. Levels that failed are withheld rather than quietly widened.</div></details></section><section><h2>Written down before the outcome</h2><p class='lede'>Every other page here is a backtest, scored by someone who had already seen the answer. <b>This one is not.</b> The claims are recorded while the window is still open, and settled when it closes.</p><div class='cards'><div class='card'><u>Claims recorded</u><b>35</b></div><div class='card'><u>Settled so far</u><b>0</b></div><div class='card'><u>Next one settles</u><b>13 Sep 2026</b></div><div class='card'><u>Levels that kept their promise</u><b>-</b></div></div><div class='verdict' style='margin-top:20px'>Nothing has matured yet: 35 claims are still open. A track record starts the day the first one is settled, not the day it is written.</div><p class='note'>Every claim, with the day it was written and the day it settles, is on <a href='receipts.html'>the receipts page</a>.</p></section><section><h2>What the robot is doing with its own money</h2><p class='lede'>A machine on this site runs a pretend portfolio in the open. Here is what it holds, and what would make it act next.</p><div class='cards'><div class='card'><u>Right now</u><b>Holding bitcoin</b></div><div class='card'><u>Of the money, in bitcoin</u><b>79%</b></div><div class='card'><u>Sells if tomorrow closes below</u><b>$22,843</b></div><div class='card'><u>Since it started</u><b>-8.8%</b></div></div><ul class='steps'><li><b>Right now it owns bitcoin.</b> 79% of its money is in bitcoin, and the rest is sitting in cash.</li><li><b>Last time it acted</b> was 2026-09-08: it put its cash into bitcoin, at $78,456, going from 0% in bitcoin to 79%.</li><li><b>Next it sells</b>, and it sells if <b>tomorrow</b> closes below $22,843. That price is for tomorrow only - it is worked out fresh each day, and it moves. Until it is hit, it does nothing.</li><li><b>The score so far.</b> It began with $10,000 on 2024-04-20 and has $9,124 today (-8.8%). Someone who bought once on that same day and never touched it again would have $11,882 (+18.8%).</li></ul><div class='verdict'><b>Please do not copy it.</b> It follows one simple rule - buy when the 50-day average price crosses above the 200-day one, sell when it crosses back. This project tested that rule and <b>could not show it beats buying on dates picked out of a hat</b>. The robot is here so you can watch a rule fail in public, with the dates written down in advance. It is not here to be followed, and nothing on this site is advice.</div><details class='method'><summary>The small print behind those four sentences</summary><div class='note'>The buy and sell prices above are the direction rule flipping. How much it holds is a separate decision made by the volatility forecast, so the size of the position can change on a day when the rule itself says nothing. Fees and slippage are charged on every change. <a href='trader.html'>The agent page</a> shows every trade and the curve behind them.</div></details></section><section><h2>How much has actually survived the tests</h2>
+<style>
+  html,body{height:100%; margin:0; background:#080b11}
+  .btclab-meter *{box-sizing:border-box}
+  .btclab-meter{
+    --bg:#080b11; --panel:#0d1219; --line:#1c2530; --ink:#e7ecf3; --dim:#8b98a9;
+    --green:#20c97e; --red:#ef4056; --gold:#f7931a;
+    height:100%; display:flex; flex-direction:column; overflow:hidden;
+    background:var(--bg); color:var(--ink); border:1px solid var(--line);
+    border-radius:10px;
+    font:13px/1.45 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  }
+  .btclab-meter .stage{position:relative; flex:0 0 168px; min-height:0}
+  .btclab-meter canvas{display:block; width:100%; height:100%}
+  .btclab-meter .parts{
+    flex:1 1 auto; min-height:0; overflow-y:auto; padding:10px 12px 12px;
+    border-top:1px solid var(--line); background:var(--panel);
+  }
+  .btclab-meter .part{display:grid; grid-template-columns:132px 74px 1fr; gap:10px;
+    align-items:center; padding:3px 0}
+  .btclab-meter .part u{text-decoration:none; color:var(--dim); font-size:10.5px;
+    letter-spacing:.1em; text-transform:uppercase}
+  .btclab-meter .track{height:6px; border-radius:3px; background:#18202b; overflow:hidden}
+  .btclab-meter .track i{display:block; height:100%; background:var(--gold)}
+  .btclab-meter .part span{color:#c3ccd8; font-size:11.5px}
+  .btclab-meter .part.empty span{color:var(--dim); font-style:italic}
+  .btclab-meter .foot{padding:8px 12px; border-top:1px solid var(--line);
+    color:var(--dim); font-size:10.5px}
+</style>
+
+<div class="btclab-meter" id="btclab-meter">
+  <div class="stage"><canvas id="btclab-meter-canvas"></canvas></div>
+  <div class="parts" id="btclab-meter-parts"></div>
+  <div class="foot" id="btclab-meter-foot"></div>
+</div>
+
+<script type="application/json" id="btclab-evidence-data">
+{"score": 0.9, "label": "NOISE", "blurb": "The skull is winning. Nothing here survives its own tests.", "components": [{"name": "survivors", "value": 0.0, "detail": "0 of 26 hypotheses survive the correction", "hasData": true}, {"name": "robustness", "value": 0.0, "detail": "2 specifications significant against 15.1 for random dates", "hasData": true}, {"name": "event_strength", "value": 0.0, "detail": "halving event study p = 0.30", "hasData": true}, {"name": "replication", "value": 0.043, "detail": "1 of 23 replicate out of sample", "hasData": true}, {"name": "track_record", "value": 0.0, "detail": "no claim has matured yet", "hasData": false}]}
+</script>
+
+<script>
+(function () {
+  var root = document.getElementById('btclab-meter');
+  if (!root || root.dataset.started === '1') return;
+  root.dataset.started = '1';
+
+  var DATA = {};
+  try {
+    DATA = JSON.parse(document.getElementById('btclab-evidence-data').textContent);
+  } catch (err) { DATA = { score: 0, label: "NO DATA", blurb: "", components: [] }; }
+
+  var GREEN = '#20c97e', RED = '#ef4056', GOLD = '#f7931a', BONE = '#efeadc', DIM = '#8b98a9';
+  var canvas = document.getElementById('btclab-meter-canvas');
+  var ctx = canvas.getContext('2d');
+  var score = Math.max(0, Math.min(100, Number(DATA.score) || 0));
+  var strength = score / 100;   // 0 = the tests found nothing, 1 = they found plenty
+  var W = 0, H = 0, DPR = 1, start = 0;
+
+  function resize() {
+    var box = canvas.parentNode.getBoundingClientRect();
+    DPR = Math.min(window.devicePixelRatio || 1, 2);
+    W = Math.max(320, box.width);
+    H = Math.max(120, box.height);
+    canvas.width = Math.round(W * DPR);
+    canvas.height = Math.round(H * DPR);
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  }
+
+  /* --------------------------------------------------------------- mascots */
+  /* The two of them are a gauge, not decoration: the skull is drawn from how
+     little the tests found, the coin from how much. At this project's real
+     numbers the skull is nearly full size, which is the honest picture. */
+  function skull(x, y, size, grin) {
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.scale(size / 100, size / 100);
+
+    var g = ctx.createLinearGradient(-40, -55, 30, 55);
+    g.addColorStop(0, '#ffffff'); g.addColorStop(0.45, BONE); g.addColorStop(1, '#a29b8d');
+    ctx.fillStyle = g;
+    ctx.shadowColor = 'rgba(255,70,90,' + (0.15 + 0.35 * (1 - strength)) + ')';
+    ctx.shadowBlur = 24;
+    ctx.beginPath(); ctx.ellipse(0, -8, 42, 40, 0, 0, Math.PI * 2); ctx.fill();
+    rounded(-25, 22, 50, 26, 11); ctx.fill();
+    ctx.shadowBlur = 0;
+
+    [-17, 17].forEach(function (ex) {
+      ctx.fillStyle = '#0b0b0e';
+      ctx.beginPath(); ctx.ellipse(ex, -12, 13, 15, 0, 0, Math.PI * 2); ctx.fill();
+      var glow = ctx.createRadialGradient(ex, -10, 1, ex, -10, 14);
+      glow.addColorStop(0, 'rgba(255,60,80,' + (0.35 + 0.6 * (1 - strength)) + ')');
+      glow.addColorStop(1, 'rgba(255,0,30,0)');
+      ctx.fillStyle = glow;
+      ctx.beginPath(); ctx.ellipse(ex, -10, 13, 15, 0, 0, Math.PI * 2); ctx.fill();
+    });
+
+    ctx.fillStyle = '#12100f';
+    ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(-6, 12); ctx.lineTo(6, 12); ctx.closePath(); ctx.fill();
+
+    /* The grin is the joke and the reading at once: it widens as the evidence
+       thins, so a wide smile here is bad news for the hypothesis. */
+    var teeth = Math.round(3 + 4 * grin);
+    var width = 5.6, gap = 1.6, total = teeth * width + (teeth - 1) * gap;
+    ctx.fillStyle = '#f7f3e8';
+    for (var i = 0; i < teeth; i++) {
+      ctx.fillRect(-total / 2 + i * (width + gap), 26, width, 11 + 3 * grin);
+    }
+    ctx.restore();
+  }
+
+  function coin(x, y, size, mood) {
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.scale(size / 100, size / 100);
+
+    ctx.shadowColor = 'rgba(247,147,26,' + (0.15 + 0.45 * mood) + ')';
+    ctx.shadowBlur = 26;
+    var g = ctx.createRadialGradient(-14, -18, 5, 0, 0, 48);
+    g.addColorStop(0, '#ffd27a'); g.addColorStop(0.55, GOLD); g.addColorStop(1, '#a9600b');
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(0, 0, 44, 0, Math.PI * 2); ctx.fill();
+    ctx.shadowBlur = 0;
+    ctx.strokeStyle = 'rgba(255,214,140,.85)'; ctx.lineWidth = 3.5;
+    ctx.beginPath(); ctx.arc(0, 0, 39, 0, Math.PI * 2); ctx.stroke();
+
+    ctx.fillStyle = '#5a3406';
+    ctx.font = '900 46px "Arial Black",Impact,sans-serif';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText('B', 1, 14);
+    ctx.fillRect(-9, -11, 5, 52);
+    ctx.fillRect(4, -11, 5, 52);
+
+    [-15, 15].forEach(function (ex) {
+      ctx.fillStyle = '#fffdf6';
+      ctx.beginPath(); ctx.ellipse(ex, -24, 9, 10, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#141414';
+      ctx.beginPath(); ctx.arc(ex - 1, -23 + 2 * (1 - mood), 3.6, 0, Math.PI * 2); ctx.fill();
+    });
+    /* Brows lift with the score; at zero the coin is thoroughly unimpressed. */
+    ctx.strokeStyle = '#4a2a05'; ctx.lineWidth = 4; ctx.lineCap = 'round';
+    var lift = 6 * mood;
+    ctx.beginPath(); ctx.moveTo(-25, -38 + lift); ctx.lineTo(-8, -33 - lift); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(25, -38 + lift); ctx.lineTo(8, -33 - lift); ctx.stroke();
+    ctx.restore();
+  }
+
+  function rounded(x, y, w, h, r) {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.arcTo(x + w, y, x + w, y + h, r);
+    ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r);
+    ctx.arcTo(x, y, x + w, y, r);
+    ctx.closePath();
+  }
+
+  /* ----------------------------------------------------------------- meter */
+  function meter(cx, top, width, shown) {
+    var height = 12, left = cx - width / 2;
+    var gradient = ctx.createLinearGradient(left, 0, left + width, 0);
+    gradient.addColorStop(0, 'rgba(239,64,86,.85)');
+    gradient.addColorStop(0.5, 'rgba(247,147,26,.85)');
+    gradient.addColorStop(1, 'rgba(32,201,126,.85)');
+    ctx.fillStyle = '#131a24';
+    rounded(left, top, width, height, height / 2); ctx.fill();
+    ctx.save();
+    rounded(left, top, width, height, height / 2); ctx.clip();
+    ctx.fillStyle = gradient;
+    ctx.fillRect(left, top, width * (shown / 100), height);
+    ctx.restore();
+
+    ctx.strokeStyle = 'rgba(140,155,175,.25)'; ctx.lineWidth = 1;
+    [10, 30, 50, 70].forEach(function (tick) {
+      var x = left + width * tick / 100;
+      ctx.beginPath(); ctx.moveTo(x, top); ctx.lineTo(x, top + height); ctx.stroke();
+      ctx.fillStyle = 'rgba(139,152,169,.7)';
+      ctx.font = '9px ui-monospace,Consolas,monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText(String(tick), x, top + height + 12);
+    });
+
+    var needle = left + width * (shown / 100);
+    ctx.fillStyle = '#e7ecf3';
+    ctx.beginPath();
+    ctx.moveTo(needle, top - 3);
+    ctx.lineTo(needle - 5, top - 12);
+    ctx.lineTo(needle + 5, top - 12);
+    ctx.closePath(); ctx.fill();
+  }
+
+  function draw(now) {
+    if (!W || !H) resize();
+    if (!start) start = now;
+    var age = now - start;
+    // One pass of the needle, so the reading is watched rather than glanced at.
+    var eased = Math.min(1, age / 900);
+    var shown = score * (eased * eased * (3 - 2 * eased));
+
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    ctx.clearRect(0, 0, W, H);
+    ctx.fillStyle = '#080b11';
+    ctx.fillRect(0, 0, W, H);
+
+    var mid = H / 2, breathe = Math.sin(age / 900) * 2;
+    var half = Math.max(96, Math.min(300, W * 0.30));
+    skull(W / 2 - half, mid + breathe, 74 + 46 * (1 - strength), 1 - strength);
+    coin(W / 2 + half, mid - breathe, 52 + 62 * strength, strength);
+
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#f6f2e8';
+    ctx.font = '900 ' + Math.round(Math.min(44, W / 13)) + 'px "Arial Black",Impact,sans-serif';
+    ctx.fillText(shown.toFixed(1), W / 2, mid - 26);
+    ctx.fillStyle = shown < 30 ? RED : shown < 70 ? GOLD : GREEN;
+    ctx.font = '700 13px ui-monospace,Consolas,monospace';
+    ctx.fillText(String(DATA.label || ''), W / 2, mid - 4);
+
+    meter(W / 2, mid + 16, Math.min(360, W * 0.46), shown);
+
+    ctx.fillStyle = DIM;
+    ctx.font = '11px ui-monospace,Consolas,monospace';
+    ctx.fillText('evidence out of 100', W / 2, mid + 58);
+
+    if (age < 1400) requestAnimationFrame(draw);
+  }
+
+  /* ----------------------------------------------------------- the numbers */
+  var parts = document.getElementById('btclab-meter-parts');
+  parts.innerHTML = '';
+  (DATA.components || []).forEach(function (component) {
+    var row = document.createElement('div');
+    row.className = 'part' + (component.hasData ? '' : ' empty');
+    var pct = Math.round(100 * Math.max(0, Math.min(1, component.value)));
+    row.innerHTML =
+      '<u>' + component.name.replace(/_/g, ' ') + '</u>' +
+      '<div class="track"><i style="width:' + pct + '%"></i></div>' +
+      '<span>' + component.detail + '</span>';
+    parts.appendChild(row);
+  });
+
+  document.getElementById('btclab-meter-foot').textContent =
+    (DATA.blurb || '') + ' Equal weights, every component shown, nothing below zero. '
+    + 'It measures how much survived the tests - never which way a price goes.';
+
+  if (window.ResizeObserver) {
+    new ResizeObserver(function () { resize(); start = 0; requestAnimationFrame(draw); })
+      .observe(canvas.parentNode);
+  }
+  resize();
+  requestAnimationFrame(draw);
+  window.__btclabMeter = { score: score, label: DATA.label };
+})();
+</script>
+</section><section><h2>The full workings</h2><p class='lede'>Everything above is a summary. Nothing below it is hidden.</p><div class='doors'><a class='door' href='now.html'><b>The cycle</b><span>Four halvings on one dial, and what usually happened from days like today.</span></a><a class='door' href='trader.html'><b>The agent</b><span>Every trade it made, and where the two constants that size it came from.</span></a><a class='door' href='evidence.html'><b>The evidence</b><span>All ten tests, in the order they were run, with their counts.</span></a><a class='door' href='signals.html'><b>The desk</b><span>What each rule says right now, against a live quote.</span></a><a class='door' href='receipts.html'><b>Receipts</b><span>Claims written down before their window closed, scored when it closes.</span></a></div></section>
 </main>
 <script>
   // Plotly measures its container at the moment the figure is inserted, and

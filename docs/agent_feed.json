@@ -1,6 +1,69 @@
 {
- "updated": "2026-09-11 19:01:45",
+ "updated": "2026-09-11 20:46:51",
  "observations": [
+  {
+   "timestamp": "2026-09-11 20:46:51",
+   "price": 77390.01,
+   "weight": 0.7871,
+   "flip_level": 22842.85,
+   "distance": -0.70483,
+   "state": "holding",
+   "note": "70.5% from 22,843"
+  },
+  {
+   "timestamp": "2026-09-11 20:31:49",
+   "price": 77334.53,
+   "weight": 0.7871,
+   "flip_level": 22842.85,
+   "distance": -0.70462,
+   "state": "holding",
+   "note": "70.5% from 22,843"
+  },
+  {
+   "timestamp": "2026-09-11 20:16:45",
+   "price": 77427.05,
+   "weight": 0.7871,
+   "flip_level": 22842.85,
+   "distance": -0.70498,
+   "state": "holding",
+   "note": "70.5% from 22,843"
+  },
+  {
+   "timestamp": "2026-09-11 20:01:45",
+   "price": 77288.01,
+   "weight": 0.7871,
+   "flip_level": 22842.85,
+   "distance": -0.70445,
+   "state": "holding",
+   "note": "70.4% from 22,843"
+  },
+  {
+   "timestamp": "2026-09-11 19:46:45",
+   "price": 77299.13,
+   "weight": 0.7871,
+   "flip_level": 22842.85,
+   "distance": -0.70449,
+   "state": "holding",
+   "note": "70.4% from 22,843"
+  },
+  {
+   "timestamp": "2026-09-11 19:31:45",
+   "price": 77234.78,
+   "weight": 0.7871,
+   "flip_level": 22842.85,
+   "distance": -0.70424,
+   "state": "holding",
+   "note": "70.4% from 22,843"
+  },
+  {
+   "timestamp": "2026-09-11 19:16:45",
+   "price": 77124.01,
+   "weight": 0.7871,
+   "flip_level": 22842.85,
+   "distance": -0.70382,
+   "state": "holding",
+   "note": "70.4% from 22,843"
+  },
   {
    "timestamp": "2026-09-11 19:01:45",
    "price": 77050.01,
@@ -297,69 +360,6 @@
    "distance": -0.70342,
    "state": "holding",
    "note": "70.3% from 22,843"
-  },
-  {
-   "timestamp": "2026-09-11 10:31:49",
-   "price": 77040.29,
-   "weight": 0.7871,
-   "flip_level": 22842.85,
-   "distance": -0.70349,
-   "state": "holding",
-   "note": "70.3% from 22,843"
-  },
-  {
-   "timestamp": "2026-09-11 10:16:48",
-   "price": 77114.0,
-   "weight": 0.7871,
-   "flip_level": 22842.85,
-   "distance": -0.70378,
-   "state": "holding",
-   "note": "70.4% from 22,843"
-  },
-  {
-   "timestamp": "2026-09-11 10:01:44",
-   "price": 77061.73,
-   "weight": 0.7871,
-   "flip_level": 22842.85,
-   "distance": -0.70358,
-   "state": "holding",
-   "note": "70.4% from 22,843"
-  },
-  {
-   "timestamp": "2026-09-11 09:46:45",
-   "price": 76995.0,
-   "weight": 0.7871,
-   "flip_level": 22842.85,
-   "distance": -0.70332,
-   "state": "holding",
-   "note": "70.3% from 22,843"
-  },
-  {
-   "timestamp": "2026-09-11 09:31:45",
-   "price": 77142.61,
-   "weight": 0.7871,
-   "flip_level": 46354.8,
-   "distance": -0.3991,
-   "state": "holding",
-   "note": "39.9% from 46,355"
-  },
-  {
-   "timestamp": "2026-09-10 22:16:45",
-   "price": 77181.62,
-   "weight": 0.7871,
-   "flip_level": 46354.8,
-   "distance": -0.39941,
-   "state": "holding",
-   "note": "39.9% from 46,355"
-  },
-  {
-   "timestamp": "2026-09-10 22:01:45",
-   "price": 77117.34,
-   "weight": 0.7871,
-   "flip_level": 46354.8,
-   "distance": -0.39891,
-   "state": "holding",
-   "note": "39.9% from 46,355"
   }
  ],
  "rule": "trend 50/200",

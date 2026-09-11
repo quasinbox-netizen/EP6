@@ -10,6 +10,102 @@ the scan changes every corrected p-value in it; changing an estimation window
 changes every abnormal return. Those belong under **Changed** with the effect
 on published results spelled out, never under **Fixed** as a detail.
 
+## [Unreleased]
+
+### Added
+
+- **The front page is one page, and it is a picture.** It opens on where the
+  price has been for two years with **every buy and every sell the portfolio
+  made marked on it**, the level at which it sells next drawn as a line, and
+  the calibrated 30-day interval standing at the right-hand edge. Nothing on
+  that chart continues past today except the interval, which is labelled as
+  one: the site's own tests reject every rule that claims a direction, and a
+  line running off to the right would be the part nobody reads the caveat
+  under.
+- **"Which way next?" is answered with a chart instead of seven columns of
+  p-values.** Gold is each rule as written, grey is the same rule entered on
+  dates picked out of a hat. One bar does clear its grey - `halving +365d` -
+  and the page names it in the same breath as the reason it is thrown out,
+  reading the p-value with the best trade removed straight from the result.
+  The table itself moved to the evidence page.
+- **How far the price can travel, as a bar rather than a sentence.** The 10-
+  and 30-day intervals are drawn with today's price marked inside them.
+- **A row of doors to the rest of the site**, because the front page is now a
+  summary and the workings had to stay one click away rather than one tab.
+- **The claims written before the outcome are counted on the front page.** How
+  many are recorded, how many have settled, and the date the next one settles.
+  The ledger is the only page here that is not a backtest and it was the last
+  tab; a reader could leave without learning the site writes its forecasts
+  down in advance. The verdict sentence is `forecast.ledger`'s own, which
+  refuses to give a score under twenty settled claims - a summary that wrote
+  its own would be a summary flattering its own data.
+
+- **The front page says in plain words what the agent holds and when it
+  sells.** A reader who cannot read a p-value could previously leave the site
+  without ever learning that a machine here trades a pretend portfolio in
+  public - the one thing on the site with a plain answer. Four sentences now
+  say what it holds, what it last did, the price at which it sells next, and
+  the score against doing nothing. The same block carries the refusal in the
+  same register: the rule behind those sentences could not beat entering on
+  dates picked at random, and the block says so. `test_publish.py` fails if
+  the numbers survive and the refusal is dropped.
+
+### Changed
+
+- **The site is set in the reader's own system typeface.** Everything was
+  monospace at 14px - findings, tables, methodology and the licence footnote
+  all at the same weight - so nothing said what to read first. It is now
+  `-apple-system`, which resolves to SF Pro on a Mac or an iPhone and Segoe UI
+  Variable on Windows 11, at 17px, with tabular numerals so columns still line
+  up on the decimal point. No webfont is fetched: nothing in the pages sends a
+  visitor's address to a font host, which is a promise PRIVACY.md would
+  otherwise have to make. Monospace survives inside `<code>` only. No
+  published number changed; `0.93` in a column that carries three decimals is
+  now printed `0.930`.
+- **Table columns are named the way a reader would say them.** The pages
+  printed the DataFrame's own column into the header, so a reader met
+  `p_worst_without_one` and `survives_correction` with nothing to decode them
+  by; the explanation now sits on the header itself. Booleans read `yes` and
+  `no` rather than `True` and `False`, deliberately without a green/red
+  palette: "rests on one trade: yes" and "survives correction: yes" want
+  opposite colours, so weight carries it instead.
+- **Each section leads with its finding and folds its method away.** The
+  caveat under every result is still there in full, one click down, rather
+  than printed at the weight of the result it qualifies.
+- **The intro plays once a week per visitor rather than on every load.** Eight
+  and a half seconds of skull, "PUMP!" and "-84%", replayed at a reader who
+  came back for the tables, on a site whose argument is that the fight is
+  unfalsifiable. It is remembered in `localStorage`, with both the read and the
+  write wrapped: a browser that blocks site data sees the intro rather than an
+  error. The dashboard is exempt - there it is the whole screen and loops on
+  purpose.
+- **The "Now" tab is called "The cycle".** Nothing distinguished "Today" from
+  "Now" except clicking one, and the front page's own link to that page had
+  already been calling it the cycle.
+
+### Fixed
+
+- **The sell level is no longer drawn as a standing floor.** `trend_flip_level`
+  says in its own docstring that it is exact for one close and that quoting it
+  as a standing line would be wrong: the day after, different days drop out of
+  each moving-average window and it moves. The first version of the new front
+  page drew it across two years of history labelled "sells below", and the
+  number went from $46,355 to $22,843 overnight while that was on screen. It
+  is now a stub at the right-hand edge reading "if tomorrow closes below
+  $X, it sells", the card is labelled with the day, and the plain-words block
+  says the price is worked out fresh each morning. No published number
+  changed and the wrong version never left this machine;
+  `test_the_sell_level_is_never_quoted_as_a_standing_floor` keeps it out.
+
+- **Tables no longer run off the side of a phone.** All seven tables on the
+  evidence page overflowed a 375px screen with nothing to say they had; a row
+  is now a card carrying the column name it was read under.
+- **The cycle dial no longer draws over the chart beside it.** Plotly measures
+  its container when the figure is inserted, which in a two-column row is
+  before the grid has settled, and `responsive: true` waits for a window
+  resize that never comes. The pages now fit each chart to its container on
+  load and whenever that container changes size.
+
 ## [1.1.0] - 2026-09-07
 
 ### Changed

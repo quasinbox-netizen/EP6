@@ -124,6 +124,128 @@ def range_chart(forecast: pd.DataFrame, close: pd.Series, days: int) -> go.Figur
     return figure
 
 
+def tape_chart(close: pd.Series, trades, trigger: float | None,
+               forecast: pd.DataFrame | None = None, days: int = 30) -> go.Figure:
+    """The one picture the front page is built around.
+
+    Price, the days the portfolio actually bought and sold, the level at which
+    it sells next, and how far the calibrated interval reaches. It replaces
+    four paragraphs that said the same thing in worse order: where a rule
+    bought is a fact with a date and a price, and a reader can check it against
+    the trade list rather than take a sentence's word for it.
+
+    What it deliberately does not draw is a direction. No line here continues
+    past today except the interval, which is an interval and is labelled as
+    one - the project's own tests reject every rule that claims to know which
+    way, and a chart that implies one would be the part nobody reads the
+    caveat under.
+    """
+    window = close.iloc[-730:]
+    last_date, last_price = window.index[-1], float(window.iloc[-1])
+    horizon = last_date + pd.Timedelta(days=days)
+
+    figure = go.Figure()
+    figure.add_trace(go.Scatter(
+        x=window.index, y=window, mode="lines", name="BTC/USD",
+        line={"color": COLORS["price"], "width": 2},
+        hovertemplate="%{x|%d %b %Y}<br>$%{y:,.0f}<extra></extra>",
+    ))
+
+    if forecast is not None and not forecast.empty:
+        widest = forecast.sort_values("level").iloc[-1]
+        figure.add_trace(go.Scatter(
+            x=[horizon, horizon], y=[widest.low, widest.high], mode="lines",
+            line={"color": "rgba(76,139,245,.55)", "width": 14},
+            name=f"in {days} days, {widest.level:.0%} of the time",
+            hovertemplate=(f"in {days} days, {widest.level:.0%} of the time between "
+                           f"${widest.low:,.0f} and ${widest.high:,.0f}<extra></extra>"),
+        ))
+
+    for action, colour, symbol, word in (
+        ("buy", "#2fcf83", "triangle-up", "bought"),
+        ("sell", "#ff5a5f", "triangle-down", "sold"),
+    ):
+        marks = [row for row in (trades or []) if str(row.get("action")) == action]
+        if not marks:
+            continue
+        figure.add_trace(go.Scatter(
+            x=[pd.Timestamp(row["date"]) for row in marks],
+            y=[float(row["price"]) for row in marks],
+            mode="markers", name=word,
+            marker={"symbol": symbol, "size": 15, "color": colour,
+                    "line": {"color": "#07080b", "width": 2}},
+            hovertemplate=(f"{word} %{{x|%d %b %Y}}<br>$%{{y:,.0f}}<extra></extra>"),
+        ))
+
+    if trigger is not None and float(trigger) > 0:
+        # Drawn as a stub at the right edge, never as a line across the chart.
+        # `trend_flip_level` is exact for exactly one close: the day after,
+        # different days drop out of each moving-average window and the level
+        # moves - it went from $46,355 to $22,843 in one day while this was
+        # first being built. A rule drawn across two years of history reads as
+        # a standing floor, which is a promise the number cannot keep.
+        figure.add_trace(go.Scatter(
+            x=[last_date - pd.Timedelta(days=26), horizon],
+            y=[float(trigger), float(trigger)], mode="lines",
+            line={"color": "#ff5a5f", "width": 1.6, "dash": "dash"},
+            name=f"if tomorrow closes below ${float(trigger):,.0f}, it sells",
+            hovertemplate=(f"sells if tomorrow closes below ${float(trigger):,.0f}"
+                           "<br>this level moves every day<extra></extra>"),
+        ))
+
+    figure.update_layout(
+        height=430, hovermode="x unified",
+        margin={"l": 8, "r": 8, "t": 14, "b": 34},
+        yaxis={"title": None, "tickprefix": "$", "tickformat": ",.0f",
+               "gridcolor": "rgba(255,255,255,.06)", "zeroline": False,
+               "automargin": True},
+        xaxis={"gridcolor": "rgba(255,255,255,0)", "showline": False,
+               "range": [window.index[0], horizon + pd.Timedelta(days=max(6, days // 3))]},
+        legend={"orientation": "h", "y": -0.14, "x": 0},
+        showlegend=True,
+    )
+    # No price label on the last point: it lands in the few pixels between the
+    # line and the right edge, and on a phone it is cut in half. The number is
+    # already the second card above the chart, at four times the size.
+    return figure
+
+
+def edge_chart(edge: pd.DataFrame) -> go.Figure:
+    """Every rule beside the same rule entered on random dates.
+
+    The table this replaces on the front page had seven columns of p-values,
+    and the thing it was trying to say fits in a picture: the grey bar is what
+    the rule scores when its dates are drawn out of a hat, and no gold bar
+    clears its own grey one by enough to matter.
+    """
+    frame = edge.sort_values("sharpe")
+    figure = go.Figure()
+    figure.add_trace(go.Bar(
+        y=frame["strategy"], x=frame["sharpe_random_timing"], orientation="h",
+        name="the same rule, random dates", marker={"color": "#3d4756"},
+        hovertemplate="random dates: %{x:.2f}<extra></extra>",
+    ))
+    figure.add_trace(go.Bar(
+        y=frame["strategy"], x=frame["sharpe"], orientation="h",
+        name="the rule as written", marker={"color": COLORS["price"]},
+        hovertemplate="the rule: %{x:.2f}<extra></extra>",
+    ))
+    # The rule names are the y axis, and `automargin` does not survive the
+    # resize the page performs on load - a clipped "macro: liquidity up, rates
+    # down" is a bar nobody can attribute. Reserve the room up front instead.
+    longest = max((len(str(name)) for name in frame["strategy"]), default=10)
+    figure.update_layout(
+        barmode="group", bargap=0.32, bargroupgap=0.08,
+        height=40 * len(frame) + 120,
+        margin={"l": min(230, 16 + 7 * longest), "r": 18, "t": 10, "b": 34},
+        xaxis={"title": None, "gridcolor": "rgba(255,255,255,.06)", "zeroline": False},
+        yaxis={"gridcolor": "rgba(255,255,255,0)", "automargin": True},
+        legend={"orientation": "h", "y": -0.12, "x": 0},
+        hovermode="y unified",
+    )
+    return figure
+
+
 def car_chart_from_frame(frame: pd.DataFrame, title: str) -> go.Figure:
     """The event study as saved by `run.py study`, with its interval.
 

@@ -115,11 +115,18 @@ def test_the_panels_are_embedded_rather_than_linked(site):
 
 
 def test_the_front_page_answers_the_question_people_arrive_with(site):
-    """"What do I do" belongs first, with the refusal attached to it."""
+    """"Which way is it going" belongs first, with the refusal attached to it.
+
+    The heading is the question a visitor actually arrives with. What follows
+    it must be the refusal, not a hedge and not a chart left to speak for
+    itself: the site's own tests reject every rule that claims a direction, so
+    the page that asks the question has to answer it in the same breath.
+    """
     index = site["text"]["index.html"]
 
-    assert "What this tool can tell you about today" in index
-    assert "cannot tell you, and it is not being modest" in index
+    assert "Which way next?" in index
+    assert "Nobody here can tell you, and this page is the reason" in index
+    assert "would be invented" in index
 
 
 def test_the_desk_keeps_its_live_quote(site):
@@ -261,3 +268,141 @@ def test_both_sweeps_reach_the_built_agent_page(tmp_path, data):
     assert "Every value of the band" in trader
     assert "Every volatility target" in trader
     assert "On 50.2% of days the position is pinned" in trader
+
+
+def test_the_front_page_says_in_plain_words_what_the_agent_will_do(tmp_path, data):
+    """A reader who cannot read a p-value still gets an answer, and the refusal.
+
+    The block exists because the site had nothing a non-specialist could read:
+    a machine trades a pretend portfolio in public here, and that one thing has
+    a plain answer - it holds or it does not, and there is a price at which it
+    sells. What the block must never become is an entry signal, so the same
+    four sentences that say when it sells also say the rule behind them could
+    not beat picking dates at random. This test fails if someone keeps the
+    signal and drops the refusal.
+    """
+    signals = strategy_signals(data)
+    close = data.features["close"]
+    curve = pd.DataFrame({"equity": close / close.iloc[0] * 10_000.0,
+                          "buy_and_hold": close / close.iloc[0] * 10_000.0})
+    inputs = SiteInputs(
+        outlook=cycle_outlook(data), signals=signals,
+        evidence=build_evidence(hypotheses=1), study=halving_event_study(data, post=365),
+        scan=pd.DataFrame({"significant_adjusted": [False]}),
+        curve_summary=pd.DataFrame(), control_note="note",
+        paper={
+            "payload": {
+                "state": {
+                    "started": "2024-04-20", "asOf": "2026-09-09",
+                    "capital": 10_000.0, "equity": 9_305.0, "hold": 12_182.0,
+                    "weight": 0.79, "lastPrice": 79_113.0, "entryPrice": 78_456.0,
+                    "flipLevel": 46_355.0, "trades": 7,
+                },
+                "trades": [{"date": "2026-09-08", "action": "buy", "price": 78_456.0,
+                            "weight_from": 0.0, "weight_to": 0.79}],
+            },
+            "curve": curve,
+        },
+    )
+    build(tmp_path / "site", DASHBOARD, inputs)
+    index = (tmp_path / "site" / "index.html").read_text(encoding="utf-8")
+
+    assert "Holding bitcoin" in index
+    assert "$46,355" in index                  # the price at which it sells
+    assert "2026-09-08" in index               # the last thing it actually did
+    assert "Please do not copy it" in index
+    assert "dates picked out of a hat" in index
+
+
+def test_the_sell_level_is_never_quoted_as_a_standing_floor(tmp_path, data):
+    """`trend_flip_level` is exact for one close, and the page has to say so.
+
+    The level solves for tomorrow's close: the day after, different days drop
+    out of each moving-average window and it moves. It went from $46,355 to
+    $22,843 overnight while the front page was being built, having been drawn
+    as a line across two years of history and labelled "sells below" - which
+    reads as a floor the rule will defend, and it is nothing of the kind.
+    """
+    signals = strategy_signals(data)
+    close = data.features["close"]
+    curve = pd.DataFrame({"equity": close / close.iloc[0] * 10_000.0,
+                          "buy_and_hold": close / close.iloc[0] * 10_000.0})
+    inputs = SiteInputs(
+        outlook=cycle_outlook(data), signals=signals,
+        evidence=build_evidence(hypotheses=1), study=halving_event_study(data, post=365),
+        scan=pd.DataFrame({"significant_adjusted": [False]}),
+        curve_summary=pd.DataFrame(), control_note="note",
+        paper={
+            "payload": {
+                "state": {"started": "2024-04-20", "asOf": "2026-09-09",
+                          "capital": 10_000.0, "equity": 9_305.0, "hold": 12_182.0,
+                          "weight": 0.79, "flipLevel": 46_355.0},
+                "trades": [{"date": "2026-09-08", "action": "buy", "price": 78_456.0,
+                            "weight_from": 0.0, "weight_to": 0.79}],
+            },
+            "curve": curve,
+        },
+    )
+    build(tmp_path / "site", DASHBOARD, inputs)
+    index = (tmp_path / "site" / "index.html").read_text(encoding="utf-8")
+
+    assert "Sells if tomorrow closes below" in index
+    assert "for tomorrow only" in index
+    # The card label that made it a floor, and the chart annotation that drew
+    # one. Neither may come back.
+    assert "It sells below" not in index
+
+
+def test_the_plain_words_are_left_out_when_there_is_no_portfolio(site):
+    """No paper run means no position, and a blank block is better than a guess."""
+    assert "What the robot is doing with its own money" not in site["text"]["index.html"]
+
+
+def test_the_front_page_counts_the_claims_written_before_the_outcome(tmp_path, data):
+    """The ledger is the only page that is not a backtest, so it goes up front.
+
+    It used to be the last tab, and a reader could leave without learning that
+    the site writes its forecasts down in advance and scores them when the
+    window closes - the one part of it that can ever become evidence. What the
+    summary must not do is invent a score: the verdict sentence comes from
+    `forecast.ledger`, which refuses to give one until twenty claims have
+    settled, and this test fails if the front page starts writing its own.
+    """
+    signals = strategy_signals(data)
+    close = data.features["close"]
+    origin = close.index[-40]
+    ledger = pd.DataFrame([
+        {
+            "made_on": origin, "as_of": origin, "horizon": 10,
+            "target_date": origin + pd.Timedelta(days=10),
+            "price_at_origin": float(close.loc[origin]),
+            "claim": "interval", "level": 0.9,
+            "low": float(close.loc[origin]) * 0.8,
+            "high": float(close.loc[origin]) * 1.2,
+            "p_up": None, "n_effective": 12, "note": "",
+        },
+        {
+            "made_on": close.index[-2], "as_of": close.index[-2], "horizon": 30,
+            "target_date": close.index[-2] + pd.Timedelta(days=30),
+            "price_at_origin": float(close.iloc[-2]),
+            "claim": "interval", "level": 0.9,
+            "low": float(close.iloc[-2]) * 0.8,
+            "high": float(close.iloc[-2]) * 1.2,
+            "p_up": None, "n_effective": 12, "note": "",
+        },
+    ])
+    inputs = SiteInputs(
+        outlook=cycle_outlook(data), signals=signals,
+        evidence=build_evidence(hypotheses=1), study=halving_event_study(data, post=365),
+        scan=pd.DataFrame({"significant_adjusted": [False]}),
+        curve_summary=pd.DataFrame(), control_note="note", ledger=ledger,
+    )
+    build(tmp_path / "site", DASHBOARD, inputs)
+    index = (tmp_path / "site" / "index.html").read_text(encoding="utf-8")
+
+    assert "Written down before the outcome" in index
+    assert "Claims recorded" in index
+    assert "Next one settles" in index
+    # Two settled claims is not a track record, and the page has to say so
+    # rather than print a hit rate that reads like one.
+    assert "not a score" in index or "A track record starts the day" in index
