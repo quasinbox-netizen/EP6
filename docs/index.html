@@ -6,36 +6,142 @@
 <title>BTC Cycle Lab</title>
 <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
 <style>
-  :root{--bg:#05070a;--panel:#0d1219;--line:#1c2530;--ink:#e7ecf3;--dim:#8b98a9;--gold:#f7931a}
+  /* Two typefaces, and the split between them carries the whole page.
+     Everything used to be monospace at 14px - the findings, the tables, the
+     methodology, the licence footnote - so nothing on the page said what to
+     read first, and a reader who wanted the answer had to read all of it.
+     Figures stay monospace, because columns of numbers have to line up.
+     Sentences move to the reading face, because sentences are read, not
+     scanned. Size does the rest of the work: a finding is 17px, a caveat 14,
+     and a caveat is folded away besides. */
+  :root{--bg:#05070a;--panel:#0d1219;--line:#1c2530;--ink:#e7ecf3;--dim:#93a1b2;--gold:#f7931a;
+    --prose:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    --figure:tabular-nums}
   *{box-sizing:border-box}
   body{margin:0;background:var(--bg);color:var(--ink);
-    font:14px/1.6 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
-  header{padding:22px 24px 0;max-width:1180px;margin:0 auto}
-  header h1{margin:0;font-size:26px;letter-spacing:.02em}
-  header p{margin:6px 0 0;color:var(--dim);font-size:12.5px;max-width:70ch}
-  nav{margin:16px 0 0;display:flex;gap:6px;flex-wrap:wrap}
-  nav a{padding:6px 12px;border:1px solid var(--line);border-radius:999px;
-    color:var(--dim);text-decoration:none;font-size:12px}
+    font:16px/1.65 var(--prose);-webkit-text-size-adjust:100%}
+  code{font-family:var(--mono);font-size:.92em;color:var(--ink)}
+  a{color:var(--gold)}
+  header{padding:26px 24px 0;max-width:1180px;margin:0 auto}
+  header h1{margin:0;font:700 29px/1.15 var(--mono);letter-spacing:.01em}
+  header p{margin:9px 0 0;color:var(--dim);font-size:14.5px;max-width:66ch}
+  nav{margin:18px 0 0;display:flex;gap:6px;flex-wrap:wrap}
+  nav a{padding:7px 14px;border:1px solid var(--line);border-radius:999px;
+    color:var(--dim);text-decoration:none;font:13px/1 var(--mono)}
   nav a.on{background:var(--gold);border-color:var(--gold);color:#06090d;font-weight:700}
-  nav a:hover{color:var(--ink)}
-  main{max-width:1180px;margin:0 auto;padding:18px 24px 40px}
-  section{margin:26px 0}
-  h2{font-size:16px;letter-spacing:.04em;margin:0 0 10px;color:var(--ink)}
-  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:18px}
-  .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px}
-  .card{border:1px solid var(--line);border-radius:8px;background:var(--panel);padding:11px 13px}
-  .card u{display:block;text-decoration:none;color:var(--dim);font-size:10px;
-    letter-spacing:.14em;text-transform:uppercase}
-  .card b{font-size:21px;font-weight:600}
-  table{width:100%;border-collapse:collapse;font-size:12.5px}
-  th,td{text-align:left;padding:6px 10px;border-bottom:1px solid var(--line)}
-  th{color:var(--dim);font-weight:600;font-size:10.5px;letter-spacing:.1em;text-transform:uppercase}
-  .wrap{overflow-x:auto;border:1px solid var(--line);border-radius:8px;background:var(--panel)}
-  .note{color:var(--dim);font-size:11.5px;margin-top:8px;max-width:80ch}
+  nav a:hover{color:var(--ink);border-color:#33404f}
+  main{max-width:1180px;margin:0 auto;padding:6px 24px 40px}
+  section{margin:0;padding:32px 0 8px;border-top:1px solid var(--line)}
+  main>section:first-child{border-top:0;padding-top:22px}
+  h2{font:700 20px/1.35 var(--mono);letter-spacing:.01em;margin:0 0 14px;color:var(--ink)}
+  main p{max-width:70ch}
+  .lede{font-size:17px;line-height:1.55;margin:0 0 16px;max-width:66ch;color:#dbe3ec}
+  .lede b{color:#fff}
+  /* Four sentences, one per line, each one a whole thought. Nothing about the
+     robot's position needs a table or a chart to be said. */
+  .steps{list-style:none;margin:16px 0 0;padding:0;max-width:72ch}
+  .steps li{position:relative;padding:11px 0 11px 30px;font-size:16px;line-height:1.6;
+    border-bottom:1px solid var(--line)}
+  .steps li:last-child{border-bottom:0}
+  .steps li::before{content:"";position:absolute;left:6px;top:20px;width:7px;height:7px;
+    border-radius:50%;background:var(--gold)}
+  .steps b{color:#fff}
+  /* min-width:0 is load-bearing. A grid track is minmax(auto,1fr), and `auto`
+     resolves to min-content - so a Plotly SVG that renders wide pushes its own
+     column wider than the page and takes the neighbouring chart with it. */
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:22px}
+  .grid>div{min-width:0}
+  .grid>div>h2{margin-top:0}
+  .js-plotly-plot,.plot-container{max-width:100%}
+  .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px}
+  .card{border:1px solid var(--line);border-radius:8px;background:var(--panel);padding:12px 14px}
+  .card u{display:block;text-decoration:none;color:var(--dim);font:600 11px/1.4 var(--mono);
+    letter-spacing:.13em;text-transform:uppercase}
+  .card b{display:block;margin-top:3px;font:600 24px/1.2 var(--mono);
+    font-variant-numeric:var(--figure)}
+  table{width:100%;border-collapse:collapse;font:13.5px/1.5 var(--mono);
+    font-variant-numeric:var(--figure)}
+  th,td{text-align:left;padding:9px 13px;border-bottom:1px solid var(--line);
+    white-space:nowrap;vertical-align:baseline}
+  tbody tr:last-child td{border-bottom:0}
+  tbody tr:hover td{background:#111a25}
+  th{color:var(--dim);font-weight:600;font-size:11px;letter-spacing:.07em;
+    text-transform:uppercase;white-space:normal}
+  th abbr{text-decoration:none;border-bottom:1px dotted #58657a;cursor:help}
+  td.num,th.num{text-align:right}
+  td.flag,th.flag{text-align:right}
+  td.key{color:#fff;white-space:normal}
+  td.txt{white-space:normal;font-family:var(--prose);font-size:14px;color:var(--dim);
+    min-width:26ch}
+  /* Deliberately not green and red. "Rests on one trade: yes" and "survives
+     correction: yes" want opposite colours, so a palette that means good and
+     bad would lie in one column to be readable in the other. Weight carries
+     the presence instead. */
+  td .yes{font-style:normal;font-weight:700;color:#fff}
+  td .no{font-style:normal;color:#71808f}
+  th.mark{color:var(--gold)}
+  th.mark,td.mark{background:rgba(247,147,26,.055)}
+  /* A table wider than its box gets a shadow at the edge it can scroll to,
+     and loses it when it cannot. Pure CSS: the covering gradients scroll with
+     the content, the shadows do not, so the shadow shows only once there is
+     something past the edge. */
+  .wrap{overflow-x:auto;border:1px solid var(--line);border-radius:8px;
+    background:
+      linear-gradient(to right,var(--panel) 30%,rgba(13,18,25,0)) left center,
+      linear-gradient(to left,var(--panel) 30%,rgba(13,18,25,0)) right center,
+      radial-gradient(farthest-side at 0 50%,rgba(0,0,0,.7),rgba(0,0,0,0)) left center,
+      radial-gradient(farthest-side at 100% 50%,rgba(0,0,0,.7),rgba(0,0,0,0)) right center,
+      var(--panel);
+    background-repeat:no-repeat;
+    background-size:44px 100%,44px 100%,16px 100%,16px 100%,100% 100%;
+    background-attachment:local,local,scroll,scroll,local}
+  .note{color:var(--dim);font-size:14px;line-height:1.6;margin-top:10px;max-width:70ch}
+  details.method{margin-top:14px;border:1px solid var(--line);border-radius:8px;
+    background:#080c12}
+  details.method>summary{cursor:pointer;padding:10px 14px;color:var(--dim);
+    font:600 11.5px/1.4 var(--mono);letter-spacing:.11em;text-transform:uppercase;
+    list-style:none}
+  details.method>summary::-webkit-details-marker{display:none}
+  details.method>summary::before{content:"+";color:var(--gold);margin-right:9px;
+    font-weight:700}
+  details.method[open]>summary::before{content:"\2013"}
+  details.method>summary:hover{color:var(--ink)}
+  details.method[open]>summary{border-bottom:1px solid var(--line)}
+  details.method .note{margin:0;padding:12px 14px;max-width:72ch}
   .verdict{border:1px solid #5c2230;border-left-width:3px;border-radius:8px;
-    background:#180d11;padding:12px 14px;color:#f3c9cf;font-size:12.5px}
-  footer{max-width:1180px;margin:0 auto;padding:0 24px 40px;color:var(--dim);font-size:11px}
+    background:#180d11;padding:14px 17px;color:#f6d3d8;font-size:15px;line-height:1.55;
+    max-width:74ch}
+  footer{max-width:1180px;margin:0 auto;padding:0 24px 40px;color:var(--dim);
+    font-size:12.5px;line-height:1.6}
   footer a{color:var(--dim)}
+  /* On a phone every one of these tables ran off the side of the screen with
+     nothing to say so. A row becomes a card, and each cell carries the column
+     name it was read under. */
+  @media (max-width:640px){
+    body{font-size:15.5px}
+    header,main,footer{padding-left:16px;padding-right:16px}
+    header h1{font-size:24px}
+    h2{font-size:18px}
+    .lede{font-size:16px}
+    .wrap{border:0;background:none;overflow:visible}
+    table,tbody,tr,td{display:block;width:auto}
+    thead{display:none}
+    tr{border:1px solid var(--line);border-radius:8px;background:var(--panel);
+      padding:2px 13px;margin:0 0 10px}
+    td{display:flex;justify-content:space-between;align-items:baseline;gap:16px;
+      padding:6px 0;border-bottom:1px solid #131b25;white-space:normal;text-align:right;
+      line-height:1.45}
+    td:last-child{border-bottom:0}
+    td::before{content:attr(data-label);color:var(--dim);font-size:10.5px;
+      letter-spacing:.07em;text-transform:uppercase;text-align:left;flex:0 0 auto;
+      max-width:50%;line-height:1.45}
+    td.key{color:var(--gold);font-weight:700;font-size:14.5px;text-align:left;
+      padding:11px 0 9px;border-bottom:1px solid var(--line)}
+    td.key::before{display:none}
+    td.mark{background:none}
+    td.txt{min-width:0}
+  }
 </style>
 </head>
 <body>
@@ -43,7 +149,7 @@
   <h1>BTC Cycle Lab</h1>
   <p>Whether the halving cycle and macro events explain anything in the price of
   BTC. Every result carries a confidence interval and a count of observations;
-  without those it is not a result. Sample to 2026-09-09.</p>
+  without those it is not a result. Sample to 2026-09-11.</p>
   <nav><a href="index.html" class="on">Today</a><a href="now.html">Now</a><a href="trader.html">The agent</a><a href="evidence.html">Evidence</a><a href="signals.html">Signals</a><a href="receipts.html">Receipts</a></nav>
 </header>
 <main>
@@ -714,8 +820,42 @@
   };
 })();
 </script>
-<section><h2>What this tool can tell you about today</h2><p class='note'>As of 2026-09-09, price 79,113. Everything here is computed from data up to that date.</p><div class='cards'><div class='card'><u>How much to hold</u><b>0.79</b></div><div class='card'><u>Forecast volatility</u><b>45%</b></div><div class='card'><u>Which way it goes</u><b>Unknown</b></div></div><p class='note'>The position is target volatility divided by forecast volatility, after a rebalance band. It says how much, never which way - and volatility is the one thing in this project that is forecastable. Both the target and the band were chosen on this history rather than brought in from outside it; <a href='trader.html'>the agent page says how</a>.</p><p>In <b>10 days</b>, with 90% probability, between <b>70,906</b> and <b>94,942</b> (-12.7% / +16.9%).</p><p>In <b>30 days</b>, with 95% probability, between <b>60,434</b> and <b>115,848</b> (-25.6% / +42.6%).</p><p class='note'>These intervals passed a coverage test on non-overlapping windows: a 90% interval really did contain the outcome about 90% of the time. Levels that failed are withheld rather than quietly widened.</p></section><section><h2>When to get in or out</h2><div class='verdict'><b>This tool cannot tell you, and it is not being modest.</b> Every timing rule it tested was rejected, the hypothesis scan finds nothing after correction, 160 specifications of the halving question find nothing, and the forecast model loses to its own baselines. An entry signal here would be invented.</div><div class='wrap'><table><thead><tr><th>strategy</th><th>sharpe</th><th>sharpe_random_timing</th><th>p_value</th><th>p_worst_without_one</th><th>fragile</th><th>survives_correction</th></tr></thead><tbody><tr><td>buy and hold</td><td>0.711</td><td>0.716</td><td>0.955</td><td>0.93</td><td>False</td><td>False</td></tr><tr><td>trend 50/200</td><td>0.9</td><td>0.556</td><td>0.194</td><td>0.285</td><td>False</td><td>False</td></tr><tr><td>halving +30d</td><td>0.09</td><td>0.135</td><td>0.538</td><td>0.581</td><td>False</td><td>False</td></tr><tr><td>halving +90d</td><td>0.705</td><td>0.188</td><td>0.088</td><td>0.525</td><td>False</td><td>False</td></tr><tr><td>halving +180d</td><td>0.667</td><td>0.233</td><td>0.194</td><td>0.347</td><td>False</td><td>False</td></tr><tr><td>halving +365d</td><td>1.176</td><td>0.342</td><td>0.013</td><td>0.166</td><td>True</td><td>False</td></tr><tr><td>macro: liquidity up, rates down</td><td>0.318</td><td>0.224</td><td>0.394</td><td>0.647</td><td>False</td><td>False</td></tr></tbody></table></div><p class='note'>Every rule compared against ITSELF applied at random times. A p-value under 0.05 would mean the timing beat chance; <code>p_worst_without_one</code> re-runs the test with one trade removed, and <code>survives_correction</code> accounts for having tried several rules at once. Nothing survives.</p></section>
+<section><h2>What the robot is doing with its own money</h2><p class='lede'>A machine on this site runs a pretend portfolio in the open. Here is what it holds, and what would make it act next.</p><div class='cards'><div class='card'><u>Right now</u><b>Holding bitcoin</b></div><div class='card'><u>Of the money, in bitcoin</u><b>79%</b></div><div class='card'><u>It sells below</u><b>$22,843</b></div><div class='card'><u>Since it started</u><b>-8.8%</b></div></div><ul class='steps'><li><b>Right now it owns bitcoin.</b> 79% of its money is in bitcoin, and the rest is sitting in cash.</li><li><b>Last time it acted</b> was 2026-09-08: it put its cash into bitcoin, at $78,456, going from 0% in bitcoin to 79%.</li><li><b>Next it sells</b>, and it sells on the day the price closes below $22,843. Until that day it does nothing at all.</li><li><b>The score so far.</b> It began with $10,000 on 2024-04-20 and has $9,124 today (-8.8%). Someone who bought once on that same day and never touched it again would have $11,882 (+18.8%).</li></ul><div class='verdict'><b>Please do not copy it.</b> It follows one simple rule - buy when the 50-day average price crosses above the 200-day one, sell when it crosses back. This project tested that rule and <b>could not show it beats buying on dates picked out of a hat</b>. The robot is here so you can watch a rule fail in public, with the dates written down in advance. It is not here to be followed, and nothing on this site is advice.</div><details class='method'><summary>The small print behind those four sentences</summary><div class='note'>The buy and sell prices above are the direction rule flipping. How much it holds is a separate decision made by the volatility forecast, so the size of the position can change on a day when the rule itself says nothing. Fees and slippage are charged on every change. <a href='trader.html'>The agent page</a> shows every trade and the curve behind them.</div></details></section><section><h2>What this tool can tell you about today</h2><p class='note'>As of 2026-09-11, price 77,163. Everything here is computed from data up to that date.</p><div class='cards'><div class='card'><u>How much to hold</u><b>0.79</b></div><div class='card'><u>Forecast volatility</u><b>45%</b></div><div class='card'><u>Which way it goes</u><b>Unknown</b></div></div><p class='lede'>It says <b>how much</b> to hold, never which way - volatility is the one thing in this project that is forecastable.</p><details class='method'><summary>How the position is worked out</summary><div class='note'>The position is target volatility divided by forecast volatility, after a rebalance band. Both the target and the band were chosen on this history rather than brought in from outside it; <a href='trader.html'>the agent page says how</a>.</div></details><p>In <b>10 days</b>, with 90% probability, between <b>70,906</b> and <b>94,942</b> (-12.7% / +16.9%).</p><p>In <b>30 days</b>, with 95% probability, between <b>60,434</b> and <b>115,848</b> (-25.6% / +42.6%).</p><details class='method'><summary>How the intervals were checked</summary><div class='note'>These intervals passed a coverage test on non-overlapping windows: a 90% interval really did contain the outcome about 90% of the time. Levels that failed are withheld rather than quietly widened.</div></details></section><section><h2>When to get in or out</h2><div class='verdict'><b>This tool cannot tell you, and it is not being modest.</b> Every timing rule it tested was rejected, the hypothesis scan finds nothing after correction, 160 specifications of the halving question find nothing, and the forecast model loses to its own baselines. An entry signal here would be invented.</div><div class='wrap'><table><thead><tr><th class="key">rule</th><th class="num"><abbr title="Return per unit of volatility, annualised. Higher is better, and on its own it proves nothing.">Sharpe</abbr></th><th class="num"><abbr title="The same rule entered on randomly chosen dates. This, not zero, is the bar the real timing has to clear.">Sharpe, random dates</abbr></th><th class="num"><abbr title="How often chance alone produces a result at least this good. Below 0.05 is the usual bar.">p</abbr></th><th class="num"><abbr title="The same test re-run with the single best trade dropped. A result that rests on one trade shows itself here.">p, best trade removed</abbr></th><th class="flag"><abbr title="Whether removing a single trade destroys the result.">rests on one trade</abbr></th><th class="flag mark"><abbr title="Whether it still holds once every rule that was tried at all is counted.">survives correction</abbr></th></tr></thead><tbody><tr><td class="key" data-label="rule">buy and hold</td><td class="num" data-label="Sharpe">0.711</td><td class="num" data-label="Sharpe, random dates">0.716</td><td class="num" data-label="p">0.955</td><td class="num" data-label="p, best trade removed">0.930</td><td class="flag" data-label="rests on one trade"><i class="no">no</i></td><td class="flag mark" data-label="survives correction"><i class="no">no</i></td></tr><tr><td class="key" data-label="rule">trend 50/200</td><td class="num" data-label="Sharpe">0.900</td><td class="num" data-label="Sharpe, random dates">0.556</td><td class="num" data-label="p">0.194</td><td class="num" data-label="p, best trade removed">0.285</td><td class="flag" data-label="rests on one trade"><i class="no">no</i></td><td class="flag mark" data-label="survives correction"><i class="no">no</i></td></tr><tr><td class="key" data-label="rule">halving +30d</td><td class="num" data-label="Sharpe">0.090</td><td class="num" data-label="Sharpe, random dates">0.135</td><td class="num" data-label="p">0.538</td><td class="num" data-label="p, best trade removed">0.581</td><td class="flag" data-label="rests on one trade"><i class="no">no</i></td><td class="flag mark" data-label="survives correction"><i class="no">no</i></td></tr><tr><td class="key" data-label="rule">halving +90d</td><td class="num" data-label="Sharpe">0.705</td><td class="num" data-label="Sharpe, random dates">0.188</td><td class="num" data-label="p">0.088</td><td class="num" data-label="p, best trade removed">0.525</td><td class="flag" data-label="rests on one trade"><i class="no">no</i></td><td class="flag mark" data-label="survives correction"><i class="no">no</i></td></tr><tr><td class="key" data-label="rule">halving +180d</td><td class="num" data-label="Sharpe">0.667</td><td class="num" data-label="Sharpe, random dates">0.233</td><td class="num" data-label="p">0.194</td><td class="num" data-label="p, best trade removed">0.347</td><td class="flag" data-label="rests on one trade"><i class="no">no</i></td><td class="flag mark" data-label="survives correction"><i class="no">no</i></td></tr><tr><td class="key" data-label="rule">halving +365d</td><td class="num" data-label="Sharpe">1.176</td><td class="num" data-label="Sharpe, random dates">0.342</td><td class="num" data-label="p">0.013</td><td class="num" data-label="p, best trade removed">0.166</td><td class="flag" data-label="rests on one trade"><i class="yes">yes</i></td><td class="flag mark" data-label="survives correction"><i class="no">no</i></td></tr><tr><td class="key" data-label="rule">macro: liquidity up, rates down</td><td class="num" data-label="Sharpe">0.318</td><td class="num" data-label="Sharpe, random dates">0.224</td><td class="num" data-label="p">0.394</td><td class="num" data-label="p, best trade removed">0.647</td><td class="flag" data-label="rests on one trade"><i class="no">no</i></td><td class="flag mark" data-label="survives correction"><i class="no">no</i></td></tr></tbody></table></div><details class='method'><summary>How each rule was tested</summary><div class='note'>Every rule is compared against ITSELF applied at random times, so the bar is its own random-timing Sharpe rather than zero. A p under 0.05 would mean the timing beat chance. <b>p, best trade removed</b> re-runs the test with one trade dropped, and <b>survives correction</b> accounts for having tried several rules at once. Nothing survives. Hover a column heading for what it measures.</div></details></section>
 </main>
+<script>
+  // Plotly measures its container at the moment the figure is inserted, and
+  // in a two-column row that moment is before the grid has settled: the first
+  // chart is drawn at the full width of the page, keeps it, and spills over
+  // the chart beside it. `responsive: true` only listens for window resizes,
+  // and there is no window resize on the way in - so watch the containers
+  // instead. The width check is what stops a resize from feeding itself.
+  (function () {
+    var widths = new WeakMap();
+    function fit(node) {
+      if (!window.Plotly || !node || !node.parentElement) { return; }
+      var width = Math.round(node.parentElement.clientWidth);
+      if (!width || widths.get(node) === width) { return; }
+      widths.set(node, width);
+      try { Plotly.Plots.resize(node); } catch (err) { /* not a plot yet */ }
+    }
+    function fitAll() {
+      document.querySelectorAll(".js-plotly-plot").forEach(fit);
+    }
+    window.addEventListener("load", function () {
+      fitAll();
+      if (!window.ResizeObserver) { return; }
+      var observer = new ResizeObserver(function (entries) {
+        entries.forEach(function (entry) {
+          var node = entry.target.querySelector(".js-plotly-plot");
+          if (node) { fit(node); }
+        });
+      });
+      document.querySelectorAll(".js-plotly-plot").forEach(function (node) {
+        if (node.parentElement) { observer.observe(node.parentElement); }
+      });
+    });
+  })();
+</script>
 <script>
   // Embedded in a page elsewhere - tell the host how tall this is, so the
   // frame can size itself instead of guessing and showing two scrollbars.
