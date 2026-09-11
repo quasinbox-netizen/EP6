@@ -1,6 +1,15 @@
 {
- "updated": "2026-09-11 20:46:51",
+ "updated": "2026-09-11 21:01:50",
  "observations": [
+  {
+   "timestamp": "2026-09-11 21:01:50",
+   "price": 77336.0,
+   "weight": 0.7871,
+   "flip_level": 22842.85,
+   "distance": -0.70463,
+   "state": "holding",
+   "note": "70.5% from 22,843"
+  },
   {
    "timestamp": "2026-09-11 20:46:51",
    "price": 77390.01,
@@ -349,15 +358,6 @@
    "weight": 0.7871,
    "flip_level": 22842.85,
    "distance": -0.70319,
-   "state": "holding",
-   "note": "70.3% from 22,843"
-  },
-  {
-   "timestamp": "2026-09-11 10:46:52",
-   "price": 77019.99,
-   "weight": 0.7871,
-   "flip_level": 22842.85,
-   "distance": -0.70342,
    "state": "holding",
    "note": "70.3% from 22,843"
   }

@@ -107,9 +107,14 @@ def test_the_panels_are_embedded_rather_than_linked(site):
     gauge with the cycle board, the desk with the signals. The intro rides on
     the front page only - a reader who came back for the tables should not sit
     through it again.
+
+    The intro is matched on the element rather than on the bare name: every
+    page carries a height reporter that waits for the overlay to go before it
+    measures, so the name alone appears everywhere and would pass for the
+    panel being there.
     """
-    assert "btclab-intro" in site["text"]["index.html"]
-    assert "btclab-intro" not in site["text"]["now.html"]
+    assert '<div id="btclab-intro"' in site["text"]["index.html"]
+    assert '<div id="btclab-intro"' not in site["text"]["now.html"]
     assert "btclab-meter" in site["text"]["now.html"]
     assert "btclab-desk" in site["text"]["signals.html"]
 

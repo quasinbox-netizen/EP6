@@ -249,14 +249,45 @@
 <script>
   // Embedded in a page elsewhere - tell the host how tall this is, so the
   // frame can size itself instead of guessing and showing two scrollbars.
+  //
+  // The measurement has to wait for the charts. A Plotly div is empty until
+  // the library draws into it, so a height taken at `load` is the height of a
+  // page with holes where its figures go - and the host this is embedded in
+  // takes an early number and keeps it: the frame sat at 2,101px around a
+  // 4,936px page, showing less than half of it inside a second scrollbar. So
+  // nothing is posted until every figure has an <svg> in it and the intro is
+  // gone, with a timeout in case the CDN never answers and the figures never
+  // arrive - a late height is recoverable, a wrong first one is not.
   (function () {
+    var last = 0, forced = false;
+    window.setTimeout(function () { forced = true; }, 6000);
+
+    function height() {
+      return Math.max(
+        document.documentElement ? document.documentElement.scrollHeight : 0,
+        document.body ? document.body.scrollHeight : 0
+      );
+    }
+    function settled() {
+      if (forced) { return true; }
+      if (document.getElementById("btclab-intro")) { return false; }
+      var plots = document.querySelectorAll(".js-plotly-plot");
+      for (var i = 0; i < plots.length; i++) {
+        if (!plots[i].querySelector(".main-svg")) { return false; }
+      }
+      return true;
+    }
     function report() {
+      if (!settled()) { return; }
+      var now = height();
+      if (!now || Math.abs(now - last) < 8) { return; }
+      last = now;
       try {
-        parent.postMessage({ btclabHeight: document.documentElement.scrollHeight }, "*");
+        parent.postMessage({ btclabHeight: now }, "*");
       } catch (err) { /* not embedded, or a host that will not listen */ }
     }
     window.addEventListener("load", report);
-    window.addEventListener("resize", report);
+    window.addEventListener("resize", function () { last = 0; report(); });
     window.setInterval(report, 1500);
   })();
 </script>
