@@ -1529,6 +1529,113 @@ def cmd_backtest(args) -> int:
     return 0
 
 
+def cmd_audit(args) -> int:
+    """Audit a track record produced outside this project."""
+    from audit.license import verify as verify_licence
+    from audit.loader import LoadError, load_csv
+    from audit.render import to_text, write_html
+    from audit.report import DEFAULT_PERMUTATIONS, run_audit
+
+    if args.example:
+        target = write_example(Path(args.example))
+        print(f"wrote an example track record to {target}")
+        print(f"now run:  python run.py audit --file {target} --variants-tried 1")
+        return 0
+
+    if not args.file:
+        print("nothing to audit. Pass --file <track-record.csv>, or --example demo.csv "
+              "to write a file you can try it on.")
+        return 2
+
+    licence = verify_licence(args.licence, root=Path(__file__).resolve().parents[1])
+    print(licence.banner())
+    print()
+
+    try:
+        data = load_csv(
+            args.file, convention=args.position_convention, cost_rate=args.cost_bps / 10_000.0
+        )
+    except LoadError as exc:
+        print(f"cannot audit {args.file}:\n  {exc}")
+        return 1
+
+    if not licence.valid:
+        from audit.license import EVAL_MAX_ROWS
+
+        if len(data.net_returns) > EVAL_MAX_ROWS:
+            print(
+                f"evaluation mode audits the most recent {EVAL_MAX_ROWS} observations "
+                f"of {len(data.net_returns):,}."
+            )
+            data = _truncate_input(data, EVAL_MAX_ROWS)
+
+    report = run_audit(
+        data,
+        licence=licence,
+        variants_tried=args.variants_tried,
+        cost_bps=args.cost_bps,
+        permutations=args.permutations or DEFAULT_PERMUTATIONS,
+        label=args.label or Path(args.file).stem,
+    )
+    print(to_text(report))
+
+    stem = Path(args.file).stem
+    out_dir = Path(args.out) if args.out else Path(args.file).resolve().parent
+    html_path = write_html(report, data, out_dir / f"{stem}-reality-check.html")
+    json_path = report.to_json(out_dir / f"{stem}-reality-check.json")
+    print(f"\nreport: {html_path}")
+    print(f"data:   {json_path}")
+
+    # A failed audit is not a failed run: exit 0 so the command can be scripted
+    # without a rejection looking like a crash. --strict flips that for anyone
+    # wiring this into a pipeline that should stop on a bad result.
+    if args.strict and report.verdict == "REJECTED":
+        return 1
+    return 0
+
+
+def _truncate_input(data, rows: int):
+    """Keep the last `rows` observations, and every series aligned to them."""
+    from dataclasses import replace
+
+    net = data.net_returns.iloc[-rows:]
+    positions = data.positions.reindex(net.index) if data.positions is not None else None
+    asset = data.asset_returns.reindex(net.index) if data.asset_returns is not None else None
+    bench = data.benchmark_returns.reindex(net.index) if data.benchmark_returns is not None else None
+    return replace(
+        data, net_returns=net, positions=positions, asset_returns=asset,
+        benchmark_returns=bench,
+        notes=list(data.notes) + [f"evaluation mode: trimmed to the last {rows} observations."],
+    )
+
+
+def write_example(path: Path) -> Path:
+    """A synthetic track record, honest about being synthetic.
+
+    Built so the audit has something to say: a trend rule on a random walk with
+    drift, which reliably produces a respectable-looking equity curve with no
+    edge in it at all. That is the point of the demo.
+    """
+    rng = np.random.default_rng(20260917)
+    days = 1400
+    dates = pd.date_range("2021-01-01", periods=days, freq="D")
+    steps = rng.normal(0.0008, 0.035, size=days)
+    close = pd.Series(20_000 * np.exp(np.cumsum(steps)), index=dates)
+    fast = close.rolling(20).mean()
+    slow = close.rolling(80).mean()
+    position = (fast > slow).astype(float)
+    position.iloc[:80] = 0.0
+    frame = pd.DataFrame({
+        "date": dates.strftime("%Y-%m-%d"),
+        "close": close.round(2).to_numpy(),
+        "position": position.to_numpy(),
+    })
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    frame.to_csv(path, index=False)
+    return path
+
+
 def cmd_all(args) -> int:
     for command in (cmd_quality, cmd_features, cmd_macro, cmd_study, cmd_control,
                     cmd_validate, cmd_walkforward, cmd_backtest, cmd_forecast):
@@ -1715,6 +1822,38 @@ def build_parser() -> argparse.ArgumentParser:
 
     backtest = subparsers.add_parser("backtest", help="strategies vs buy-and-hold")
     backtest.set_defaults(func=cmd_backtest)
+
+    audit_parser = subparsers.add_parser(
+        "audit",
+        help="audit an outside strategy's track record (Strategy Reality Check)",
+    )
+    audit_parser.add_argument("--file", default=None, help="the CSV to audit")
+    audit_parser.add_argument(
+        "--example", default=None,
+        help="write an example track record to this path and exit",
+    )
+    audit_parser.add_argument(
+        "--variants-tried", type=int, default=None,
+        help="how many rules/parameter sets were tried before keeping this one",
+    )
+    audit_parser.add_argument(
+        "--cost-bps", type=float, default=0.0,
+        help="one-way cost in basis points, applied to turnover (positions form only)",
+    )
+    audit_parser.add_argument(
+        "--position-convention", choices=("decided", "held"), default="decided",
+        help="does a row's position get applied to the next day's return (decided) "
+             "or that same row's (held)?",
+    )
+    audit_parser.add_argument("--permutations", type=int, default=None)
+    audit_parser.add_argument("--licence", default=None, help="licence key, overriding the file")
+    audit_parser.add_argument("--label", default=None, help="name for the report header")
+    audit_parser.add_argument("--out", default=None, help="directory for the report files")
+    audit_parser.add_argument(
+        "--strict", action="store_true",
+        help="exit non-zero when the verdict is REJECTED",
+    )
+    audit_parser.set_defaults(func=cmd_audit)
 
     everything = subparsers.add_parser("all", help="full run (without downloading data)")
     everything.add_argument("--pre", type=int, default=30)

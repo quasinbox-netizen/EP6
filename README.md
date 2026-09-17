@@ -92,6 +92,7 @@ Then run any of these:
 | `run.py paper` | advance the public paper portfolio and print its trades |
 | `run.py publish` | build the static site into `site/` for a web host |
 | `run.py backtest` | strategies vs buy-and-hold |
+| `run.py audit --file x.csv` | audit somebody else's track record — [Strategy Reality Check](docs/AUDIT.md) |
 | `run.py all` | everything in sequence |
 | `run.py dashboard` | browser dashboard on port 8511 |
 | `run.py test` | the test suite (`test offline` skips network tests) |
@@ -481,6 +482,48 @@ does not multiply evidence.
 
 ---
 
+## Auditing somebody else's strategy
+
+Everything above interrogates one hypothesis of this project's own. The same
+machinery answers a question people bring from outside: **is my backtest real,
+or did I search until something looked good?**
+
+```bash
+python run.py audit --example demo.csv
+python run.py audit --file demo.csv --variants-tried 1
+```
+
+`--example` writes a 20/80 moving-average crossover on a **random walk**. It
+shows roughly +135% at a Sharpe of 1.7, and there is nothing in a random walk
+to have an edge on. The audit rejects it:
+
+```
+VERDICT: REJECTED
+4 of 9 checks failed (timing vs chance, multiple testing, sharpe interval,
+versus holding).
+```
+
+Ten checks run. Three do the real work:
+
+* **Timing vs chance** keeps the price path as it happened and moves the *rule*
+  instead, circularly shifting the position series. Exposure, turnover and costs
+  are preserved; only the alignment with the market is destroyed. Shuffling the
+  returns instead — the obvious null — destroys volatility clustering and drift
+  at once, so almost any rule beats it.
+* **Fragility** re-runs that test with each trade removed in turn. Permutation
+  draws multiply the *arrangements* of the evidence, not the evidence.
+* **Multiple testing** needs your honesty rather than your data:
+  `--variants-tried` counts every parameter set you tried and discarded.
+  Undeclared, the report can never reach its top grade.
+
+The result is a terminal report, a self-contained HTML file with no external
+references, and the same content as JSON. Full documentation in
+[docs/AUDIT.md](docs/AUDIT.md); if you intend to charge for it, read
+[docs/SELLING.md](docs/SELLING.md) first — the line between an audit tool and
+regulated investment advice is the entire product.
+
+---
+
 ## Layout
 
 ```
@@ -492,6 +535,7 @@ src/
 ├── analysis/    event study, HAC correlations, control group (placebo)
 ├── backtest/    engine with costs and slippage + strategies
 ├── validation/  splits, walk-forward, Bonferroni/BH, synthetic data
+├── audit/       Strategy Reality Check: the same tests, pointed at an outside CSV
 ├── pipeline.py  assembles everything - used by both the CLI and the dashboard
 └── cli.py
 dashboard/       Streamlit - presentation only, no logic (a test enforces this)
@@ -536,6 +580,8 @@ comes from `pipeline.py`, so the terminal and the browser can never disagree.
 | [TERMS.md](TERMS.md) | terms of use |
 | [PRIVACY.md](PRIVACY.md) | privacy policy (the tool collects nothing) |
 | [DATA_SOURCES.md](DATA_SOURCES.md) | attribution and redistribution restrictions |
+| [docs/AUDIT.md](docs/AUDIT.md) | Strategy Reality Check: auditing an outside track record |
+| [docs/SELLING.md](docs/SELLING.md) | commercial and EU regulatory notes, if you sell it |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | how to contribute, and the house rule |
 | [SECURITY.md](SECURITY.md) | reporting vulnerabilities |
 | [CHANGELOG.md](CHANGELOG.md) | what changed, and which changes moved the numbers |
