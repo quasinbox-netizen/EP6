@@ -14,6 +14,32 @@ on published results spelled out, never under **Fixed** as a detail.
 
 ### Added
 
+- **Strategy Reality Check: the project's own tests, pointed at somebody
+  else's backtest** (`run.py audit --file track-record.csv`). The lab was built
+  to interrogate one hypothesis of its own and concluded against it; the
+  machinery it grew doing that - a permutation null that re-times a rule rather
+  than reshuffling prices, leave-one-episode-out fragility, a correction for how
+  many variants were tried, an embargoed out-of-sample split - answers a
+  question almost nobody asks about their own backtest. Reads a CSV in three
+  shapes (`close`+`position`, `equity`, or `return`), runs ten checks and
+  returns one of three verdicts with a terminal report, a self-contained HTML
+  file and JSON. `--example` writes a moving-average crossover on a **random
+  walk** that shows +135% at Sharpe 1.7, and the audit rejects it - that is the
+  demo, and it is the argument. Deliberately **not** a score out of ten: a score
+  invites tuning the strategy until the number rises, which is the search the
+  multiplicity check exists to punish. `--variants-tried` is the honest part and
+  cannot be inferred from the file, so leaving it out caps the verdict below its
+  top grade rather than assuming one. Documented in
+  [docs/AUDIT.md](docs/AUDIT.md).
+- **Offline licence keys** (`src/audit/license.py`, `audit.keytool`). Ed25519,
+  not HMAC: the verifier ships to the customer, so a shared secret would be a
+  forgeable one. Evaluation mode - the default, and what an unsigned build of
+  this repository always runs - trims to 400 observations and 200 permutation
+  draws. It does not alter a single verdict: a weakened test is reported as
+  weakened, because a free tier that lies is worth less than no free tier.
+  Commercial and EU regulatory notes, including the line between an audit tool
+  and regulated investment advice, in [docs/SELLING.md](docs/SELLING.md).
+
 - **The front page is one page, and it is a picture.** It opens on where the
   price has been for two years with **every buy and every sell the portfolio
   made marked on it**, the level at which it sells next drawn as a line, and
@@ -85,6 +111,22 @@ on published results spelled out, never under **Fixed** as a detail.
 
 ### Fixed
 
+- **The audit's own metric table and its permutation test now report the same
+  Sharpe.** The first was computed on simple returns and the second on log
+  returns, which differ by about sigma^2/2 - a quarter of a Sharpe point on a
+  55%-volatility series. Two different numbers for one quantity in one report is
+  a defect whatever the footnote says; the audit path is simple returns
+  throughout, and the cost-breakeven calculation converts locally where it needs
+  logs to stay closed form.
+- **The audit's equity curve starts at exactly 1.0.** It began at `1 + r0`, so
+  the first day's return divided out of every total and the first day's loss
+  could not appear in a drawdown.
+- **European CSV exports parse.** pandas' delimiter sniffer reads the whole
+  sample and, on `date;close;position` over rows like `2021-01-01;100,23;1,0`,
+  finds more commas than semicolons and splits on the decimal separator. The
+  delimiter is now counted in the header line, where names carry no decimals.
+  Separately, the numeric cleanup was gated on `dtype == object`, which pandas 3
+  never reports for text columns - so it skipped exactly the files it exists for.
 - **The sell level is no longer drawn as a standing floor.** `trend_flip_level`
   says in its own docstring that it is exact for one close and that quoting it
   as a standing line would be wrong: the day after, different days drop out of

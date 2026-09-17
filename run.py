@@ -4,6 +4,7 @@
     python run.py ingest --what all      # download data
     python run.py all                    # full analysis
     python run.py dashboard              # browser dashboard
+    python run.py audit-desk             # Strategy Reality Check, in a browser
     python run.py test                   # test suite
     python run.py doctor                 # environment diagnostics
 
@@ -222,8 +223,9 @@ def looks_like_our_dashboard(port: int) -> bool:
         return False
 
 
-def start_dashboard(python: Path, port: str) -> int:
-    """Start the dashboard, or explain clearly why it cannot start.
+def start_dashboard(python: Path, port: str, *, app: str = "app.py",
+                    name: str = "dashboard") -> int:
+    """Start a Streamlit app, or explain clearly why it cannot start.
 
     The port is checked BEFORE anything optimistic is printed. The first
     version announced "Dashboard starting on http://localhost:8511", then
@@ -242,28 +244,28 @@ def start_dashboard(python: Path, port: str) -> int:
     if port_is_taken(port_number):
         if looks_like_our_dashboard(port_number):
             print(
-                f"The dashboard is already running on http://localhost:{port_number}\n"
+                f"The {name} is already running on http://localhost:{port_number}\n"
                 "Open that address in a browser - there is nothing to start.\n\n"
                 "To restart it instead, close the window running it (Ctrl+C), or "
                 f"start a\nsecond one on another port:\n\n"
-                f"    python run.py dashboard {port_number + 1}"
+                f"    python run.py {name} {port_number + 1}"
             )
             return 0
         print(
             f"[error] Port {port_number} is in use by something that is not this "
-            "dashboard.\n        Start it on a different port:\n\n"
-            f"            python run.py dashboard {port_number + 1}"
+            f"{name}.\n        Start it on a different port:\n\n"
+            f"            python run.py {name} {port_number + 1}"
         )
         return 1
 
-    print(f"Dashboard starting on http://localhost:{port_number}")
+    print(f"{name.capitalize()} starting on http://localhost:{port_number}")
     print("Press Ctrl+C in this window to stop.\n")
     # Normal priority, unlike the batch commands: someone is sitting in front
     # of this waiting for it to redraw. Deprioritising the thing being watched
     # is how you make an application feel broken while saving nothing - it
     # settles at 240 MB and 2% of a core once loaded.
     return run(python, [
-        "-m", "streamlit", "run", str(ROOT / "dashboard" / "app.py"),
+        "-m", "streamlit", "run", str(ROOT / "dashboard" / app),
         "--server.port", str(port_number), "--browser.gatherUsageStats", "false",
     ], low_priority=False)
 
@@ -342,6 +344,12 @@ def main(argv: list[str]) -> int:
 
     if command == "dashboard":
         return start_dashboard(python, rest[0] if rest else "8511")
+
+    if command == "audit-desk":
+        return start_dashboard(
+            python, rest[0] if rest else "8512",
+            app="audit_desk.py", name="audit-desk",
+        )
 
     if command == "test":
         if rest and rest[0] == "offline":

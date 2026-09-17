@@ -54,3 +54,13 @@ data/processed/**
 
 # The published site is build output; rebuild it with `run.py publish`.
 /site/
+
+# Licence material for the Strategy Reality Check.
+# The private signing key must never reach the repository: it mints licences
+# for the product forever. The customer key is personal data of a customer.
+licence.key
+*.licence.key
+src-signing.key
+*-signing.key
+*-reality-check.html
+*-reality-check.json
