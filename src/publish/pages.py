@@ -121,7 +121,8 @@ COLUMNS: dict[str, tuple[str, str]] = {
     "high": ("high", ""),
     "p_up": ("p, up", ""),
     "matured": ("settled", ""),
-    "realised": ("outcome", ""),
+    "realised": ("outcome %", "How far the price actually moved from the day the "
+                              "claim was recorded to the day it settled."),
 }
 
 

@@ -139,12 +139,44 @@
       table.innerHTML = '<tr><td style="color:#8b98a9">Nothing recorded yet.</td></tr>';
       return;
     }
+    /* One row per STRETCH, not per check. The agent looks every quarter of an
+       hour and usually sees exactly what it saw last time: forty rows carrying
+       one sentence is forty times the ink for none of the information. A
+       stretch collapses into its first and last check, how many there were,
+       and the range of prices across them - so what stands out is the moment
+       something changed, which is the only thing a journal is for. */
+    var runs = [];
+    rows.forEach(function (row) {
+      var last = runs[runs.length - 1];
+      if (last && last.note === row.note && last.state === row.state) {
+        last.checks += 1;
+        last.until = row.timestamp;
+        last.low = Math.min(last.low, row.price);
+        last.high = Math.max(last.high, row.price);
+      } else {
+        runs.push({
+          note: row.note, state: row.state, checks: 1,
+          from: row.timestamp, until: row.timestamp,
+          low: row.price, high: row.price,
+        });
+      }
+    });
+
     table.innerHTML =
-      '<tr><th>time (utc)</th><th>price</th><th>state</th><th>what it saw</th></tr>'
-      + rows.map(function (row) {
-          return '<tr><td>' + row.timestamp + '</td><td>' + money(row.price) + '</td>'
-            + '<td class="' + row.state + '">' + row.state + '</td>'
-            + '<td>' + row.note + '</td></tr>';
+      '<tr><th>when</th><th>checks</th><th>price</th><th>state</th>'
+      + '<th>what it saw</th></tr>'
+      + runs.map(function (run) {
+          var when = run.checks === 1
+            ? run.from
+            : run.until.slice(5) + ' → ' + run.from.slice(5);
+          var price = run.low === run.high
+            ? money(run.low)
+            : money(run.low) + ' – ' + money(run.high);
+          return '<tr><td>' + when + '</td>'
+            + '<td>' + run.checks + '</td>'
+            + '<td>' + price + '</td>'
+            + '<td class="' + run.state + '">' + run.state + '</td>'
+            + '<td>' + run.note + '</td></tr>';
         }).join('');
   }
 

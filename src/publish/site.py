@@ -797,11 +797,27 @@ def build(destination: Path, dashboard_dir: Path, inputs: SiteInputs) -> list:
     else:
         open_claims = int((~scored["matured"].astype(bool)).sum())
         board = ledger_scoreboard(scored, base_rate=unconditional.share_positive)
+        # Dollars to the dollar, outcomes as percentages. A bound published as
+        # 77,597.7343 asks the reader to carry four digits that no claim was
+        # ever made about - the interval was never accurate to a hundredth of a
+        # cent - and an outcome of -0.0539 makes them do the arithmetic that
+        # the column exists to save them. This changes the precision on the
+        # page, not the figure behind it, so it is not a restatement and does
+        # not belong in CORRECTIONS; the claim is identical either way.
         shown = scored.assign(
             as_of=scored["as_of"].dt.strftime("%Y-%m-%d"),
             settles=scored["target_date"].dt.strftime("%Y-%m-%d"),
+            # Through to_numeric first: a direction claim carries no bounds and
+            # an interval claim carries no probability, so these columns hold
+            # None and arrive as object dtype, where .round() raises rather
+            # than leaving the blank alone.
+            low=_numeric(scored["low"]).round(0),
+            high=_numeric(scored["high"]).round(0),
+            realised=(_numeric(scored["realised"]) * 100).round(1),
+            p_up=_numeric(scored["p_up"]).round(3),
+            level=_numeric(scored["level"]).round(2),
         ).loc[:, ["as_of", "settles", "horizon", "claim", "level", "low", "high",
-                  "p_up", "matured", "realised"]].round(4)
+                  "p_up", "matured", "realised"]]
         receipts = (
             "<section><h2>Receipts</h2>"
             + lede("Every other page is a backtest, written by someone who had "
@@ -817,6 +833,17 @@ def build(destination: Path, dashboard_dir: Path, inputs: SiteInputs) -> list:
     written.append(_write(destination / "receipts.html",
                           _shell("BTC Cycle Lab - receipts", "Receipts", receipts, as_of=as_of)))
     return written
+
+
+def _numeric(values: pd.Series) -> pd.Series:
+    """A column as numbers, with anything unparseable left blank.
+
+    The ledger mixes claim types in one table: an interval has bounds and no
+    probability, a direction call has a probability and no bounds. The empty
+    cells arrive as None, which makes the column object-typed, and rounding
+    an object column raises instead of skipping the blanks.
+    """
+    return pd.to_numeric(values, errors="coerce")
 
 
 def _write(path: Path, text: str) -> Path:
