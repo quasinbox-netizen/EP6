@@ -8,6 +8,8 @@ between observing and trading.
 """
 from __future__ import annotations
 
+import json
+import numpy as np
 import pandas as pd
 import pytest
 
@@ -134,3 +136,28 @@ def test_the_feed_is_newest_first(tmp_path):
 
     assert payload["observations"][0]["price"] == 70003.0
     assert payload["updated"].endswith("12:03:00")
+
+def test_a_missing_flip_level_becomes_null_not_nan():
+    """The feed has to survive JSON.parse, and NaN does not.
+
+    A rule whose trigger is a date, or one without enough history for its
+    averages, records no flip level. Pandas calls that NaN, `json.dumps`
+    writes it out verbatim, every browser refuses the file, and the page
+    reports the feed as unpublished while it sits there returning 200. This
+    happened in public for a week.
+    """
+    journal = pd.DataFrame({
+        "timestamp": ["2026-09-17 13:46:41"],
+        "price": [76078.84],
+        "flip_level": [np.nan],
+        "distance": [np.inf],
+        "state": ["waiting"],
+    })
+
+    payload = feed(journal)
+    observation = payload["observations"][0]
+
+    assert observation["flip_level"] is None
+    assert observation["distance"] is None
+    # allow_nan=False is what the command writes with; it must not raise here.
+    assert json.loads(json.dumps(payload, allow_nan=False))["observations"]

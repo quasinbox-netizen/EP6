@@ -34,6 +34,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 
 from ingest.http import FetchError, get_json
@@ -182,11 +183,34 @@ def should_publish(
 
 
 def feed(journal: pd.DataFrame, *, rows: int = 40) -> dict:
-    """What the site shows: the recent observations, newest first."""
+    """What the site shows: the recent observations, newest first.
+
+    Every non-finite number becomes null on the way out. A missing flip level
+    is an ordinary state - the rule's trigger is a date, or there is not
+    enough history for the averages - and pandas records it as NaN, which
+    Python will happily write into a file called .json and no browser will
+    parse. The page then reports the feed as unpublished while the file sits
+    there returning 200, which is a long way to look for a one-word bug.
+    """
     if journal.empty:
         return {"observations": [], "updated": None}
     recent = journal.tail(rows).iloc[::-1]
     return {
         "updated": str(journal.iloc[-1]["timestamp"]),
-        "observations": recent.to_dict("records"),
+        "observations": [_jsonable(record) for record in recent.to_dict("records")],
     }
+
+
+def _jsonable(record: dict) -> dict:
+    """One observation with NaN and infinity replaced by null."""
+    clean = {}
+    for key, value in record.items():
+        if isinstance(value, (float, np.floating)) and not np.isfinite(value):
+            clean[key] = None
+        elif isinstance(value, (np.integer,)):
+            clean[key] = int(value)
+        elif isinstance(value, (np.floating,)):
+            clean[key] = float(value)
+        else:
+            clean[key] = value
+    return clean

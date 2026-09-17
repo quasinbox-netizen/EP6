@@ -984,7 +984,13 @@ def cmd_agent(args) -> int:
     payload["flipText"] = report.trigger.text
     payload["asOf"] = f"{signals['as_of']:%Y-%m-%d}"
     destination.mkdir(parents=True, exist_ok=True)
-    feed_path.write_text(json.dumps(payload, indent=1), encoding="utf-8")
+    # allow_nan=False: Python writes NaN into JSON quite happily and every
+    # browser refuses to parse it, so a silent NaN becomes a page that says
+    # the feed was never published. Better to fail here, where the message
+    # names the actual problem.
+    feed_path.write_text(
+        json.dumps(payload, indent=1, allow_nan=False), encoding="utf-8"
+    )
 
     last = None
     if args.since:

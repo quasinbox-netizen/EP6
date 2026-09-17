@@ -84,11 +84,26 @@
      together are what makes the panel current without a server. */
   function loadFeed() {
     fetch('agent_feed.json?cb=' + Date.now(), { cache: 'no-store' })
-      .then(function (r) { return r.json(); })
-      .then(function (data) { feed = data; render(); })
-      .catch(function () {
+      .then(function (r) {
+        /* A missing feed and an unreadable one are different problems, and
+           the old catch-all reported both as "not published yet" - which
+           sends a reader looking for a file that was sitting right there. */
+        if (!r.ok) { throw new Error('missing'); }
+        return r.text();
+      })
+      .then(function (text) {
+        try {
+          feed = JSON.parse(text);
+        } catch (err) {
+          throw new Error('unreadable');
+        }
+        render();
+      })
+      .catch(function (err) {
         document.getElementById('btclab-agent-says').textContent =
-          'The agent feed is not published yet.';
+          err && err.message === 'unreadable'
+            ? 'The agent feed is published but could not be read. It is being fixed.'
+            : 'The agent feed is not published yet.';
       });
   }
 
