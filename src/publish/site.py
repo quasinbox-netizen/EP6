@@ -46,6 +46,8 @@ from publish.pages import (agent_in_plain_words, evidence_page, figure_html,
 from publish.pages import table as _table
 from publish.payloads import desk_payload
 from publish.simple import simple_document
+from publish.trend import TREND_ASSETS, cycle_chart, cycle_meters, trend_ribbon
+from analysis.cycle_timing import FOLK_DOWN_DAYS, FOLK_UP_DAYS, cycle_timing
 
 PANELS = {
     "intro": ("intro.html", "<!--INTRO:START-->", "<!--INTRO:END-->"),
@@ -573,7 +575,8 @@ def build(destination: Path, dashboard_dir: Path, inputs: SiteInputs) -> list:
     written.append(_write(
         destination / "today.html",
         _shell("BTC Cycle Lab - today", "Today",
-               hero(inputs)
+               _trend_now(inputs)
+               + hero(inputs)
                + which_way(inputs)
                + how_far(inputs)
                + _track_record(scored, base_rate=unconditional.share_positive)
@@ -595,6 +598,7 @@ def build(destination: Path, dashboard_dir: Path, inputs: SiteInputs) -> list:
             ("200-day trend", "Above" if "above" in outlook.trend_label else "Below"),
         ]),
         "</section>",
+        _cycle_calendar(inputs),
         "<section><h2>How much has actually survived the tests</h2>",
         panel(dashboard_dir, "meter", inputs.evidence.as_dict()),
         "</section>",
@@ -743,6 +747,7 @@ def build(destination: Path, dashboard_dir: Path, inputs: SiteInputs) -> list:
 
         trader_body = (
             "<section><h2>What the agent is doing right now</h2>"
+            + _agent_trend(inputs)
             + panel(dashboard_dir, "agent")
             + method(
                 "Why it watches often and acts rarely",
@@ -845,6 +850,111 @@ def build(destination: Path, dashboard_dir: Path, inputs: SiteInputs) -> list:
     written.append(_write(destination / "receipts.html",
                           _shell("BTC Cycle Lab - receipts", "Receipts", receipts, as_of=as_of)))
     return written
+
+
+def _trend_now(inputs: SiteInputs) -> str:
+    """The first thing on the practical page: which colour the trend is today."""
+    close = (inputs.signals or {}).get("price")
+    if close is None or not len(close):
+        return ""
+    ribbon = trend_ribbon(close, element_id="trend-now", days=730)
+    if not ribbon:
+        return ""
+    return (
+        "<section><h2>The trend right now</h2>"
+        + ribbon
+        + method(
+            "What green and red mean here",
+            "Green on a day the close was above its 200-day average, red on a day "
+            "it was below. It is the most quoted trend line there is, which is why "
+            "it is drawn - and it is a description of the days behind us. The "
+            "evidence page tests rules built on it; none of them beat entering on "
+            "random dates after costs.",
+        )
+        + "</section>"
+        + TREND_ASSETS
+    )
+
+
+def _agent_trend(inputs: SiteInputs) -> str:
+    """The agent's own rule as a colour: green while the 50-day is above the 200-day."""
+    close = (inputs.signals or {}).get("price")
+    payload = (inputs.paper or {}).get("payload") or {}
+    started = (payload.get("state") or {}).get("started")
+    if close is None or not len(close) or not started:
+        return ""
+    ribbon = trend_ribbon(close, element_id="trend-agent", fast=50, slow=200,
+                          since=started, trades=payload.get("trades") or [])
+    if not ribbon:
+        return ""
+    return (
+        ribbon
+        + lede("The line turns <b>green when the 50-day average rises above the "
+               "200-day</b> and red when it falls below - that is the agent's whole "
+               "rule. The triangles are where it actually bought and sold.")
+        + TREND_ASSETS
+    )
+
+
+def _cycle_calendar(inputs: SiteInputs) -> str:
+    """The folk calendar - 365 days down, 1,064 up - measured, not quoted."""
+    close = (inputs.signals or {}).get("price")
+    if close is None or not len(close):
+        return ""
+    timing = cycle_timing(close)
+    if timing is None or len(timing.laps) < 2:
+        return ""
+    downs = [d for *_, d in timing.down_days()]
+    ups = [d for *_, d in timing.up_days()]
+    laps = []
+    for lap, following in zip(timing.laps, timing.laps[1:] + [None]):
+        rise = "-"
+        if following is not None and lap.bottom is not None and lap.bottom_final:
+            rise = f"{(following.top - lap.bottom).days:,}"
+        laps.append({
+            "top": f"{lap.top:%Y-%m-%d}",
+            "top price": f"${lap.top_price:,.0f}",
+            "bottom": "-" if lap.bottom is None else (
+                f"{lap.bottom:%Y-%m-%d}" + ("" if lap.bottom_final else " (so far)")),
+            "bottom price": "-" if lap.bottom_price is None else f"${lap.bottom_price:,.0f}",
+            "fall": "-" if lap.bottom_price is None else f"{lap.bottom_price / lap.top_price - 1:.0%}",
+            "days down": "-" if lap.down_days is None else f"{lap.down_days:,}",
+            "days up to next top": rise,
+        })
+    p_value = None
+    try:
+        p_value = float(inputs.study.car_summary["p_value"])
+    except (AttributeError, KeyError, TypeError, ValueError):
+        pass
+    tested = (f" The lab's own test of the halving effect gives p={p_value:.2f}."
+              if p_value is not None else "")
+    spread_down = f"{min(downs)}-{max(downs)}" if downs else "-"
+    spread_up = f"{min(ups):,}-{max(ups):,}" if ups else "-"
+    return (
+        f"<section><h2>The {FOLK_DOWN_DAYS} / {FOLK_UP_DAYS:,}-day calendar</h2>"
+        + lede(f"People say bitcoin falls for about <b>{FOLK_DOWN_DAYS} days</b> after a "
+               f"cycle top and then rises for about <b>{FOLK_UP_DAYS:,}</b>. On this lab's "
+               f"prices the falls took <b>{spread_down} days</b> and the rises "
+               f"<b>{spread_up}</b>. That is a close fit - from three laps.")
+        + cycle_chart(close, timing)
+        + cycle_meters(timing)
+        + _table(pd.DataFrame(laps), highlight="days down")
+        + lede("Three laps that fit are three laps, not a law. <b>Nothing here is a "
+               "date to buy on</b>: a fourth lap is free to run long or short, and the "
+               "calendar has no mechanism that says it cannot." + tested)
+        + method(
+            "How a top and a bottom are found",
+            "Top: the highest daily close in the two years after each halving. "
+            "Bottom: the lowest close between that top and the next halving - so "
+            "the current lap's bottom is only the lowest so far until 2028. The "
+            "two-year window is the folk one, and it was chosen knowing roughly "
+            "where the tops were, which is why the calendar is drawn here and not "
+            "tested with: a definition shaped around history cannot then prove "
+            "that history has a shape.",
+        )
+        + "</section>"
+        + TREND_ASSETS
+    )
 
 
 def _numeric(values: pd.Series) -> pd.Series:

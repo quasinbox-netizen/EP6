@@ -433,3 +433,10 @@ def test_the_front_page_is_three_plain_answers_in_two_languages(site):
 def test_the_details_page_is_in_the_navigation(site):
     assert "today.html" in {name for name, _ in PAGES}
     assert "today.html" in site["text"]
+
+
+def test_the_trend_and_the_cycle_are_drawn_where_they_belong(site):
+    """The moving line on the practical page, the calendar on the cycle page."""
+    assert 'id="trend-now"' in site["text"]["today.html"]
+    assert 'id="cycle-lap"' in site["text"]["now.html"]
+    assert "Nothing here is a date to buy on" in site["text"]["now.html"]
