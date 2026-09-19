@@ -45,6 +45,7 @@ from publish.pages import (agent_in_plain_words, evidence_page, figure_html,
                            hero, how_far, lede, method, which_way, workings)
 from publish.pages import table as _table
 from publish.payloads import desk_payload
+from publish.simple import simple_document
 
 PANELS = {
     "intro": ("intro.html", "<!--INTRO:START-->", "<!--INTRO:END-->"),
@@ -91,7 +92,8 @@ DATA_START, DATA_END = "<!--DATA:START-->", "<!--DATA:END-->"
 PLOTLY = "https://cdn.plot.ly/plotly-2.35.2.min.js"
 
 PAGES = (
-    ("index.html", "Today"),
+    ("index.html", "Start"),
+    ("today.html", "Today"),
     ("now.html", "The cycle"),
     ("trader.html", "The agent"),
     ("evidence.html", "Evidence"),
@@ -553,15 +555,25 @@ def build(destination: Path, dashboard_dir: Path, inputs: SiteInputs) -> list:
     scored = (score_ledger(ledger, inputs.signals["price"])
               if not ledger.empty else pd.DataFrame())
 
-    # --- the practical page ----------------------------------------------
-    # First, because it answers the question a visitor arrives with. The intro
-    # rides on this page only; a reader who came back for the tables should not
-    # have to sit through it again.
+    # --- the front door --------------------------------------------------
+    # Three questions in plain words, in Polish or English, for a visitor who
+    # has never met a p-value and will give the page thirty seconds. It is
+    # index.html because that is what the frame on quasipi.tech shows. The
+    # intro rides here and only here: a reader who came back for the tables
+    # should not have to sit through it again.
     written.append(_write(
         destination / "index.html",
-        _shell("BTC Cycle Lab", "Today",
-               panel(dashboard_dir, "intro")
-               + hero(inputs)
+        simple_document(inputs, as_of=as_of,
+                        intro=panel(dashboard_dir, "intro"),
+                        height_reporter=HEIGHT_REPORTER),
+    ))
+
+    # --- the practical page ----------------------------------------------
+    # The same answers with their workings, one click in from the front door.
+    written.append(_write(
+        destination / "today.html",
+        _shell("BTC Cycle Lab - today", "Today",
+               hero(inputs)
                + which_way(inputs)
                + how_far(inputs)
                + _track_record(scored, base_rate=unconditional.share_positive)

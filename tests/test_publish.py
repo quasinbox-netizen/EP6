@@ -127,7 +127,7 @@ def test_the_front_page_answers_the_question_people_arrive_with(site):
     itself: the site's own tests reject every rule that claims a direction, so
     the page that asks the question has to answer it in the same breath.
     """
-    index = site["text"]["index.html"]
+    index = site["text"]["today.html"]
 
     assert "Which way next?" in index
     assert "Nobody here can tell you, and this page is the reason" in index
@@ -310,7 +310,7 @@ def test_the_front_page_says_in_plain_words_what_the_agent_will_do(tmp_path, dat
         },
     )
     build(tmp_path / "site", DASHBOARD, inputs)
-    index = (tmp_path / "site" / "index.html").read_text(encoding="utf-8")
+    index = (tmp_path / "site" / "today.html").read_text(encoding="utf-8")
 
     assert "Holding bitcoin" in index
     assert "$46,355" in index                  # the price at which it sells
@@ -349,7 +349,7 @@ def test_the_sell_level_is_never_quoted_as_a_standing_floor(tmp_path, data):
         },
     )
     build(tmp_path / "site", DASHBOARD, inputs)
-    index = (tmp_path / "site" / "index.html").read_text(encoding="utf-8")
+    index = (tmp_path / "site" / "today.html").read_text(encoding="utf-8")
 
     assert "Sells if tomorrow closes below" in index
     assert "for tomorrow only" in index
@@ -360,7 +360,7 @@ def test_the_sell_level_is_never_quoted_as_a_standing_floor(tmp_path, data):
 
 def test_the_plain_words_are_left_out_when_there_is_no_portfolio(site):
     """No paper run means no position, and a blank block is better than a guess."""
-    assert "What the robot is doing with its own money" not in site["text"]["index.html"]
+    assert "What the robot is doing with its own money" not in site["text"]["today.html"]
 
 
 def test_the_front_page_counts_the_claims_written_before_the_outcome(tmp_path, data):
@@ -403,7 +403,7 @@ def test_the_front_page_counts_the_claims_written_before_the_outcome(tmp_path, d
         curve_summary=pd.DataFrame(), control_note="note", ledger=ledger,
     )
     build(tmp_path / "site", DASHBOARD, inputs)
-    index = (tmp_path / "site" / "index.html").read_text(encoding="utf-8")
+    index = (tmp_path / "site" / "today.html").read_text(encoding="utf-8")
 
     assert "Written down before the outcome" in index
     assert "Claims recorded" in index
@@ -411,3 +411,25 @@ def test_the_front_page_counts_the_claims_written_before_the_outcome(tmp_path, d
     # Two settled claims is not a track record, and the page has to say so
     # rather than print a hit rate that reads like one.
     assert "not a score" in index or "A track record starts the day" in index
+
+
+def test_the_front_page_is_three_plain_answers_in_two_languages(site):
+    """The front page is for a reader who has thirty seconds and no jargon.
+
+    Both languages ship in the same file and the switch only hides one; a
+    reader who turns off scripts still gets both rather than neither.
+    """
+    front = site["text"]["index.html"]
+
+    assert 'id="btclab-lang"' in front
+    assert '<span lang="pl">' in front and '<span lang="en">' in front
+    assert front.count('<section class="qa">') >= 2
+    assert 'href="today.html"' in front
+    # The fixture's scan has 26 rules and none survives, so the page must say
+    # nobody here found a way - picked by the data, not written in advance.
+    assert "26" in front
+
+
+def test_the_details_page_is_in_the_navigation(site):
+    assert "today.html" in {name for name, _ in PAGES}
+    assert "today.html" in site["text"]
