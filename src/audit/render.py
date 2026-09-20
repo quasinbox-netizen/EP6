@@ -317,6 +317,21 @@ border-radius:8px;padding:12px 16px;margin:0 0 20px;font-size:13px}
 _BADGE_CLASS = {PASS: "b-pass", FAIL: "b-fail", WARN: "b-warn", NA: "b-na"}
 
 
+def _provenance(meta: dict, esc) -> str:
+    """Who this report was prepared for, when it is a licensed one.
+
+    Traceability cuts both ways and both are wanted: a report an investment
+    committee reads should say whose copy produced it, and a licensee whose
+    name is on every page they hand out is a licensee who thinks before handing
+    out the licence. An evaluation report names nobody - there is nobody to
+    name, and the watermark at the top has already said so.
+    """
+    licensee = str(meta.get("licensee", "")).strip()
+    if meta.get("licence_mode") != "licensed" or not licensee:
+        return ""
+    return f"<p>Prepared with a licensed copy registered to {esc(licensee)}.</p>"
+
+
 def to_html(report, data) -> str:
     meta = report.meta
     esc = html.escape
@@ -402,7 +417,8 @@ def to_html(report, data) -> str:
         f"{meta['cost_bps_applied']:.0f} bps cost applied, "
         f"{meta['permutations']:,} permutations. "
         f"Variants declared: {meta.get('variants_declared') or 'not declared'}.</p>"
-        "</footer></div></body></html>"
+        + _provenance(meta, esc)
+        + "</footer></div></body></html>"
     )
     return "".join(body)
 

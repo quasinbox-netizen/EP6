@@ -108,18 +108,6 @@ def main() -> None:
             st.error(f"**This file cannot be audited.**\n\n{exc}")
             st.stop()
 
-        if not licence.valid:
-            from audit.license import EVAL_MAX_ROWS
-
-            if len(data.net_returns) > EVAL_MAX_ROWS:
-                st.warning(
-                    f"Evaluation mode audits the most recent {EVAL_MAX_ROWS} of "
-                    f"{len(data.net_returns):,} observations."
-                )
-                from cli import _truncate_input
-
-                data = _truncate_input(data, EVAL_MAX_ROWS)
-
         with st.spinner("Re-timing the rule against chance..."):
             report = run_audit(
                 data,

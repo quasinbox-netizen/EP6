@@ -151,32 +151,80 @@ passes — that the multiplicity check exists to punish.
 
 The tool runs entirely on your machine and never calls home, so licences are
 offline: the key *is* the licence. It carries a payload (licensee, expiry,
-seats) signed with an Ed25519 key that stays with the vendor, and the shipped
-code carries only the public half.
+seats) signed with an Ed25519 key that stays with the vendor; the shipped code
+carries only the public half.
 
-Without a key the tool runs in evaluation mode: the most recent 400
-observations, 200 permutation draws, and a watermark on the report. **Nothing
-is falsified in evaluation mode** — the verdict logic is identical and a
-weakened test is stated as weakened. A free tier that lies is worse than none.
+Without a key the tool runs in evaluation mode: **the whole record is still
+audited**, permutation draws are capped at 200 so p-values are coarser, and the
+report carries a watermark. Nothing is falsified — the verdict logic is
+identical, every check runs on every observation, and a weakened test is stated
+as weakened. A free tier that lies is worse than none.
 
-Key placement, in order: `--licence`, then `SRC_LICENCE_KEY`, then a file named
-`licence.key` beside the app or in `~/.config/strategy-reality-check/`.
+> Evaluation mode used to trim the record to its most recent 400 rows as well.
+> That was wrong, and not subtly: truncation does not lower the *precision* of
+> an answer, it asks a *different question*, of whatever window the last 400
+> rows happen to be. On this project's own `--example` file the trimmed window
+> showed +135% at Sharpe 1.70 and the full record showed +50% at Sharpe 0.46
+> with a 65% drawdown — four failed checks against six. A prospect and a
+> customer would have been shown different findings about the same strategy.
+> Draws are the honest lever: they set how finely a p-value can be read, they
+> cannot move which side of a threshold the truth falls on.
 
-Vendor side (see `src/audit/keytool.py`, not shipped to customers):
+Licence key placement, in order: `--licence`, then `SRC_LICENCE_KEY`, then a
+file named `licence.key` beside the app or in
+`~/.config/strategy-reality-check/`.
+
+### Turning on full mode
 
 ```bash
+# 1. On the machine that will KEEP the key. Once, ever.
 python -m audit.keytool generate --out ~/.keys/src-signing.key
-# paste the printed public key into src/audit/license.py
 
+# 2. Install the printed PUBLIC key in this checkout. No source editing.
+python -m audit.keytool install --public-key "<the printed public key>"
+
+# 3. Issue yourself a licence.
 export SRC_SIGNING_KEY_FILE=~/.keys/src-signing.key
-python -m audit.keytool issue --licensee "ACME sp. z o.o." --months 12 --ref ORD-1042
+python -m audit.keytool issue --licensee "Your name" --months 12 --out licence.key
+
+# 4. Confirm.
+python -m audit.keytool status      # should say: mode  licensed
 ```
 
-Lose the private key and every future licence needs re-issuing under a new
-public key. Leak it and anyone can mint licences for your product forever. It
-does not belong in this repository, in a cloud drive, or in shell history —
-which is why `issue` reads it from the environment or a file and never from an
-argument.
+`python -m audit.keytool selftest` proves signing, verification, expiry and
+tamper-detection all work **without writing a key anywhere** — safe to run on a
+machine that must never hold one, which is exactly the machine where someone
+doubts the setup.
+
+### Where the vendor key comes from
+
+Three sources, checked in this order:
+
+1. `PUBLIC_KEY_B64` compiled into `src/audit/license.py` — what a release bakes in.
+2. `SRC_VENDOR_KEY` in the environment.
+3. A `vendor.pub` file beside the app, written by `keytool install`.
+
+A compiled key wins on purpose. If a file could override it, anyone able to
+write next to a signed build could re-key it and mint their own licences. The
+file and the environment are the development and self-hosting paths.
+
+`vendor.pub` is gitignored, and `PUBLIC_KEY_B64` is empty in this repository
+permanently: a public repo that ships a vendor key ships it to every fork.
+
+### The private key
+
+Lose it and every future licence needs re-issuing under a new public key. Leak
+it and anyone can mint licences for your product forever.
+
+It does not belong in this repository, in a cloud drive, in shell history, or
+on a machine you do not control — which is why `issue` reads it from the
+environment or a file and never from an argument, and why `generate` refuses to
+overwrite an existing key file.
+
+`keytool install` likewise refuses to replace an existing vendor key without
+`--force`: replacing it invalidates every licence already issued under the old
+one, which is a thing to do deliberately and never as a side effect of
+re-running a setup command.
 
 ---
 

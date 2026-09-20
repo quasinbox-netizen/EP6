@@ -28,9 +28,9 @@ SIGNING_KEY_ENV = "SRC_SIGNING_KEY"
 
 if __package__ in (None, ""):  # allow `python src/audit/keytool.py`
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-    from audit.license import PRODUCT, verify  # type: ignore
+    from audit.license import _pad, PRODUCT, verify, vendor_key  # type: ignore
 else:
-    from .license import PRODUCT, verify
+    from .license import _pad, PRODUCT, verify, vendor_key
 
 
 def _b64(raw: bytes) -> str:
@@ -140,15 +140,134 @@ def cmd_issue(args) -> int:
 
 
 def cmd_check(args) -> int:
-    from . import license as lic  # noqa: PLC0415 - re-read so a patched key is seen
-
-    public = args.public_key or lic.PUBLIC_KEY_B64
+    public = args.public_key or vendor_key(root=_repo_root())
     result = verify(args.key, public_key_b64=public)
     print(result.banner())
     if result.valid:
         print(f"  licensee {result.licensee} | issued {result.issued} | "
               f"expires {result.expires} | seats {result.seats}")
     return 0 if result.valid else 1
+
+
+def _repo_root() -> Path:
+    return Path(__file__).resolve().parents[2]
+
+
+def cmd_install(args) -> int:
+    """Write the vendor public key so this checkout verifies licences.
+
+    Deliberately refuses to overwrite without --force. Replacing a vendor key
+    invalidates every licence already issued under the old one, which is a
+    thing to do on purpose and never as a side effect of re-running a setup
+    command.
+    """
+    from . import license as lic
+
+    key = args.public_key.strip()
+    try:
+        raw = base64.b64decode(_pad(key))
+    except Exception as exc:
+        raise SystemExit("the public key is not valid base64.") from exc
+    if len(raw) != 32:
+        raise SystemExit(f"an Ed25519 public key is 32 bytes; got {len(raw)}.")
+
+    target = Path(args.out) if args.out else _repo_root() / lic.VENDOR_KEY_FILENAME
+    if target.exists() and not args.force:
+        current = target.read_text(encoding="utf-8").strip()
+        if current == key:
+            print(f"{target} already holds this key; nothing to do.")
+            return 0
+        raise SystemExit(
+            f"{target} already holds a different vendor key.\n"
+            "Replacing it invalidates every licence issued under the old one. "
+            "Pass --force if that is what you mean."
+        )
+    target.write_text(key + "\n", encoding="utf-8")
+    print(f"vendor key installed at {target}")
+    print("This checkout now verifies licences signed by the matching private key.")
+    return 0
+
+
+def cmd_status(args) -> int:
+    """Say which key this build would verify against, and where it came from."""
+    from . import license as lic
+
+    root = _repo_root()
+    print(f"product           : {PRODUCT}")
+    if lic.PUBLIC_KEY_B64:
+        source = "compiled into this build (src/audit/license.py)"
+    elif os.environ.get(lic.VENDOR_KEY_ENV, "").strip():
+        source = f"environment ({lic.VENDOR_KEY_ENV})"
+    else:
+        found = [p for p in lic._vendor_key_paths(root) if p.is_file()]
+        source = str(found[0]) if found else "nowhere - evaluation mode"
+    key = vendor_key(root=root)
+    print(f"vendor key        : {key or '(none)'}")
+    print(f"      from        : {source}")
+    print(f"licence key       : {'found' if lic.read_key(root=root) else 'not found'}")
+    print(f"mode              : {verify(root=root).mode}")
+    print(f"evaluation limit  : {lic.EVAL_PERMUTATIONS} permutation draws "
+          "(the whole record is audited either way)")
+    return 0
+
+
+def cmd_selftest(args) -> int:
+    """Prove the whole chain without persisting a key anywhere.
+
+    Generates a throwaway pair in memory, signs a licence, verifies it, then
+    checks that an edited payload and an expired date are both rejected. It
+    touches no file, so it is safe to run on a machine that must never hold a
+    signing key - which is exactly the machine where someone doubts the setup.
+    """
+    serialization, Ed25519PrivateKey = _require_cryptography()
+    private = Ed25519PrivateKey.generate()
+    public = _b64(private.public_key().public_bytes(
+        encoding=serialization.Encoding.Raw,
+        format=serialization.PublicFormat.Raw,
+    ))
+
+    def sign(**overrides) -> str:
+        payload = {
+            "product": PRODUCT, "licensee": "selftest",
+            "issued": date.today().isoformat(),
+            "expires": (date.today() + timedelta(days=30)).isoformat(),
+            "seats": 1, "ref": "SELFTEST",
+        }
+        payload.update(overrides)
+        raw = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()
+        return f"{_b64url(raw)}.{_b64url(private.sign(raw))}"
+
+    checks = []
+    good = sign()
+    checks.append(("a signed licence verifies", verify(good, public_key_b64=public).valid))
+    checks.append((
+        "an expired licence is refused",
+        not verify(sign(expires=(date.today() - timedelta(days=1)).isoformat()),
+                   public_key_b64=public).valid,
+    ))
+    checks.append((
+        "another product's licence is refused",
+        not verify(sign(product="something-else"), public_key_b64=public).valid,
+    ))
+    payload_b64, signature_b64 = good.split(".")
+    tampered = json.loads(base64.urlsafe_b64decode(_pad(payload_b64)))
+    tampered["expires"] = "2099-01-01"
+    forged = _b64url(json.dumps(tampered, sort_keys=True, separators=(",", ":")).encode())
+    checks.append((
+        "an edited payload breaks the signature",
+        not verify(f"{forged}.{signature_b64}", public_key_b64=public).valid,
+    ))
+    checks.append(("garbage is refused without raising",
+                   not verify("not-a-key", public_key_b64=public).valid))
+
+    for label, ok in checks:
+        print(f"  [{'+' if ok else 'x'}] {label}")
+    failed = [label for label, ok in checks if not ok]
+    if failed:
+        print(f"\nSELFTEST FAILED: {len(failed)} check(s). Do not ship this build.")
+        return 1
+    print("\nselftest passed; no key was written to disk.")
+    return 0
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -169,6 +288,21 @@ def build_parser() -> argparse.ArgumentParser:
     issue.add_argument("--ref", default=None, help="order reference, for tracing a leak")
     issue.add_argument("--out", default=None, help="write the key to this file")
     issue.set_defaults(func=cmd_issue)
+
+    install = sub.add_parser("install", help="install the vendor PUBLIC key in this checkout")
+    install.add_argument("--public-key", required=True)
+    install.add_argument("--out", default=None, help="write somewhere other than the repo root")
+    install.add_argument("--force", action="store_true",
+                         help="replace an existing key, invalidating licences issued under it")
+    install.set_defaults(func=cmd_install)
+
+    status = sub.add_parser("status", help="which key this build verifies against, and from where")
+    status.set_defaults(func=cmd_status)
+
+    selftest = sub.add_parser(
+        "selftest", help="prove signing and verification work, writing nothing to disk"
+    )
+    selftest.set_defaults(func=cmd_selftest)
 
     check = sub.add_parser("check", help="verify a key as the customer's copy would")
     check.add_argument("--key", required=True)

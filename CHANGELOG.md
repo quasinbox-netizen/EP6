@@ -14,6 +14,18 @@ on published results spelled out, never under **Fixed** as a detail.
 
 ### Added
 
+- **Turning on full mode no longer means editing source.**
+  `audit.keytool install --public-key <key>` writes a gitignored `vendor.pub`
+  that the build verifies against, `audit.keytool status` says which key is in
+  force and where it came from, and `audit.keytool selftest` proves signing,
+  expiry and tamper-detection all work **without writing a key anywhere** -
+  safe to run on the machine that must never hold one, which is exactly the
+  machine where someone doubts the setup. A key compiled into a release still
+  wins over the file: if a file could override it, anyone able to write next to
+  a signed build could re-key it and mint their own licences. `install` refuses
+  to replace an existing key without `--force`, because replacing it
+  invalidates every licence already issued under the old one.
+
 - **Strategy Reality Check: the project's own tests, pointed at somebody
   else's backtest** (`run.py audit --file track-record.csv`). The lab was built
   to interrogate one hypothesis of its own and concluded against it; the
@@ -110,6 +122,25 @@ on published results spelled out, never under **Fixed** as a detail.
   already been calling it the cycle.
 
 ### Fixed
+
+- **Evaluation mode no longer shortens the record it audits.** It trimmed to
+  the most recent 400 rows, and that is not a less precise answer - it is the
+  answer to a different question, asked of whatever window those rows happen to
+  be. On this project's own `--example` file the trimmed window showed +135% at
+  Sharpe 1.70 and the full record showed +50% at Sharpe 0.46 with a 65%
+  drawdown; four checks failed against six. A prospect and a customer would
+  have been shown different findings about the same strategy, and the
+  prospect's could have been the flattering one. Evaluation mode now caps
+  permutation draws and nothing else: draws set how finely a p-value can be
+  read and cannot move which side of a threshold the truth falls on. The test
+  that was meant to guard this compared the two modes on the same data, so it
+  could never have caught it; the replacement goes through the command line,
+  where the truncation lived.
+- **The test suite is hermetic again.** Installing a vendor key and a licence in
+  a checkout - what anyone working on the paid path does - silently flipped
+  every test into licensed mode, so a test asserting evaluation behaviour failed
+  for a reason unrelated to the code. An autouse fixture now neutralises any
+  licence the machine happens to hold; tests that want one construct it.
 
 - **The audit's own metric table and its permutation test now report the same
   Sharpe.** The first was computed on simple returns and the second on log

@@ -1559,16 +1559,6 @@ def cmd_audit(args) -> int:
         print(f"cannot audit {args.file}:\n  {exc}")
         return 1
 
-    if not licence.valid:
-        from audit.license import EVAL_MAX_ROWS
-
-        if len(data.net_returns) > EVAL_MAX_ROWS:
-            print(
-                f"evaluation mode audits the most recent {EVAL_MAX_ROWS} observations "
-                f"of {len(data.net_returns):,}."
-            )
-            data = _truncate_input(data, EVAL_MAX_ROWS)
-
     report = run_audit(
         data,
         licence=licence,
@@ -1592,21 +1582,6 @@ def cmd_audit(args) -> int:
     if args.strict and report.verdict == "REJECTED":
         return 1
     return 0
-
-
-def _truncate_input(data, rows: int):
-    """Keep the last `rows` observations, and every series aligned to them."""
-    from dataclasses import replace
-
-    net = data.net_returns.iloc[-rows:]
-    positions = data.positions.reindex(net.index) if data.positions is not None else None
-    asset = data.asset_returns.reindex(net.index) if data.asset_returns is not None else None
-    bench = data.benchmark_returns.reindex(net.index) if data.benchmark_returns is not None else None
-    return replace(
-        data, net_returns=net, positions=positions, asset_returns=asset,
-        benchmark_returns=bench,
-        notes=list(data.notes) + [f"evaluation mode: trimmed to the last {rows} observations."],
-    )
 
 
 def write_example(path: Path) -> Path:

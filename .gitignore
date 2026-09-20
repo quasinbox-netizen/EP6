@@ -62,5 +62,10 @@ licence.key
 *.licence.key
 src-signing.key
 *-signing.key
+# The vendor PUBLIC key a checkout verifies against. Harmless to disclose, but
+# committing it means every fork of this repository ships trusting one vendor's
+# key - and a release is supposed to bake its own in deliberately, not inherit
+# whichever one a contributor happened to have installed.
+vendor.pub
 *-reality-check.html
 *-reality-check.json

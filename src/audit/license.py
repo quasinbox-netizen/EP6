@@ -44,16 +44,41 @@ PRODUCT = "strategy-reality-check"
 KEY_ENV = "SRC_LICENCE_KEY"
 KEY_FILENAME = "licence.key"
 
-# The vendor's Ed25519 public key, base64 (raw 32 bytes). Replace this with
-# the value printed by `python -m audit.keytool generate` before shipping.
-# Empty means unsigned builds: everything runs in evaluation mode, which is
-# the correct default for a repository that is public.
+# The vendor's Ed25519 public key, base64 (raw 32 bytes), baked into a release.
+# Empty here on purpose and permanently: this repository is public, and a build
+# published with a key in it is a build anyone can read the key out of. It is
+# filled in by the release process, or left empty and supplied at runtime by
+# VENDOR_KEY_FILENAME below.
 PUBLIC_KEY_B64 = ""
 
-# What evaluation mode allows. Generous on purpose: the checks that cost
-# nothing to run are the ones that earn the sale, and a crippled demo of a
-# statistics tool cannot demonstrate statistics.
-EVAL_MAX_ROWS = 400
+# The runtime alternative to editing the line above. `audit.keytool install`
+# writes this file; `vendor_key` reads it. Two reasons it exists:
+#
+#   * editing a source file before every release is a step someone eventually
+#     forgets, and the failure is silent - the build ships, and every paying
+#     customer lands in evaluation mode;
+#   * a vendor key in version control is a vendor key in every fork.
+#
+# It is gitignored. A build that carries neither runs in evaluation mode, which
+# is the right default for a repository anyone can clone.
+VENDOR_KEY_FILENAME = "vendor.pub"
+VENDOR_KEY_ENV = "SRC_VENDOR_KEY"
+
+# What evaluation mode changes: the number of permutation draws, and nothing
+# else.
+#
+# It used to trim the record to its most recent 400 rows as well, and that was
+# wrong in a way that took a real run to see. Truncation does not lower the
+# PRECISION of an answer, it asks a DIFFERENT QUESTION - of whatever window the
+# last 400 rows happen to be. On this project's own demo file the trimmed
+# window showed +135% at Sharpe 1.70 and the full record showed +50% at Sharpe
+# 0.46 with a 65% drawdown; the verdicts differed too, 4 failures against 6.
+# A prospect and a customer would have been shown different findings about the
+# same strategy, and the prospect's could have been the flattering one.
+#
+# Draws are the honest lever: they set how finely a p-value can be read, they
+# cannot change which side of a threshold the truth falls on, and a report that
+# ran 200 of them says so on its face.
 EVAL_PERMUTATIONS = 200
 
 
@@ -77,8 +102,9 @@ class Licence:
             return f"Licensed to {self.licensee}{tail}."
         return (
             f"EVALUATION MODE - {self.reason} "
-            f"Reports are limited to {EVAL_MAX_ROWS} rows and "
-            f"{EVAL_PERMUTATIONS} permutations, and carry an evaluation watermark."
+            f"The whole record is audited; permutation draws are capped at "
+            f"{EVAL_PERMUTATIONS}, so p-values are coarser, and the report "
+            "carries an evaluation watermark."
         )
 
 
@@ -102,6 +128,43 @@ def _decode(token: str) -> tuple[dict, bytes, bytes]:
 
 def _pad(value: str) -> str:
     return value + "=" * (-len(value) % 4)
+
+
+def vendor_key(*, root: Path | None = None) -> str:
+    """The public key this build verifies against: baked in, env, or file.
+
+    Order matters and is the reverse of `read_key`'s. A key compiled into the
+    release wins, because that is the deliberate act of shipping; the file and
+    the environment are the development and self-hosting paths, and neither
+    should be able to silently replace a released build's key - an attacker who
+    can drop a `vendor.pub` next to a *signed* build would otherwise mint their
+    own licences for it.
+    """
+    if PUBLIC_KEY_B64:
+        return PUBLIC_KEY_B64
+    from_env = os.environ.get(VENDOR_KEY_ENV, "").strip()
+    if from_env:
+        return from_env
+    for candidate in _vendor_key_paths(root):
+        try:
+            if candidate.is_file() and candidate.stat().st_size < 8192:
+                text = candidate.read_text(encoding="utf-8").strip()
+                if text:
+                    return text
+        except OSError:
+            continue
+    return ""
+
+
+def _vendor_key_paths(root: Path | None) -> list[Path]:
+    paths = []
+    if root is not None:
+        paths.append(Path(root) / VENDOR_KEY_FILENAME)
+    paths.append(Path(__file__).resolve().parents[2] / VENDOR_KEY_FILENAME)
+    paths.append(Path.cwd() / VENDOR_KEY_FILENAME)
+    # Deduplicate while keeping order: the same path reached two ways should
+    # not be read twice, and `dict.fromkeys` is the cheapest stable way to say so.
+    return list(dict.fromkeys(paths))
 
 
 def read_key(explicit: str | None = None, *, root: Path | None = None) -> str:
@@ -140,9 +203,11 @@ def verify(
     today: date | None = None,
 ) -> Licence:
     """Check a licence key. Never raises; an invalid key is a result, not an error."""
-    key_b64 = PUBLIC_KEY_B64 if public_key_b64 is None else public_key_b64
+    key_b64 = vendor_key(root=root) if public_key_b64 is None else public_key_b64
     if not key_b64:
-        return _unlicensed("this build carries no vendor key, so nothing can be licensed.")
+        return _unlicensed(
+            "this build carries no vendor key, so nothing can be licensed."
+        )
 
     token = token if token is not None else read_key(root=root)
     if not token:

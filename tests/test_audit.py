@@ -27,6 +27,22 @@ from audit.report import REJECTED, SURVIVES, UNPROVEN, run_audit
 pytestmark = pytest.mark.filterwarnings("ignore::RuntimeWarning")
 
 
+@pytest.fixture(autouse=True)
+def unlicensed_by_default(monkeypatch):
+    """No test may depend on whether this machine happens to hold a licence.
+
+    Installing `vendor.pub` and `licence.key` in a checkout - which is exactly
+    what a developer working on the paid path does - silently flipped the whole
+    suite into licensed mode, and a test asserting evaluation behaviour then
+    failed for a reason that had nothing to do with the code. Tests that want a
+    licence construct one and pass it in.
+    """
+    monkeypatch.delenv(lic.KEY_ENV, raising=False)
+    monkeypatch.delenv(lic.VENDOR_KEY_ENV, raising=False)
+    monkeypatch.setattr(lic, "PUBLIC_KEY_B64", "")
+    monkeypatch.setattr(lic, "_vendor_key_paths", lambda root: [])
+
+
 # --------------------------------------------------------------------------
 # fixtures: synthetic track records with a KNOWN answer
 # --------------------------------------------------------------------------
@@ -403,6 +419,30 @@ def test_evaluation_mode_reaches_the_same_verdict(random_rule):
     assert licensed.verdict == evaluation.verdict
 
 
+def test_evaluation_mode_audits_the_whole_record(tmp_path, capsys):
+    """Evaluation mode must not change the SAMPLE, only the precision.
+
+    The earlier version trimmed the record to its most recent 400 rows, which
+    is not a smaller version of the answer - it is the answer to a different
+    question, asked of whatever window those rows happen to be. The test that
+    was supposed to guard this fed both modes the same data, so it could not
+    see it. This one goes through the command line, which is where the
+    truncation lived.
+    """
+    import cli
+
+    path = write_random_rule(tmp_path / "long.csv", days=1200, seed=31)
+    assert cli.main(["audit", "--file", str(path), "--variants-tried", "3",
+                     "--out", str(tmp_path)]) == 0
+    payload = json.loads((tmp_path / "long-reality-check.json").read_text(encoding="utf-8"))
+
+    assert payload["meta"]["licence_mode"] == "evaluation"
+    assert payload["meta"]["observations"] == 1199, "the record was trimmed"
+    assert payload["meta"]["first_day"] == "2020-01-02"
+    assert not any("trimmed" in note for note in payload["meta"]["notes"])
+    assert "most recent" not in capsys.readouterr().out
+
+
 def test_undeclared_variants_cannot_produce_a_clean_pass(real_edge):
     """Without a declared variant count the report can never say SURVIVES."""
     report = run_audit(real_edge, permutations=400, variants_tried=None)
@@ -599,3 +639,98 @@ def test_column_names_with_diacritics_are_matched(tmp_path):
     path.write_text("\n".join(rows), encoding="utf-8")
     data = load_csv(path)
     assert data.form == "positions"
+
+
+# --------------------------------------------------------------------------
+# vendor key resolution: which key a build trusts, and from where
+# --------------------------------------------------------------------------
+def test_a_compiled_key_beats_a_file(monkeypatch, tmp_path):
+    """A released build must not be re-keyed by dropping a file beside it.
+
+    Otherwise anyone who can write next to a signed build mints their own
+    licences for it, which defeats the whole point of signing.
+    """
+    _, public = _keypair()
+    _, other = _keypair()
+    (tmp_path / lic.VENDOR_KEY_FILENAME).write_text(other, encoding="utf-8")
+    monkeypatch.setattr(lic, "_vendor_key_paths", lambda root: [tmp_path / lic.VENDOR_KEY_FILENAME])
+    monkeypatch.setattr(lic, "PUBLIC_KEY_B64", public)
+    assert lic.vendor_key(root=tmp_path) == public
+
+
+def test_a_key_file_is_used_when_nothing_is_compiled_in(monkeypatch, tmp_path):
+    _, public = _keypair()
+    (tmp_path / lic.VENDOR_KEY_FILENAME).write_text(public + "\n", encoding="utf-8")
+    monkeypatch.setattr(lic, "_vendor_key_paths", lambda root: [tmp_path / lic.VENDOR_KEY_FILENAME])
+    assert lic.vendor_key(root=tmp_path) == public
+
+
+def test_the_environment_beats_a_file_but_not_a_compiled_key(monkeypatch, tmp_path):
+    _, from_env = _keypair()
+    _, from_file = _keypair()
+    (tmp_path / lic.VENDOR_KEY_FILENAME).write_text(from_file, encoding="utf-8")
+    monkeypatch.setattr(lic, "_vendor_key_paths", lambda root: [tmp_path / lic.VENDOR_KEY_FILENAME])
+    monkeypatch.setenv(lic.VENDOR_KEY_ENV, from_env)
+    assert lic.vendor_key(root=tmp_path) == from_env
+
+
+def test_keytool_install_refuses_to_silently_replace_a_key(tmp_path):
+    """Replacing a vendor key invalidates every licence issued under the old one."""
+    from audit import keytool
+
+    _, first = _keypair()
+    _, second = _keypair()
+    target = tmp_path / "vendor.pub"
+
+    assert keytool.main(["install", "--public-key", first, "--out", str(target)]) == 0
+    assert target.read_text(encoding="utf-8").strip() == first
+    # Re-installing the same key is a no-op, not an error.
+    assert keytool.main(["install", "--public-key", first, "--out", str(target)]) == 0
+
+    with pytest.raises(SystemExit, match="already holds a different"):
+        keytool.main(["install", "--public-key", second, "--out", str(target)])
+    assert target.read_text(encoding="utf-8").strip() == first
+
+    assert keytool.main(["install", "--public-key", second, "--out", str(target),
+                         "--force"]) == 0
+    assert target.read_text(encoding="utf-8").strip() == second
+
+
+@pytest.mark.parametrize("junk", ["", "not-base64!!", base64.b64encode(b"short").decode()])
+def test_keytool_install_refuses_a_key_that_is_not_ed25519(tmp_path, junk):
+    from audit import keytool
+
+    with pytest.raises(SystemExit):
+        keytool.main(["install", "--public-key", junk, "--out", str(tmp_path / "v.pub")])
+
+
+def test_keytool_selftest_passes_and_writes_nothing(tmp_path, monkeypatch, capsys):
+    from audit import keytool
+
+    monkeypatch.chdir(tmp_path)
+    assert keytool.main(["selftest"]) == 0
+    assert "selftest passed" in capsys.readouterr().out
+    assert list(tmp_path.iterdir()) == [], "selftest left a file behind"
+
+
+def test_a_licensed_report_names_its_licensee(random_rule):
+    """Traceability: a paid report says whose copy produced it."""
+    licence = lic.Licence(valid=True, reason="", licensee="ACME sp. z o.o.")
+    report = run_audit(random_rule, licence=licence, permutations=200)
+    page = to_html(report, random_rule)
+    assert "registered to ACME sp. z o.o." in page
+    assert "EVALUATION COPY" not in page
+
+
+def test_an_evaluation_report_names_nobody(random_rule):
+    report = run_audit(random_rule, permutations=200)
+    page = to_html(report, random_rule)
+    assert "Prepared with a licensed copy" not in page
+    assert "EVALUATION COPY" in page
+
+
+def test_a_hostile_licensee_name_is_escaped(random_rule):
+    licence = lic.Licence(valid=True, reason="", licensee="<img src=x onerror=1>")
+    page = to_html(run_audit(random_rule, licence=licence, permutations=200), random_rule)
+    assert "<img src=x" not in page
+    assert "&lt;img" in page
