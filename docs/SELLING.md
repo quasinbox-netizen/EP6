@@ -155,13 +155,26 @@ not against the cost of the compute.
 
 | segment | shape | reasoning |
 |---|---|---|
-| **Individual trader** | one-off, single seat, 12-month updates | Impulse-range purchase, high support burden per euro. Keep the evaluation mode generous so nobody buys and refunds. |
+| **Individual trader** | one-off, single seat, 12-month updates | Impulse-range purchase, high support burden per euro. Keep evaluation mode generous so nobody buys and refunds. |
 | **Prop firm / trading educator** | per-seat annual | They audit many strategies and many people's strategies. Recurring, and the multiplicity check is exactly their problem. |
 | **Fund / family office** | annual site licence, invoiced | The report is an artefact they can hand to an investment committee. This is where the price is defensible, and where B2B removes the consumer-law surface entirely. |
 
 Do not set the numbers from this file. Set them from five conversations with
 people in the segment you choose, and raise them once you have the first three
 customers.
+
+### What the free tier may not do
+
+Evaluation mode caps permutation draws and stamps a watermark. It does **not**
+shorten the record, and it must not, for a reason that is commercial as much as
+ethical: a prospect who is shown a different finding from the one a customer
+would see has been mis-sold, and if the free tier's answer is the flattering
+one you have sold a licence on a false premise. That is a refund, a bad review,
+and under the digital-content rules in §4 arguably a non-conformity.
+
+The general rule for any future gating: **reduce precision, never change the
+question.** Fewer draws is a coarser p-value. A shorter sample is a different
+strategy.
 
 ### What actually sells it
 
@@ -184,8 +197,16 @@ Not features. Two things:
 - [ ] Terms, privacy notice and pre-contract information published.
 - [ ] Withdrawal-right consent and acknowledgement implemented at checkout.
 - [ ] VAT route decided: OSS yourself, or a merchant of record.
-- [ ] Vendor signing key generated, stored offline, backed up in two places.
-- [ ] `PUBLIC_KEY_B64` set in the shipped build; evaluation mode verified with
-      and without a key.
+- [ ] Vendor signing key generated **on the machine that keeps it**, stored
+      offline, backed up in two places. Never on a rented box, a CI runner, or
+      anything whose disk you do not own.
+- [ ] `python -m audit.keytool selftest` passes on the build you intend to ship.
+- [ ] `PUBLIC_KEY_B64` baked into the shipped build — not a `vendor.pub` file
+      riding along beside it, which anyone who can write to that directory can
+      replace.
+- [ ] `python -m audit.keytool status` on the shipped build names the compiled
+      key as its source.
+- [ ] Evaluation mode verified with and without a licence: same verdict, same
+      observation count, coarser p-values, watermark present.
 - [ ] A licence issued to yourself and verified on a clean machine.
 - [ ] Release tagged, test suite green, version recorded.
