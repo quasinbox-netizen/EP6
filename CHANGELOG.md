@@ -123,6 +123,22 @@ on published results spelled out, never under **Fixed** as a detail.
 
 ### Fixed
 
+- **`keytool` runs at all.** The documented `python -m audit.keytool` needed
+  `PYTHONPATH=src` to resolve, which nobody types, and running the file
+  directly raised "attempted relative import with no known parent package" from
+  the imports inside its command functions - between them, every way a vendor
+  would actually invoke it. There is now one command, `python run.py keytool
+  ...`, which brings up the virtual environment first; that matters because the
+  machine generating a signing key is usually a clean one.
+- **`keytool generate --out` no longer prints the private key.** A production
+  signing key on stdout is a signing key in terminal scrollback, in the
+  recording of the call where it was set up, and in whatever ships terminal
+  logs. With `--out` the key reaches only the file, created owner-only in one
+  step rather than written and chmod-ed afterwards; without `--out` it is
+  printed with a warning that it now exists on screen. It also creates missing
+  parent directories, and reports the permissions it actually achieved instead
+  of announcing "(mode 600)" on Windows, where the chmod does close to nothing.
+
 - **Evaluation mode no longer shortens the record it audits.** It trimmed to
   the most recent 400 rows, and that is not a less precise answer - it is the
   answer to a different question, asked of whatever window those rows happen to

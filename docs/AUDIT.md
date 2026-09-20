@@ -178,20 +178,26 @@ file named `licence.key` beside the app or in
 
 ```bash
 # 1. On the machine that will KEEP the key. Once, ever.
-python -m audit.keytool generate --out ~/.keys/src-signing.key
+#    The private key goes to the file and is never printed.
+python run.py keytool generate --out ~/.keys/src-signing.key
 
-# 2. Install the printed PUBLIC key in this checkout. No source editing.
-python -m audit.keytool install --public-key "<the printed public key>"
+# 2. Install the PUBLIC key it prints. No source editing.
+python run.py keytool install --public-key "<the printed public key>"
 
 # 3. Issue yourself a licence.
 export SRC_SIGNING_KEY_FILE=~/.keys/src-signing.key
-python -m audit.keytool issue --licensee "Your name" --months 12 --out licence.key
+python run.py keytool issue --licensee "Your name" --months 12 --out licence.key
 
 # 4. Confirm.
-python -m audit.keytool status      # should say: mode  licensed
+python run.py keytool status      # should say: mode  licensed
 ```
 
-`python -m audit.keytool selftest` proves signing, verification, expiry and
+On Windows, step 3 is `$env:SRC_SIGNING_KEY_FILE = "$HOME\.keys\src-signing.key"`
+in PowerShell, and the generated file gets no POSIX permissions - `generate`
+prints the `icacls` command to restrict it, because claiming a protection it
+did not apply would be worse than saying nothing.
+
+`python run.py keytool selftest` proves signing, verification, expiry and
 tamper-detection all work **without writing a key anywhere** — safe to run on a
 machine that must never hold one, which is exactly the machine where someone
 doubts the setup.

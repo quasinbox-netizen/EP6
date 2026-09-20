@@ -17,7 +17,6 @@ from __future__ import annotations
 
 import argparse
 import base64
-import contextlib
 import json
 import os
 import sys
@@ -26,11 +25,23 @@ from pathlib import Path
 
 SIGNING_KEY_ENV = "SRC_SIGNING_KEY"
 
-if __package__ in (None, ""):  # allow `python src/audit/keytool.py`
+# This module has to import the same way whether it is run as
+# `python -m audit.keytool` (a package), as `python src/audit/keytool.py` (a
+# script with no package at all) or through `run.py keytool`. The shim below
+# binds the licence module ONCE, as `lic`, and everything downstream uses that
+# name - a relative `from . import license` inside a function looks harmless
+# and raises "attempted relative import with no known parent package" the first
+# time someone runs the file directly, which is the first thing a vendor does.
+if __package__ in (None, ""):  # `python src/audit/keytool.py`
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-    from audit.license import _pad, PRODUCT, verify, vendor_key  # type: ignore
+    from audit import license as lic  # type: ignore
 else:
-    from .license import _pad, PRODUCT, verify, vendor_key
+    from . import license as lic
+
+_pad = lic._pad
+PRODUCT = lic.PRODUCT
+verify = lic.verify
+vendor_key = lic.vendor_key
 
 
 def _b64(raw: bytes) -> str:
@@ -65,20 +76,78 @@ def cmd_generate(args) -> int:
         encoding=serialization.Encoding.Raw,
         format=serialization.PublicFormat.Raw,
     )
-    print("PRIVATE KEY (keep offline, never commit):")
-    print(f"  {_b64(private_raw)}")
-    print()
-    print("PUBLIC KEY - paste into src/audit/license.py as PUBLIC_KEY_B64:")
-    print(f'  PUBLIC_KEY_B64 = "{_b64(public_raw)}"')
+    public_b64 = _b64(public_raw)
+
     if args.out:
-        target = Path(args.out)
+        target = Path(args.out).expanduser()
         if target.exists():
-            raise SystemExit(f"refusing to overwrite an existing key at {target}")
-        target.write_text(_b64(private_raw), encoding="utf-8")
-        with contextlib.suppress(OSError):
-            target.chmod(0o600)
-        print(f"\nprivate key written to {target} (mode 600)")
+            raise SystemExit(
+                f"refusing to overwrite an existing key at {target}.\n"
+                "If that file is the signing key for a product you have already "
+                "sold licences for, overwriting it invalidates every one of them."
+            )
+        target.parent.mkdir(parents=True, exist_ok=True)
+        # Create with the right mode from the start. Writing first and
+        # chmod-ing after leaves the key world-readable for the moment in
+        # between, which on a shared machine is a moment too long.
+        _write_private(target, _b64(private_raw))
+        print(f"private key written to {target}")
+        print(_permissions_note(target))
+        # Deliberately NOT printed. A production signing key on stdout is a
+        # production signing key in scrollback, in the screen recording of the
+        # call where it was set up, and in whatever ships terminal logs.
+        print("The private key itself was not displayed. It is only in that file.")
+    else:
+        print("PRIVATE KEY - this is now in your terminal scrollback:")
+        print(f"  {_b64(private_raw)}")
+        print()
+        print("Pass --out <path> instead to write it straight to a file and keep")
+        print("it off the screen. Treat a key printed here as compromised if the")
+        print("terminal was shared, recorded, or is logged.")
+
+    print()
+    print("PUBLIC KEY (safe to disclose):")
+    print(f"  {public_b64}")
+    print()
+    print("Install it in this checkout with:")
+    print(f'  python run.py keytool install --public-key "{public_b64}"')
     return 0
+
+
+def _write_private(target: Path, material: str) -> None:
+    """Write a secret with owner-only permissions where the OS supports them."""
+    try:
+        handle = os.open(target, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    except (AttributeError, OSError):
+        target.write_text(material, encoding="utf-8")
+        return
+    with os.fdopen(handle, "w", encoding="utf-8") as stream:
+        stream.write(material)
+
+
+def _permissions_note(target: Path) -> str:
+    """Say what the file's permissions actually are, never what they ought to be.
+
+    The earlier version printed "(mode 600)" unconditionally. On Windows the
+    chmod is close to a no-op, so it announced a protection it had not applied
+    - which is worse than saying nothing, because the reader stops checking.
+    """
+    if os.name == "nt":
+        return (
+            "NOTE: Windows does not apply POSIX permissions. Restrict the file "
+            "to your account with:\n"
+            f'  icacls "{target}" /inheritance:r /grant:r "%USERNAME%:F"'
+        )
+    try:
+        mode = target.stat().st_mode & 0o777
+    except OSError:
+        return "Could not read the file's permissions back; check them yourself."
+    if mode == 0o600:
+        return "Permissions: 600 (owner read/write only)."
+    return (
+        f"WARNING: permissions are {mode:03o}, not 600. Fix with:\n"
+        f"  chmod 600 {target}"
+    )
 
 
 def _load_private():
@@ -161,8 +230,6 @@ def cmd_install(args) -> int:
     thing to do on purpose and never as a side effect of re-running a setup
     command.
     """
-    from . import license as lic
-
     key = args.public_key.strip()
     try:
         raw = base64.b64decode(_pad(key))
@@ -190,8 +257,6 @@ def cmd_install(args) -> int:
 
 def cmd_status(args) -> int:
     """Say which key this build would verify against, and where it came from."""
-    from . import license as lic
-
     root = _repo_root()
     print(f"product           : {PRODUCT}")
     if lic.PUBLIC_KEY_B64:

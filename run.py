@@ -5,6 +5,7 @@
     python run.py all                    # full analysis
     python run.py dashboard              # browser dashboard
     python run.py audit-desk             # Strategy Reality Check, in a browser
+    python run.py keytool status         # licence keys (vendor side)
     python run.py test                   # test suite
     python run.py doctor                 # environment diagnostics
 
@@ -350,6 +351,14 @@ def main(argv: list[str]) -> int:
             python, rest[0] if rest else "8512",
             app="audit_desk.py", name="audit-desk",
         )
+
+    if command == "keytool":
+        # Vendor-side key management. Routed here rather than left to
+        # `python -m audit.keytool`, which needs PYTHONPATH=src to resolve and
+        # so fails for anyone who types it as the documentation once had it.
+        # This path also brings up the virtual environment first, which matters
+        # because the machine generating a signing key is often a clean one.
+        return run(python, [str(ROOT / "src" / "audit" / "keytool.py"), *rest])
 
     if command == "test":
         if rest and rest[0] == "offline":

@@ -12,7 +12,9 @@ from __future__ import annotations
 
 import base64
 import json
+import os
 from datetime import date, timedelta
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -734,3 +736,66 @@ def test_a_hostile_licensee_name_is_escaped(random_rule):
     page = to_html(run_audit(random_rule, licence=licence, permutations=200), random_rule)
     assert "<img src=x" not in page
     assert "&lt;img" in page
+
+
+def test_keytool_runs_as_a_script_not_only_as_a_module(tmp_path):
+    """`python src/audit/keytool.py` must work: it is what run.py invokes.
+
+    The relative imports inside the command functions raised "attempted
+    relative import with no known parent package" when the file was run
+    directly - the first thing a vendor does with it.
+    """
+    import subprocess
+    import sys
+
+    script = Path(__file__).resolve().parents[1] / "src" / "audit" / "keytool.py"
+    result = subprocess.run(
+        [sys.executable, str(script), "selftest"],
+        capture_output=True, text=True, timeout=120, cwd=tmp_path,
+    )
+    assert result.returncode == 0, result.stderr
+    assert "selftest passed" in result.stdout
+
+
+def test_generate_with_out_never_prints_the_private_key(tmp_path, capsys):
+    """A production signing key on stdout is a key in terminal scrollback."""
+    from audit import keytool
+
+    target = tmp_path / "deep" / "signing.key"
+    assert keytool.main(["generate", "--out", str(target)]) == 0
+    printed = capsys.readouterr().out
+    secret = target.read_text(encoding="utf-8").strip()
+
+    assert secret and secret not in printed
+    assert "was not displayed" in printed
+    assert "PUBLIC KEY" in printed
+    # The next command is spelled out, with the key already substituted in.
+    assert "keytool install --public-key" in printed
+
+
+def test_generate_without_out_warns_that_the_key_is_on_screen(capsys):
+    from audit import keytool
+
+    assert keytool.main(["generate"]) == 0
+    printed = capsys.readouterr().out
+    assert "terminal scrollback" in printed
+
+
+def test_generate_refuses_to_overwrite_an_existing_signing_key(tmp_path):
+    from audit import keytool
+
+    target = tmp_path / "signing.key"
+    assert keytool.main(["generate", "--out", str(target)]) == 0
+    original = target.read_text(encoding="utf-8")
+    with pytest.raises(SystemExit, match="refusing to overwrite"):
+        keytool.main(["generate", "--out", str(target)])
+    assert target.read_text(encoding="utf-8") == original
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX permissions")
+def test_a_generated_signing_key_is_owner_only(tmp_path):
+    from audit import keytool
+
+    target = tmp_path / "signing.key"
+    assert keytool.main(["generate", "--out", str(target)]) == 0
+    assert target.stat().st_mode & 0o777 == 0o600
