@@ -69,3 +69,22 @@ def get_json(
             last_error = exc
         time.sleep(backoff ** attempt)
     raise FetchError(f"{url} -> failed after {retries} attempts: {last_error!r}")
+
+
+# Binance answers HTTP 451 to requests from the United States, which is where
+# GitHub's runners are. data-api.binance.vision is Binance's own market-data
+# mirror: the same public endpoints and the same numbers, without the region
+# block. The main host stays first so a machine that can reach it behaves
+# exactly as before.
+BINANCE_HOSTS = ("https://api.binance.com", "https://data-api.binance.vision")
+
+
+def get_binance(path: str, **kwargs) -> Any:
+    """GET a public Binance endpoint, falling back to the mirror if blocked."""
+    errors = []
+    for host in BINANCE_HOSTS:
+        try:
+            return get_json(host + path, **kwargs)
+        except FetchError as error:
+            errors.append(str(error))
+    raise FetchError(" | ".join(errors))

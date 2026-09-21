@@ -1,0 +1,9 @@
+# What the scheduled cloud jobs need: requirements.txt without the dashboard (streamlit) and the test runner.
+pandas>=2.2
+numpy>=1.26
+scipy>=1.11
+statsmodels>=0.14
+pyyaml>=6.0
+requests>=2.31
+python-dotenv>=1.0
+plotly>=5.22

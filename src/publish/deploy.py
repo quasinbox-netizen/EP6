@@ -61,6 +61,16 @@ def commit_and_push(root: Path, paths: list, message: str) -> tuple[bool, list]:
         ("push", ["push", "origin", "HEAD"]),
     ):
         finished = _git(root, arguments)
+        if finished.returncode != 0 and name == "push":
+            # Somebody pushed between this job's checkout and now - the other
+            # job, or a person. The paths committed here are this job's own, so
+            # replaying the commit on top of theirs is safe; one retry, because
+            # a second rejection means something is wrong that a loop would hide.
+            branch = _git(root, ["rev-parse", "--abbrev-ref", "HEAD"]).stdout.strip()
+            rebased = _git(root, ["pull", "--rebase", "origin", branch])
+            if rebased.returncode == 0:
+                lines.append("push rejected; rebased onto the remote and retried")
+                finished = _git(root, arguments)
         if finished.returncode != 0:
             lines.append(f"{name} failed: {(finished.stderr or finished.stdout).strip()}")
             return False, lines

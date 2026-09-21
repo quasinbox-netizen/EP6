@@ -37,9 +37,9 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from ingest.http import FetchError, get_json
+from ingest.http import FetchError, get_binance, get_json
 
-TICKER_URL = "https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT"
+TICKER_PATH = "/api/v3/ticker/price?symbol=BTCUSDT"
 
 JOURNAL_COLUMNS = [
     "timestamp", "price", "weight", "flip_level", "distance", "state", "note",
@@ -84,12 +84,12 @@ class Observation:
         }
 
 
-def fetch_price(url: str = TICKER_URL) -> float:
+def fetch_price(url: str | None = None) -> float:
     """The live quote. Raises FetchError, which the caller logs rather than dies on."""
-    payload = get_json(url, retries=3)
+    payload = get_json(url, retries=3) if url else get_binance(TICKER_PATH, retries=3)
     price = float(payload["price"])
     if price <= 0:
-        raise FetchError(f"{url} -> nonsense price {price!r}")
+        raise FetchError(f"{url or TICKER_PATH} -> nonsense price {price!r}")
     return price
 
 

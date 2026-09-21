@@ -31,7 +31,7 @@ from datetime import datetime, timedelta, timezone
 
 import pandas as pd
 
-from ingest.http import FetchError, get_json
+from ingest.http import FetchError, get_binance, get_json
 from storage import log_ingest, upsert_prices
 
 OHLCV_COLUMNS = ["date", "open", "high", "low", "close", "volume"]
@@ -91,11 +91,11 @@ def fetch_binance(symbol: str, start: str, end: str | None = None) -> pd.DataFra
     rows: list[dict] = []
     seen: set[int] = set()
     while cursor <= stop:
-        url = (
-            "https://api.binance.com/api/v3/klines"
-            f"?symbol={pair}&interval=1d&startTime={cursor}&endTime={stop}&limit=1000"
+        chunk = get_binance(
+            "/api/v3/klines"
+            f"?symbol={pair}&interval=1d&startTime={cursor}&endTime={stop}&limit=1000",
+            sleep=0.25,
         )
-        chunk = get_json(url, sleep=0.25)
         if not chunk:
             break
         for kline in chunk:

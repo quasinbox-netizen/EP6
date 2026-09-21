@@ -54,3 +54,6 @@ data/processed/**
 
 # The published site is build output; rebuild it with `run.py publish`.
 /site/
+
+# The encrypted state of the cloud jobs, packed and unpacked in place.
+.state/
