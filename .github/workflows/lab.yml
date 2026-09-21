@@ -1,9 +1,17 @@
 # The lab's two scheduled jobs, in the cloud instead of on one PC.
 #
-# Every fifteen minutes: the agent looks at the price and publishes its feed.
+# Every hour: the agent looks at the price and publishes its feed. Hourly, not
+# every fifteen minutes, because the repository is private and a private
+# repository gets 2,000 free Actions minutes a month; quarter-hourly runs would
+# spend that in about three weeks. The pages fetch the live price themselves,
+# so the hour only decides how fresh the agent's journal is.
 # Once a day after 08:00 (Warsaw): refresh prices, rebuild the sizing, record
 # the day's claims, rebuild the site, push. See scripts/cloud_run.py for why
 # "once a day" is checked on every tick rather than scheduled at 08:00.
+#
+# The site is served by Cloudflare Pages behind a password (functions/ and
+# scripts/cloud_deploy.sh), not by GitHub Pages: the site is for people who
+# were given the password.
 #
 # The state between runs (database, journal, ledger) is encrypted with the
 # STATE_KEY secret - see scripts/cloud_state.sh for why it must be. Without
@@ -12,16 +20,20 @@ name: Lab
 
 on:
   schedule:
-    - cron: "*/15 * * * *"
+    - cron: "17 * * * *"
   workflow_dispatch:
     inputs:
       daily:
         description: "Run the daily refresh now, whatever the time"
         type: boolean
         default: false
+      deploy:
+        description: "Deploy the site even if the pages did not change"
+        type: boolean
+        default: false
 
 permissions:
-  contents: write   # push the rebuilt site and the agent feed
+  contents: write   # commit the rebuilt site and the agent feed
   actions: write    # prune old state caches
 
 # One run at a time: two runs restoring the same state and each saving its own
@@ -39,6 +51,7 @@ jobs:
       TZ: Europe/Warsaw
       PYTHONUNBUFFERED: "1"
       LAB_FORCE_DAILY: ${{ inputs.daily && 'true' || 'false' }}
+      LAB_FORCE_DEPLOY: ${{ inputs.deploy && 'true' || 'false' }}
     steps:
       - name: Check for the state key
         id: key
@@ -86,6 +99,14 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           python scripts/cloud_run.py
+
+      - name: Deploy to Cloudflare Pages
+        if: always() && steps.unpack.outcome == 'success'
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          SITE_PASSWORD: ${{ secrets.SITE_PASSWORD }}
+        run: bash scripts/cloud_deploy.sh
 
       # Saved even when the run failed: a journal line or a recorded claim is
       # still worth keeping, and the next run starts from it.

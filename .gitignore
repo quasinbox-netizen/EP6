@@ -57,3 +57,8 @@ data/processed/**
 
 # The encrypted state of the cloud jobs, packed and unpacked in place.
 .state/
+
+# Local secrets for `wrangler pages dev`.
+.dev.vars
+.wrangler/
+node_modules/
