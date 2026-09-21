@@ -20,6 +20,13 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
+# The scheduler starts pythonw, which has no window - but a console program
+# it starts (python.exe, git) gets a fresh console of its own, and Windows
+# shows it. Every fifteen minutes that was a black window over whatever the
+# user was doing. CREATE_NO_WINDOW keeps the console and hides it; the flag
+# does not exist off Windows, where there is nothing to hide.
+NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+
 ROOT = Path(__file__).resolve().parents[1]
 LOG = ROOT / "data" / "processed" / "agent.log"
 LOG_LIMIT_BYTES = 500_000
@@ -51,6 +58,7 @@ def main() -> int:
         finished = subprocess.run(
             command, cwd=ROOT, capture_output=True, text=True,
             encoding="utf-8", errors="replace", timeout=600,
+            creationflags=NO_WINDOW,
         )
     except Exception as error:  # a scheduled tick must never raise
         with LOG.open("a", encoding="utf-8") as handle:
