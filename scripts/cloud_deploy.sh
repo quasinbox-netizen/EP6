@@ -12,11 +12,22 @@ set -euo pipefail
 
 PROJECT="${CF_PAGES_PROJECT:-quasipi-btc-lab}"
 MARKER=data/processed/cloudflare_deployed.txt
+# Committed, unlike the marker: the repository is private, so its run logs
+# cannot be read from outside, and this file is how anyone helping from a
+# distance learns what the deploy did. An outcome and an address, no
+# timestamp - a line that changed hourly would be a commit an hour.
+STATUS=data/status/deploy.txt
 WRANGLER=(npx --yes wrangler@4)
+
+report() {
+  mkdir -p "$(dirname "$STATUS")"
+  printf '%s\n' "$1" > "$STATUS"
+}
 
 for name in CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID SITE_PASSWORD; do
   if [ -z "${!name:-}" ]; then
     echo "::warning::$name is not set; the site was not deployed."
+    report "not deployed: the $name secret is not set in the repository"
     exit 0
   fi
 done
@@ -30,7 +41,12 @@ if [ "${LAB_FORCE_DEPLOY:-false}" != "true" ] && [ -f "$MARKER" ] && [ "$(cat "$
 fi
 
 if ! "${WRANGLER[@]}" pages project list 2>/dev/null | grep -q "$PROJECT"; then
-  "${WRANGLER[@]}" pages project create "$PROJECT" --production-branch main
+  if ! "${WRANGLER[@]}" pages project create "$PROJECT" --production-branch main > create.log 2>&1; then
+    cat create.log
+    report "not deployed: could not create the Cloudflare project $PROJECT
+$(tail -n 12 create.log)"
+    exit 1
+  fi
 fi
 
 # The password lives in Cloudflare, not in the files. Set again only when it
@@ -40,6 +56,17 @@ if [ ! -f "$MARKER" ] || [ "$(cut -d' ' -f2 "$MARKER")" != "$secret" ]; then
 fi
 
 # From the repository root, so wrangler picks up functions/ next to docs/.
-"${WRANGLER[@]}" pages deploy docs --project-name "$PROJECT" --branch main \
-  --commit-hash "$(git rev-parse HEAD)" --commit-dirty=true
+if ! "${WRANGLER[@]}" pages deploy docs --project-name "$PROJECT" --branch main \
+  --commit-hash "$(git rev-parse HEAD)" --commit-dirty=true > deploy.log 2>&1; then
+  cat deploy.log
+  report "not deployed: wrangler failed
+$(tail -n 12 deploy.log)"
+  exit 1
+fi
+cat deploy.log
+# The address comes out of wrangler's own output: a project whose name was
+# already taken is served from a different one than the name asked for.
+address="$(grep -Eo 'https://[a-z0-9.-]*pages[.]dev' deploy.log | tail -n1)"
+report "deployed to ${address:-https://$PROJECT.pages.dev} (password required)"
+rm -f deploy.log create.log
 echo "$wanted" > "$MARKER"

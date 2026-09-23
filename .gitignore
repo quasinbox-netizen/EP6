@@ -62,3 +62,7 @@ data/processed/**
 .dev.vars
 .wrangler/
 node_modules/
+
+# Wrangler output kept only long enough to report a failure.
+/deploy.log
+/create.log

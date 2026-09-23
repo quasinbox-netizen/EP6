@@ -108,6 +108,19 @@ jobs:
           SITE_PASSWORD: ${{ secrets.SITE_PASSWORD }}
         run: bash scripts/cloud_deploy.sh
 
+      # The deploy's own account of itself, committed so that it can be read
+      # from outside a private repository. Only when it changed, so that an
+      # unattended job does not add a commit an hour saying the same thing.
+      - name: Report the deploy
+        if: always() && steps.unpack.outcome == 'success'
+        run: |
+          git add -A data/status
+          if ! git diff --cached --quiet; then
+            git commit -m "Cloud deploy status"
+            branch="$(git rev-parse --abbrev-ref HEAD)"
+            git push origin HEAD || { git pull --rebase origin "$branch" && git push origin HEAD; }
+          fi
+
       # Saved even when the run failed: a journal line or a recorded claim is
       # still worth keeping, and the next run starts from it.
       - name: Pack state
