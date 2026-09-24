@@ -62,9 +62,11 @@ COLUMNS: dict[str, tuple[str, str]] = {
     "significant_adjusted": ("significant",
                              "Significant after the Benjamini-Hochberg correction."),
     "target": ("measures", ""),
-    "n_in": ("days inside", "How many days fall inside the condition being tested."),
-    "difference": ("difference", "The gap between days inside the condition and "
-                                 "every other day."),
+    "n_in": ("days like this", "How many days in the whole history fall "
+                                "inside the condition being tested."),
+    "difference": ("difference, % a day",
+                   "How much more (or less) the price moved on an average day "
+                   "inside the condition than on every other day."),
     "total_return": ("total return", ""),
     "cagr": ("a year", "Compound annual growth rate over the whole test."),
     "max_drawdown": ("worst fall", "The deepest peak-to-trough loss over the test."),
@@ -112,18 +114,78 @@ COLUMNS: dict[str, tuple[str, str]] = {
     "position": ("position", "Whether the rule is holding BTC right now."),
     "since": ("since", ""),
     "what flips it": ("what flips it", ""),
-    "as_of": ("recorded", ""),
-    "settles": ("settles", ""),
-    "horizon": ("horizon", ""),
-    "claim": ("claim", ""),
-    "level": ("confidence", ""),
-    "low": ("low", ""),
-    "high": ("high", ""),
-    "p_up": ("p, up", ""),
+    "as_of": ("recorded", "The day the claim was written down."),
+    "settles": ("settles", "The day the claim is scored, right or wrong."),
+    "horizon": ("days ahead", "How far into the future the claim reaches."),
+    "claim": ("claim", "An interval says where the price will be; a direction "
+                       "claim says which way."),
+    "level": ("promise", "How often a range like this is supposed to contain "
+                        "the price."),
+    "low": ("range, low", ""),
+    "high": ("range, high", ""),
+    "p_up": ("chance of a rise", "The probability the claim gave to the price "
+                                 "being higher when it settles."),
     "matured": ("settled", ""),
+    "result": ("result", "Whether the price finished inside the range promised."),
+    "delivered": ("landed inside %", "How often the price actually finished "
+                                    "inside the range."),
+    "times_scored": ("times scored", "How many of these claims have settled so "
+                                     "far. Read it beside the result."),
     "realised": ("outcome %", "How far the price actually moved from the day the "
                               "claim was recorded to the day it settled."),
 }
+
+
+# The scan's row names are the identifiers the code tests with, and they were
+# printed straight onto the page: `event_credit_event_30d`, `phase_expanding_
+# rising`. A reader cannot tell from those what was tested, which makes the
+# table that holds this project's main finding unreadable by the people the
+# finding is for. The identifiers stay in hypothesis_scan.csv, which the page
+# names, so anyone checking the page against the data can line the rows up.
+EVENT_NAMES = {
+    "credit_event": "a credit shock",
+    "halving": "a halving",
+    "macro": "a big economic announcement",
+    "market_structure": "a change in market structure",
+    "protocol_upgrade": "an upgrade to bitcoin itself",
+    "regulation": "a regulatory decision",
+}
+PHASE_NAMES = {
+    "expanding_rising": "money supply growing while rates rise",
+    "expanding_falling": "money supply growing while rates fall",
+    "contracting_rising": "money supply shrinking while rates rise",
+    "contracting_falling": "money supply shrinking while rates fall",
+}
+TARGET_NAMES = {"log_return": "the daily move"}
+
+
+def plain_hypothesis(name: str) -> str:
+    """"event_credit_event_30d" -> "The 30 days after a credit shock ..."."""
+    text = str(name)
+    if text.startswith("event_"):
+        body = text[len("event_"):]
+        kind, _, window = body.rpartition("_")
+        if kind in EVENT_NAMES and window.endswith("d"):
+            return f"The {window[:-1]} days after {EVENT_NAMES[kind]}"
+    if text.startswith("halving_after_") and text.endswith("d"):
+        days = text[len("halving_after_"):-1]
+        return ("The year after a halving" if days == "365"
+                else f"The {days} days after a halving")
+    if text.startswith("phase_"):
+        phase = text[len("phase_"):]
+        if phase in PHASE_NAMES:
+            return f"Days with {PHASE_NAMES[phase]}"
+    return text.replace("_", " ")
+
+
+def plain_values(frame: pd.DataFrame) -> pd.DataFrame:
+    """A copy of a scan table with its machine names put into English."""
+    out = frame.copy()
+    if "hypothesis" in out.columns:
+        out["hypothesis"] = [plain_hypothesis(name) for name in out["hypothesis"]]
+    if "target" in out.columns:
+        out["target"] = [TARGET_NAMES.get(str(value), str(value)) for value in out["target"]]
+    return out
 
 
 def _label(column: str) -> str:
@@ -264,6 +326,18 @@ def table(frame: pd.DataFrame, *, highlight: str | None = None) -> str:
 def lede(text: str) -> str:
     """The one line of a section that is its answer, set larger than the rest."""
     return f"<p class='lede'>{text}</p>"
+
+
+def plain(text: str) -> str:
+    """The same finding again, in the words someone would use out loud.
+
+    Not a summary and not a caveat: a translation. Every section here reaches
+    its answer through a statistic - a p-value, a Sharpe ratio, an interval -
+    and a reader who does not have those words leaves with nothing, however
+    carefully the number was arrived at. The statistic stays exactly where it
+    was; this says the same thing beside it.
+    """
+    return f"<p class='plain'><b>In plain words.</b> {text}</p>"
 
 
 def method(summary: str, body: str) -> str:
@@ -439,8 +513,14 @@ def hero(inputs) -> str:
             ("The robot", ("Holding" if holding else "In cash") if state else "-"),
             # "It sells below" was a lie of tense. The level is exact for one
             # close and moves the day after, so the label has to carry the day.
+            #
+            # A dash was worse than nothing here: there is no level on the days
+            # when no single close can cross the averages, and a reader was left
+            # to guess whether that meant "safe", "unknown" or "broken". It
+            # means the rule cannot flip tomorrow whatever the price does, which
+            # is a fact worth having in words.
             ("Sells if tomorrow closes below",
-             "-" if trigger is None else f"${float(trigger):,.0f}"),
+             "Cannot flip tomorrow" if trigger is None else f"${float(trigger):,.0f}"),
         ]),
         figure_html(
             tape_chart(close, trades, trigger,
@@ -572,7 +652,7 @@ def evidence_page(inputs) -> str:
     if not study.empty:
         summary = inputs.study.car_summary
         parts.append(
-            "<section><h2>The halving event study</h2>"
+            "<section><h2>What happened after each halving</h2>"
             + figure_html(
                 car_chart_from_frame(study, f"n = {inputs.study.n_events} halvings"), "car")
             + lede(
@@ -580,6 +660,15 @@ def evidence_page(inputs) -> str:
                 f"<b>{summary['car']:+.0%}</b> - somewhere between "
                 f"{summary['ci_low']:+.0%} and {summary['ci_high']:+.0%}, "
                 f"p={summary['p_value']:.2f}."
+            )
+            + plain(
+                f"Bitcoin did rise sharply in the year after halvings - on average "
+                f"{summary['car']:+.0%} more than usual. But with only "
+                f"{inputs.study.n_events} halvings ever, the honest range around "
+                f"that average runs from {summary['ci_low']:+.0%} to "
+                f"{summary['ci_high']:+.0%}: it covers a crash and a boom at the "
+                "same time. When the range is that wide, the rise cannot be told "
+                "apart from luck."
             )
             + method(
                 "Why the interval is that wide",
@@ -593,24 +682,39 @@ def evidence_page(inputs) -> str:
     if not scan.empty:
         columns = [
             column for column in (
-                "hypothesis", "target", "n_in", "difference", "p_value",
+                "hypothesis", "n_in", "difference", "p_value",
                 "p_adjusted", "significant_adjusted",
             ) if column in scan.columns
         ]
-        shown = scan.loc[:, columns].sort_values("p_value").head(12).round(4)
+        shown = scan.loc[:, columns].sort_values("p_value").head(12).copy()
+        if "difference" in shown.columns:
+            shown["difference"] = (100 * shown["difference"]).round(2)
+        shown = shown.round(4)
         survivors = int(scan["significant_adjusted"].sum())
         parts.append(
-            "<section><h2>Every hypothesis, corrected for having asked many</h2>"
+            f"<section><h2>{len(scan)} popular ideas, tested at once</h2>"
             + lede(
                 f"<b>{survivors} of {len(scan)}</b> hypotheses survive the "
                 "correction for how many were asked."
             )
-            + table(shown, highlight="significant_adjusted")
+            + plain(
+                "Each row is an idea people repeat: that bitcoin moves differently "
+                "after a halving, after an exchange collapses, while central banks "
+                "print money. The last column is the verdict. "
+                + ("None of them passed. " if survivors == 0
+                   else f"{survivors} passed. ")
+                + "Test enough ideas and a few look special by chance alone, so "
+                "the test is made stricter the more ideas are asked - that is what "
+                "the corrected column is."
+            )
+            + table(plain_values(shown), highlight="significant_adjusted")
             + method(
                 "What is in the table",
-                f"The twelve smallest p-values out of {len(scan)} hypotheses. "
-                "Testing enough ideas produces small p-values by itself, which is "
-                "what the Benjamini-Hochberg correction is for.",
+                f"The twelve smallest p-values out of {len(scan)} hypotheses, named "
+                "in words here and by their identifiers in "
+                "<code>hypothesis_scan.csv</code>. Testing enough ideas produces "
+                "small p-values by itself, which is what the Benjamini-Hochberg "
+                "correction is for.",
             )
             + "</section>"
         )
@@ -618,7 +722,7 @@ def evidence_page(inputs) -> str:
     if not inputs.curve_summary.empty:
         row = inputs.curve_summary.iloc[0]
         parts.append(
-            "<section><h2>One question, 160 ways of asking it</h2>"
+            "<section><h2>One question, asked 160 different ways</h2>"
             + lede(
                 f"<b>{int(row['n_significant'])} of {int(row['n_specs'])}</b> "
                 "specifications come out significant - fewer than randomly placed "
@@ -630,6 +734,16 @@ def evidence_page(inputs) -> str:
                 ("Random dates give", f"{row['null_significant_mean']:.1f}"),
                 ("Median effect", f"{row['median_car']:+.1%}"),
             ])
+            + plain(
+                "There is no single right way to measure \"the halving effect\": "
+                "you have to pick a window, a yardstick, a way of handling the "
+                "wild days. So every sensible combination was tried - "
+                f"{int(row['n_specs'])} of them. If the effect were real, most "
+                "of those ways would find it. "
+                f"{int(row['n_significant'])} did, and dates picked at random "
+                f"score {row['null_significant_mean']:.1f} the same way. The "
+                "effect fails to beat nonsense."
+            )
             + method(
                 "Why ask the same question 160 ways",
                 "A finding that depends on which reasonable choices were made is "
@@ -650,6 +764,14 @@ def evidence_page(inputs) -> str:
             "<section><h2>Every rule, against itself entered at random</h2>"
             + lede("<b>Nothing survives.</b> The front page draws this table; "
                    "these are the numbers under the picture.")
+            + plain(
+                "The fair test of a timing rule is not whether it made money - "
+                "bitcoin rose, so almost anything did. It is whether buying on "
+                "the days the rule picked beat buying on days pulled out of a "
+                "hat. That is the second column against the first. One rule looks "
+                "like it did, until you remove its single luckiest trade and it "
+                "collapses; that is the fourth column."
+            )
             + table(edge.loc[:, columns].round(3), highlight="survives_correction")
             + method(
                 "How each rule was tested",
@@ -677,6 +799,12 @@ def evidence_page(inputs) -> str:
                 "Beating buy-and-hold on Sharpe is <b>not enough</b>: a rule also "
                 "has to beat its own random-timing version, which is the table on "
                 "the first page."
+            )
+            + plain(
+                "What each rule would have made if it had been followed since "
+                "2011, next to what simply buying and holding would have made. "
+                "Looking better here is easy and means little - the table above "
+                "is the one that decides."
             )
             + table(backtest.loc[:, columns].round(3), highlight="sharpe")
             + method(
@@ -811,4 +939,62 @@ def evidence_page(inputs) -> str:
         + inputs.control_note
         + "</p></section>"
     )
+    parts.append(glossary())
     return "".join(parts)
+
+
+# Every word on this page that a reader is expected to already know, and does
+# not have to. They are the words the tables are made of, so a glossary that
+# sits at the bottom of the page the tables are on is where someone looks up
+# from a column and finds it.
+TERMS = [
+    ("p-value",
+     "How often pure chance would produce a result at least this good. Small "
+     "means hard to explain by luck; 0.05 is the usual line, and a p of 0.30 "
+     "means luck explains it comfortably."),
+    ("Sharpe ratio",
+     "Profit per unit of the nerves it took - the return divided by how "
+     "violently the value swung on the way. Two rules can end at the same "
+     "place and one of them is far harder to hold."),
+    ("Abnormal return",
+     "How much the price moved beyond what it usually does over a stretch of "
+     "that length. The 'beyond usual' part is why it can be large and still "
+     "mean nothing."),
+    ("Confidence interval",
+     "The range the true answer plausibly sits in. A wide one is not a shy "
+     "answer - it is the data admitting it does not know."),
+    ("Volatility",
+     "How far the price swings day to day, without regard to direction. This "
+     "is the one thing on this site that can be forecast."),
+    ("Drawdown",
+     "How far the value fell from its own high point before recovering. The "
+     "number people actually feel."),
+    ("Backtest",
+     "Running a rule over the past to see what it would have made. Cheap to "
+     "do, easy to fool yourself with, which is what the rest of this page is "
+     "about."),
+    ("Correction (for multiple testing)",
+     "Making the bar higher the more ideas were tried, because trying twenty "
+     "ideas produces one that looks special by chance."),
+    ("Specification",
+     "One set of reasonable choices - which window, which yardstick, which "
+     "outliers - used to measure an effect. A real effect survives most of "
+     "them."),
+    ("Out of sample",
+     "Tested on data the rule never saw while it was being designed. A rule "
+     "that only works on the data that inspired it has described that data, "
+     "not the world."),
+]
+
+
+def glossary() -> str:
+    rows = "".join(
+        f"<div class='term'><u>{escape(word)}</u><p>{meaning}</p></div>"
+        for word, meaning in TERMS
+    )
+    return (
+        "<section><h2>The words on this page</h2>"
+        + lede("Every term the tables above lean on, in one place. "
+               "<b>None of them is harder than the idea underneath it.</b>")
+        + f"<div class='terms'>{rows}</div></section>"
+    )

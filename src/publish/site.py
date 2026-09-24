@@ -42,7 +42,8 @@ from publish.disclosure import (corrections_html, provenance_html,
                                 target_sweep_html)
 from publish.pages import cards as _cards
 from publish.pages import (agent_in_plain_words, evidence_page, figure_html,
-                           hero, how_far, lede, method, which_way, workings)
+                           glossary, hero, how_far, lede, method, plain,
+                           which_way, workings)
 from publish.pages import table as _table
 from publish.payloads import desk_payload
 from publish.simple import simple_document
@@ -195,7 +196,27 @@ def _nav(current: str) -> str:
     return "<nav>" + "".join(links) + "</nav>"
 
 
+# What each page is for, in the words a visitor would use. The old header said
+# the same sentence about confidence intervals on all six pages, which told a
+# reader what the project believes and nothing about where they had just
+# landed. The sentence about method moved into the pages that need it.
+SUBTITLES = {
+    "Today": "What can be said about bitcoin today, and what cannot. "
+             "Prices, the trend, and the one forecast this project stands behind.",
+    "The cycle": "Where bitcoin stands in the four-year cycle people talk about, "
+                 "and how much of that talk survives being measured.",
+    "The agent": "A robot trading pretend money in public, one simple rule, every "
+                 "trade shown - and whether it beats doing nothing.",
+    "Evidence": "Every test this project ran, including the ones that killed its "
+                "own best-looking ideas.",
+    "Signals": "What each rule says at this minute, with the live price next to it.",
+    "Receipts": "Forecasts written down before the outcome and scored after it - "
+                "the only page here that cannot be flattered by hindsight.",
+}
+
+
 def _shell(title: str, current: str, body: str, *, as_of: str) -> str:
+    subtitle = SUBTITLES.get(current, "")
     return f"""<!doctype html>
 <html lang="en">
 <head>
@@ -231,8 +252,9 @@ def _shell(title: str, current: str, body: str, *, as_of: str) -> str:
   a:hover{{text-decoration:underline}}
   header{{padding:44px 24px 0;max-width:1100px;margin:0 auto}}
   header h1{{margin:0;font-size:40px;font-weight:700;letter-spacing:-.024em;line-height:1.08}}
-  header p{{margin:14px 0 0;color:var(--dim);font-size:17px;max-width:60ch;
+  header p{{margin:14px 0 0;color:var(--soft);font-size:18px;max-width:62ch;
     letter-spacing:-.01em}}
+  header p.asof{{margin-top:8px;color:var(--dim);font-size:15px}}
   nav{{margin:26px 0 0;display:flex;gap:7px;flex-wrap:wrap}}
   nav a{{padding:8px 16px;border-radius:999px;background:var(--panel);
     color:var(--soft);font-size:15px;font-weight:500;letter-spacing:-.01em;
@@ -256,6 +278,19 @@ def _shell(title: str, current: str, body: str, *, as_of: str) -> str:
   .grid>div>h2{{margin-top:0}}
   .js-plotly-plot,.plot-container{{max-width:100%}}
   .js-plotly-plot{{border-radius:var(--r);overflow:hidden;margin-top:22px}}
+
+  /* The translation of a finding into ordinary words. Set apart by a rule down
+     its left rather than a box, so it reads as the same voice continuing and
+     not as a sidebar a reader can skip. */
+  .plain{{margin:16px 0 0;padding:2px 0 2px 16px;border-left:3px solid var(--gold);
+    color:var(--soft);font-size:17px;line-height:1.55;max-width:66ch}}
+  .plain b{{color:var(--ink);font-weight:600}}
+
+  .terms{{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:14px}}
+  .term{{background:var(--panel);border-radius:var(--r);padding:16px 18px}}
+  .term u{{display:block;text-decoration:none;color:var(--gold);font-weight:600;
+    font-size:15px;margin-bottom:6px}}
+  .term p{{margin:0;color:var(--soft);font-size:15px;line-height:1.5}}
 
   .cards{{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px}}
   .card{{border-radius:var(--r);background:var(--panel);padding:16px 18px 18px}}
@@ -403,9 +438,8 @@ def _shell(title: str, current: str, body: str, *, as_of: str) -> str:
 <body>
 <header>
   <h1>BTC Cycle Lab</h1>
-  <p>Whether the halving cycle and macro events explain anything in the price of
-  BTC. Every result carries a confidence interval and a count of observations;
-  without those it is not a result. Sample to {as_of}.</p>
+  <p>{subtitle}</p>
+  <p class="asof">Prices to {as_of}. Research, not advice.</p>
   {_nav(current)}
 </header>
 <main>
@@ -661,6 +695,12 @@ def build(destination: Path, dashboard_dir: Path, inputs: SiteInputs) -> list:
         "<section><h2>What usually happened from days like today</h2>",
         lede("The long-horizon rows are the ones that look most impressive and "
              "<b>rest on the fewest windows</b>."),
+        plain(
+            "Days that resembled today - same distance from a halving, same side "
+            "of the 200-day average - and what the price did next. The last "
+            "column is the one that decides how much to believe: a row built "
+            "from six separate stretches of history is a story, not a statistic."
+        ),
         _table(rates, highlight="independent_windows"),
         method(
             "Why the window count is the column to read",
@@ -699,6 +739,13 @@ def build(destination: Path, dashboard_dir: Path, inputs: SiteInputs) -> list:
         "<section><h2>What the rules say, and what the tests say</h2>",
         lede("Where each rule stands today, and underneath it what the tests did "
              "to the rules themselves."),
+        plain(
+            "Each rule is a recipe someone follows: hold bitcoin while this is "
+            "true, sit in cash while it is not. The table says what each one "
+            "would be doing today and what would make it change its mind. It is "
+            "not a recommendation - the same rules are taken apart on the "
+            "evidence page, where none of them survives."
+        ),
         _table(rules, highlight="position"),
         "<div class='verdict' style='margin-top:16px'>"
         + "<br>".join(verdict_lines)
@@ -772,6 +819,12 @@ def build(destination: Path, dashboard_dir: Path, inputs: SiteInputs) -> list:
             + chart
             + lede("The dotted line is what doing nothing would have earned, and "
                    "it is <b>the only benchmark that matters</b>.")
+            + plain(
+                "The question is never \"did the robot make money\" - bitcoin "
+                "rose, so most things did. It is whether all that buying and "
+                "selling beat someone who bought once and went to sleep. Where "
+                "the solid line sits below the dotted one, it did not."
+            )
             + method(
                 "What the portfolio is made of",
                 "Virtual money, started on the last halving - a date fixed by the "
@@ -843,21 +896,98 @@ def build(destination: Path, dashboard_dir: Path, inputs: SiteInputs) -> list:
             level=_numeric(scored["level"]).round(2),
         ).loc[:, ["as_of", "settles", "horizon", "claim", "level", "low", "high",
                   "p_up", "matured", "realised"]]
+        # Settled first, and split from the open ones. The page used to be one
+        # table of ninety-eight rows in which the claims that had been scored
+        # and the claims that had not sat together, sorted by the day they were
+        # written. A reader looking for "was it right" had to find the scored
+        # rows themselves, and most of what they were looking at could not be
+        # right or wrong yet.
+        settled = shown[shown["matured"].astype(bool)].copy()
+        settled["level"] = [
+            "-" if pd.isna(value) else f"{float(value):.0%}" for value in settled["level"]
+        ]
+        settled["result"] = [
+            _result(claim, hit) for claim, hit in
+            zip(settled["claim"], scored.loc[settled.index, "hit"])
+        ]
+        settled = settled.sort_values("settles", ascending=False).loc[
+            :, ["settles", "horizon", "claim", "level", "low", "high", "result", "realised"]
+        ]
+        pending = shown[~shown["matured"].astype(bool)].assign(
+            level=[("-" if pd.isna(value) else f"{float(value):.0%}")
+                   for value in shown.loc[~shown["matured"].astype(bool), "level"]],
+        ).sort_values("settles").loc[
+            :, ["as_of", "settles", "horizon", "claim", "level", "low", "high"]
+        ]
+        promise = board.copy()
+        if not promise.empty:
+            # The level reads as a promise rather than a decimal: "90%", not
+            # 0.9, and once it says 90% the column beside it does not need to
+            # say "promised" a second time.
+            promise = promise.assign(
+                level=[f"{value:.0%}" for value in promise["level"]],
+                delivered=(100 * promise["delivered"]).round(0),
+            ).rename(columns={"n": "times_scored"}).loc[
+                :, ["claim", "horizon", "level", "times_scored", "delivered"]]
+
         receipts = (
             "<section><h2>Receipts</h2>"
             + lede("Every other page is a backtest, written by someone who had "
                    "already seen the outcome. <b>This one is the exception</b>: "
                    "claims recorded before their window closed, scored when it closes.")
+            + plain(
+                "Every day this site writes down where it thinks the price will be "
+                "within 10 and 30 days, and how sure it is. Nothing is edited "
+                "afterwards. When the day arrives, the claim is marked right or "
+                "wrong here - including the wrong ones."
+            )
             + f"<div class='verdict' style='margin:16px 0'>"
               f"{ledger_verdict(board, open_claims)}</div>"
-            + _table(shown, highlight="realised")
-            + ("" if board.empty else "<h2 style='margin-top:26px'>Settled</h2>"
-               + _table(board.round(3)))
             + "</section>"
+            + ("" if promise.empty else
+               "<section><h2>What was promised, and what arrived</h2>"
+               + plain(
+                   "A range given as 90% is a promise that the price lands inside "
+                   "it about nine times in ten - no more often, which would mean "
+                   "the range is uselessly wide, and no less, which would mean it "
+                   "is not what it says. The last two columns are that promise "
+                   "and what actually happened."
+               )
+               + _table(promise, highlight="delivered")
+               + method(
+                   "Why a small count cannot be a grade",
+                   "Each row is scored on a handful of settled claims so far. "
+                   "Five landings out of five is not a 100% method; it is five "
+                   "landings. The count is the column to read beside the result.",
+               )
+               + "</section>")
+            + ("" if settled.empty else
+               "<section><h2>Settled claims</h2>"
+               + plain("Each row is a claim whose day has come. <b>Result</b> says "
+                       "whether the price finished inside the range that was "
+                       "promised, and <b>outcome</b> how far it moved in the "
+                       "meantime.")
+               + _table(settled, highlight="result")
+               + "</section>")
+            + ("" if pending.empty else
+               "<section><h2>Still open</h2>"
+               + plain(f"{len(pending)} claims whose day has not arrived. They are "
+                       "published now so that they cannot be quietly dropped later.")
+               + "<details class='method'><summary>Show the open claims</summary>"
+               + _table(pending) + "</details></section>")
         )
     written.append(_write(destination / "receipts.html",
                           _shell("BTC Cycle Lab - receipts", "Receipts", receipts, as_of=as_of)))
     return written
+
+
+def _result(claim: str, hit) -> str:
+    """What happened to one settled claim, in a word a reader can scan for."""
+    if pd.isna(hit):
+        return "-"
+    if str(claim) == "interval":
+        return "inside" if float(hit) >= 1 else "outside"
+    return "right" if float(hit) >= 1 else "wrong"
 
 
 def _trend_now(inputs: SiteInputs) -> str:
