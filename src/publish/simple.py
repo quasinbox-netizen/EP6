@@ -350,6 +350,8 @@ def simple_document(inputs, *, as_of: str, intro: str, height_reporter: str) -> 
         '<meta charset="utf-8">\n'
         '<meta name="viewport" content="width=device-width, initial-scale=1">\n'
         "<title>BTC Cycle Lab</title>\n"
+        # Public so that it can be served, not so that it can be found.
+        '<meta name="robots" content="noindex, nofollow">\n'
         + LANGUAGE_BOOT
         + "\n<style>" + SIMPLE_CSS + "</style>\n</head>\n<body>\n"
         + intro

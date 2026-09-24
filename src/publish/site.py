@@ -202,6 +202,7 @@ def _shell(title: str, current: str, body: str, *, as_of: str) -> str:
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{title}</title>
+<meta name="robots" content="noindex, nofollow">
 <script src="{PLOTLY}"></script>
 <style>
   /* One typeface, the reader's own. `-apple-system` resolves to SF Pro on a
@@ -544,6 +545,13 @@ def build(destination: Path, dashboard_dir: Path, inputs: SiteInputs) -> list:
     # GitHub Pages runs Jekyll unless told not to, and Jekyll drops files it
     # does not recognise. Nothing here is a Jekyll site.
     (destination / ".nojekyll").write_text("", encoding="utf-8")
+    # The site has to be public for GitHub Pages to serve it, but public and
+    # advertised are different things: this one is shown through a page on
+    # quasipi.tech, and its owner does not want it turning up in searches.
+    # robots.txt is the request every crawler reads first; the pages carry the
+    # same instruction in a meta tag, for a crawler that arrived by a link.
+    (destination / "robots.txt").write_text(
+        "User-agent: *\nDisallow: /\n", encoding="utf-8")
 
     outlook = inputs.outlook
     as_of = f"{outlook.as_of:%Y-%m-%d}"

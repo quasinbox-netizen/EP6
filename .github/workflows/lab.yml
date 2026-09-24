@@ -1,17 +1,17 @@
 # The lab's two scheduled jobs, in the cloud instead of on one PC.
 #
-# Every hour: the agent looks at the price and publishes its feed. Hourly, not
-# every fifteen minutes, because the repository is private and a private
-# repository gets 2,000 free Actions minutes a month; quarter-hourly runs would
-# spend that in about three weeks. The pages fetch the live price themselves,
-# so the hour only decides how fresh the agent's journal is.
+# Every fifteen minutes: the agent looks at the price and publishes its feed.
+# A public repository has no Actions quota to spend, which is why this is back
+# to quarter-hourly after a spell at hourly.
 # Once a day after 08:00 (Warsaw): refresh prices, rebuild the sizing, record
 # the day's claims, rebuild the site, push. See scripts/cloud_run.py for why
 # "once a day" is checked on every tick rather than scheduled at 08:00.
 #
-# The site is served by Cloudflare Pages behind a password (functions/ and
-# scripts/cloud_deploy.sh), not by GitHub Pages: the site is for people who
-# were given the password.
+# The site is served by GitHub Pages from docs/ on main, which is why the
+# repository is public. Public is not the same as advertised: the pages ask
+# not to be indexed, and the way in is the page on quasipi.tech. The Cloudflare
+# path (functions/, scripts/cloud_deploy.sh) is kept for the day a real
+# password is wanted; without its secrets the deploy step does nothing.
 #
 # The state between runs (database, journal, ledger) is encrypted with the
 # STATE_KEY secret - see scripts/cloud_state.sh for why it must be. Without
@@ -20,7 +20,7 @@ name: Lab
 
 on:
   schedule:
-    - cron: "17 * * * *"
+    - cron: "*/15 * * * *"
   workflow_dispatch:
     inputs:
       daily:
