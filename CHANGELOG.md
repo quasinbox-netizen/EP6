@@ -350,4 +350,4 @@ reader comparing an old figure to a current one deserves to know why.
 - **UTF-8 output on Windows** — a legacy console code page turned an em dash in
   an event description into a crash.
 
-[1.0.0]: https://github.com/quasinbox-netizen/EP6/releases/tag/v1.0.0
+[1.0.0]: https://github.com/quasinbox-netizen/btc-cycle-lab/releases/tag/v1.0.0

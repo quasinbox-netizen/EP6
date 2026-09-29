@@ -1,6 +1,6 @@
 # btc-cycle-lab
 
-[![tests](https://github.com/quasinbox-netizen/EP6/actions/workflows/tests.yml/badge.svg)](https://github.com/quasinbox-netizen/EP6/actions/workflows/tests.yml)
+[![tests](https://github.com/quasinbox-netizen/btc-cycle-lab/actions/workflows/tests.yml/badge.svg)](https://github.com/quasinbox-netizen/btc-cycle-lab/actions/workflows/tests.yml)
 
 A local research lab for testing whether the Bitcoin halving cycle and macro
 events explain anything in the price of BTC.
