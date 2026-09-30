@@ -12,6 +12,24 @@ on published results spelled out, never under **Fixed** as a detail.
 
 ## [Unreleased]
 
+### Removed
+
+- **`SELLING.md` is no longer in the repository.** It held pricing reasoning,
+  segment analysis, positioning and a pre-launch checklist - the owner's
+  commercial thinking, which does not belong in a repository this project
+  pushes to publicly. The regulatory substance that mattered to the code stays
+  where it is load-bearing: `AUDIT.md` and the README still state that this is
+  an audit and not advice, and that the perimeter between the two is judged on
+  what the marketing claims as much as on what the code does.
+
+  The branch history was rewritten so the file is absent from every commit on
+  it, not merely from the tip: removing it from the tip alone would have left
+  the content readable at the three commits that carried it, all of which had
+  been pushed. `main` never held the file, so nothing outside this branch was
+  touched. Note that a host can keep orphaned objects reachable by SHA until it
+  garbage-collects, so a rewrite is the last step that can be taken from the
+  repository, not a guarantee about every copy of it.
+
 ### Added
 
 - **Turning on full mode no longer means editing source.**
@@ -50,7 +68,8 @@ on published results spelled out, never under **Fixed** as a detail.
   draws. It does not alter a single verdict: a weakened test is reported as
   weakened, because a free tier that lies is worth less than no free tier.
   Commercial and EU regulatory notes, including the line between an audit tool
-  and regulated investment advice, in [SELLING.md](SELLING.md).
+  and regulated investment advice, were written up in `SELLING.md` (since
+  removed from the repository - see Removed).
 
 - **The front page is one page, and it is a picture.** It opens on where the
   price has been for two years with **every buy and every sell the portfolio

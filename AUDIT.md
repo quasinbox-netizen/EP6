@@ -240,6 +240,12 @@ It is an audit of a past track record. It measures how much of a result could
 be chance, cost, or a handful of days.
 
 It makes no forecast. It produces no signal. It does not tell anyone what to
-buy, sell or hold, and no output of it is a personal recommendation. That
-boundary is not decoration — see [SELLING.md](SELLING.md) before charging
-anyone money for it.
+buy, sell or hold, and no output of it is a personal recommendation.
+
+That boundary is not decoration. Selling this, or publishing its reports, puts
+you within reach of rules on investment advice and on investment
+recommendations, and the perimeter is judged on presentation as well as
+substance — a landing page promising to "find profitable strategies" turns an
+audit tool into something that reads like a recommendation, whatever the source
+code does. Take that question to a lawyer before taking anyone's money, not
+after.

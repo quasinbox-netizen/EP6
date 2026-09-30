@@ -69,3 +69,7 @@ src-signing.key
 vendor.pub
 *-reality-check.html
 *-reality-check.json
+
+# Commercial notes: kept out of the repository on purpose. A working copy may
+# sit here; it must not be committed.
+SELLING.md

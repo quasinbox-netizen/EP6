@@ -518,9 +518,10 @@ Ten checks run. Three do the real work:
 
 The result is a terminal report, a self-contained HTML file with no external
 references, and the same content as JSON. Full documentation in
-[AUDIT.md](AUDIT.md); if you intend to charge for it, read
-[SELLING.md](SELLING.md) first — the line between an audit tool and
-regulated investment advice is the entire product.
+[AUDIT.md](AUDIT.md). If you intend to charge for it, settle the regulatory
+question first: the line between a statistical audit and regulated investment
+advice is the entire product, and it is assessed on what the marketing claims
+as much as on what the code does.
 
 ---
 
@@ -581,7 +582,6 @@ comes from `pipeline.py`, so the terminal and the browser can never disagree.
 | [PRIVACY.md](PRIVACY.md) | privacy policy (the tool collects nothing) |
 | [DATA_SOURCES.md](DATA_SOURCES.md) | attribution and redistribution restrictions |
 | [AUDIT.md](AUDIT.md) | Strategy Reality Check: auditing an outside track record |
-| [SELLING.md](SELLING.md) | commercial and EU regulatory notes, if you sell it |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | how to contribute, and the house rule |
 | [SECURITY.md](SECURITY.md) | reporting vulnerabilities |
 | [CHANGELOG.md](CHANGELOG.md) | what changed, and which changes moved the numbers |
