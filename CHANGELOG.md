@@ -42,7 +42,7 @@ on published results spelled out, never under **Fixed** as a detail.
   multiplicity check exists to punish. `--variants-tried` is the honest part and
   cannot be inferred from the file, so leaving it out caps the verdict below its
   top grade rather than assuming one. Documented in
-  [docs/AUDIT.md](docs/AUDIT.md).
+  [AUDIT.md](AUDIT.md).
 - **Offline licence keys** (`src/audit/license.py`, `audit.keytool`). Ed25519,
   not HMAC: the verifier ships to the customer, so a shared secret would be a
   forgeable one. Evaluation mode - the default, and what an unsigned build of
@@ -50,7 +50,7 @@ on published results spelled out, never under **Fixed** as a detail.
   draws. It does not alter a single verdict: a weakened test is reported as
   weakened, because a free tier that lies is worth less than no free tier.
   Commercial and EU regulatory notes, including the line between an audit tool
-  and regulated investment advice, in [docs/SELLING.md](docs/SELLING.md).
+  and regulated investment advice, in [SELLING.md](SELLING.md).
 
 - **The front page is one page, and it is a picture.** It opens on where the
   price has been for two years with **every buy and every sell the portfolio
@@ -122,6 +122,17 @@ on published results spelled out, never under **Fixed** as a detail.
   already been calling it the cycle.
 
 ### Fixed
+
+- **`AUDIT.md` and `SELLING.md` moved out of `docs/`.** That directory is not
+  documentation - it is the published website: `publish` writes the pages into
+  it and the agent pushes `agent_feed.json` there every quarter of an hour. The
+  builder clears only its own `*.html` and `.nojekyll`, so anything else left
+  there survives every rebuild, and the next publish would have carried both
+  files onto the web - including the pricing strategy, segment reasoning and
+  pre-launch checklist in `SELLING.md`. They now sit at the repository root
+  beside `DISCLAIMER.md` and `TERMS.md`, where the rest of the project's
+  documentation already lived. A test in `test_publish.py` now rejects anything
+  in `docs/` that the site builder does not write.
 
 - **`keytool` runs at all.** The documented `python -m audit.keytool` needed
   `PYTHONPATH=src` to resolve, which nobody types, and running the file

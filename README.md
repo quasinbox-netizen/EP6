@@ -92,7 +92,7 @@ Then run any of these:
 | `run.py paper` | advance the public paper portfolio and print its trades |
 | `run.py publish` | build the static site into `site/` for a web host |
 | `run.py backtest` | strategies vs buy-and-hold |
-| `run.py audit --file x.csv` | audit somebody else's track record — [Strategy Reality Check](docs/AUDIT.md) |
+| `run.py audit --file x.csv` | audit somebody else's track record — [Strategy Reality Check](AUDIT.md) |
 | `run.py all` | everything in sequence |
 | `run.py dashboard` | browser dashboard on port 8511 |
 | `run.py test` | the test suite (`test offline` skips network tests) |
@@ -518,8 +518,8 @@ Ten checks run. Three do the real work:
 
 The result is a terminal report, a self-contained HTML file with no external
 references, and the same content as JSON. Full documentation in
-[docs/AUDIT.md](docs/AUDIT.md); if you intend to charge for it, read
-[docs/SELLING.md](docs/SELLING.md) first — the line between an audit tool and
+[AUDIT.md](AUDIT.md); if you intend to charge for it, read
+[SELLING.md](SELLING.md) first — the line between an audit tool and
 regulated investment advice is the entire product.
 
 ---
@@ -580,8 +580,8 @@ comes from `pipeline.py`, so the terminal and the browser can never disagree.
 | [TERMS.md](TERMS.md) | terms of use |
 | [PRIVACY.md](PRIVACY.md) | privacy policy (the tool collects nothing) |
 | [DATA_SOURCES.md](DATA_SOURCES.md) | attribution and redistribution restrictions |
-| [docs/AUDIT.md](docs/AUDIT.md) | Strategy Reality Check: auditing an outside track record |
-| [docs/SELLING.md](docs/SELLING.md) | commercial and EU regulatory notes, if you sell it |
+| [AUDIT.md](AUDIT.md) | Strategy Reality Check: auditing an outside track record |
+| [SELLING.md](SELLING.md) | commercial and EU regulatory notes, if you sell it |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | how to contribute, and the house rule |
 | [SECURITY.md](SECURITY.md) | reporting vulnerabilities |
 | [CHANGELOG.md](CHANGELOG.md) | what changed, and which changes moved the numbers |

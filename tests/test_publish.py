@@ -411,3 +411,39 @@ def test_the_front_page_counts_the_claims_written_before_the_outcome(tmp_path, d
     # Two settled claims is not a track record, and the page has to say so
     # rather than print a hit rate that reads like one.
     assert "not a score" in index or "A track record starts the day" in index
+
+
+# --- docs/ is the published website, not a documentation folder ----------------
+
+def test_docs_holds_only_what_the_site_builder_writes():
+    """`docs/` is served as the public site, so nothing private may land there.
+
+    It looks like a documentation directory and is not one: `publish` writes
+    the pages into it and the agent pushes `agent_feed.json` there every
+    quarter of an hour. Two markdown files were once added to it, one of them
+    holding pricing strategy and commercial positioning, and nothing would have
+    caught it before the next publish carried them onto the web - the builder
+    clears only its own `*.html` and `.nojekyll`, so anything else put there
+    survives every rebuild.
+
+    Project documentation belongs at the repository root, beside DISCLAIMER.md
+    and TERMS.md.
+    """
+    docs = REPO_ROOT / "docs"
+    if not docs.exists():
+        return
+
+    allowed_suffixes = {".html"}
+    allowed_names = {".nojekyll", "agent_feed.json"}
+
+    unexpected = sorted(
+        path.name for path in docs.iterdir()
+        if path.is_file()
+        and path.name not in allowed_names
+        and path.suffix.lower() not in allowed_suffixes
+    )
+    assert not unexpected, (
+        "docs/ is the published website. These files would be served publicly "
+        f"on the next publish: {unexpected}. Move documentation to the "
+        "repository root."
+    )
