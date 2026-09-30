@@ -60,8 +60,11 @@ case "${1:-}" in
   seed)
     # One commit, no parents, force-pushed: the branch is a locker, not a
     # history, and yesterday's ciphertext is of no use to anyone.
+    # vercel.json rides along: Vercel reads it from the commit it is about to
+    # build, so the copy on main does not stop it building this branch.
     blob="$(git hash-object -w "$ENC")"
-    tree="$(printf '100644 blob %s\tstate.enc\n' "$blob" | git mktree)"
+    vercel="$(git hash-object -w vercel.json)"
+    tree="$(printf '100644 blob %s\tstate.enc\n100644 blob %s\tvercel.json\n' "$blob" "$vercel" | git mktree)"
     commit="$(git -c user.name="${GIT_AUTHOR_NAME:-lab}" -c user.email="${GIT_AUTHOR_EMAIL:-lab@localhost}" \
       commit-tree "$tree" -m "Encrypted lab state $(date -u +%Y-%m-%d)")"
     git push --quiet --force origin "$commit:refs/heads/lab-state"
